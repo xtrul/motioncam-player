@@ -1,2 +1,0 @@
-﻿#include "windows.h"
-IDI_APPICON ICON DISCARDABLE "icon.ico"
