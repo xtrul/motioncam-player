@@ -5,6 +5,13 @@
 #include "Utils/DebugLog.h"
 
 #include <array> // For std::array
+#include <filesystem> // For path joining
+
+namespace fs = std::filesystem;
+
+// Declare g_AppBasePath as extern so this file can use it
+// Ensure g_AppBasePath is defined in main.cpp or another appropriate .cpp file.
+extern std::string g_AppBasePath;
 
 namespace Pipeline {
 
@@ -20,8 +27,13 @@ namespace Pipeline {
             renderer->m_pipelineLayout = VK_NULL_HANDLE;
         }
 
-        std::string vertShaderPath = "shaders_spv/fullscreen_quad.vert.spv";
-        std::string fragShaderPath = "shaders_spv/image_process.frag.spv";
+        fs::path basePathFs(g_AppBasePath);
+        std::string vertShaderPath = (basePathFs / "shaders_spv" / "fullscreen_quad.vert.spv").string();
+        std::string fragShaderPath = (basePathFs / "shaders_spv" / "image_process.frag.spv").string();
+
+        LogToFile(std::string("[Pipeline::createGraphicsPipeline] Attempting to load vertex shader from: ") + vertShaderPath);
+        LogToFile(std::string("[Pipeline::createGraphicsPipeline] Attempting to load fragment shader from: ") + fragShaderPath);
+
 
         auto vertShaderCode = VulkanHelpers::readFile(vertShaderPath);
         auto fragShaderCode = VulkanHelpers::readFile(fragShaderPath);

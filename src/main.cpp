@@ -9,6 +9,7 @@
 #include <cstring>
 #include <iomanip>
 #include <sstream>
+#include <vector> // Required for GetModuleFileNameW buffer
 
 #ifdef _WIN32
 #   define WIN32_LEAN_AND_MEAN
@@ -19,6 +20,15 @@
 #   include <stdio.h>
 #   include <fcntl.h>
 #   include <io.h>
+#elif defined(__linux__)
+#   include <unistd.h> // For readlink
+#   include <linux/limits.h> // For PATH_MAX
+#elif defined(__APPLE__)
+#   include <mach-o/dyld.h> // For _NSGetExecutablePath
+// PATH_MAX might be in limits.h or a large buffer might be used
+#   ifndef PATH_MAX
+#       define PATH_MAX 1024 // Or some other reasonable default
+#   endif
 #endif
 
 #include <SDL.h>
@@ -35,6 +45,77 @@ namespace DebugLogHelper {
 #endif
 
 namespace fs = std::filesystem;
+
+// Global variable to store the application's base path
+std::string g_AppBasePath;
+
+void determineAppBasePath(const char* argv0) {
+    fs::path exePath;
+#ifdef _WIN32
+    std::vector<wchar_t> pathBuf;
+    DWORD copied = 0;
+    do {
+        pathBuf.resize(pathBuf.size() + MAX_PATH + 1); // +1 for null terminator safety if needed by some interpretations
+        copied = GetModuleFileNameW(NULL, pathBuf.data(), static_cast<DWORD>(pathBuf.size()));
+        if (copied == 0) { // Error
+            LogToFile("[determineAppBasePath] GetModuleFileNameW failed. Error: " + std::to_string(GetLastError()));
+            break;
+        }
+    } while (copied >= pathBuf.size()); // Loop if buffer was too small
+
+    if (copied > 0) {
+        pathBuf.resize(copied); // Resize to actual length
+        exePath = fs::path(std::wstring(pathBuf.begin(), pathBuf.end()));
+    }
+    else {
+        // Fallback if GetModuleFileNameW failed catastrophically
+        exePath = fs::absolute(fs::path(argv0)); // Try to use argv0
+    }
+#elif defined(__linux__)
+    char path[PATH_MAX];
+    ssize_t count = readlink("/proc/self/exe", path, PATH_MAX);
+    if (count > 0) {
+        exePath = fs::path(std::string(path, count));
+    }
+    else {
+        LogToFile("[determineAppBasePath] readlink /proc/self/exe failed. Error: " + std::string(strerror(errno)));
+        exePath = fs::absolute(fs::path(argv0)); // Try to use argv0
+    }
+#elif defined(__APPLE__)
+    char path[PATH_MAX];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) == 0) {
+        exePath = fs::path(std::string(path));
+    }
+    else {
+        LogToFile("[determineAppBasePath] _NSGetExecutablePath failed (buffer too small or other error).");
+        // If buffer was too small, 'size' now contains required size. Could reallocate and retry.
+        // For simplicity, falling back.
+        exePath = fs::absolute(fs::path(argv0)); // Try to use argv0
+    }
+#else
+    // Generic fallback: use argv[0] and try to make it absolute
+    exePath = fs::absolute(fs::path(argv0));
+#endif
+
+    if (exePath.has_filename()) { //Check if it's a file path
+        if (exePath.has_parent_path()) {
+            g_AppBasePath = exePath.parent_path().string();
+        }
+        else {
+            // This case implies exePath is something like "app.exe" found in PATH,
+            // and argv0 didn't provide directory info. CWD at startup is the best guess.
+            g_AppBasePath = fs::current_path().string();
+            LogToFile("[determineAppBasePath] Warning: Executable path has no parent. Using CWD at startup as base path: " + g_AppBasePath);
+        }
+    }
+    else { //exePath might be a directory itself if argv0 was "." or determination failed strangely
+        g_AppBasePath = fs::absolute(exePath).string(); //Treat it as a directory path
+        LogToFile("[determineAppBasePath] Warning: Executable path seems to be a directory or failed. Using absolute(exePath): " + g_AppBasePath);
+    }
+    LogToFile(std::string("[main] Determined App Base Path: ") + g_AppBasePath);
+}
+
 
 #ifdef _WIN32
 void RedirectIOToConsole() {
@@ -113,6 +194,12 @@ static std::string OpenMcrawDialog() {
 int main(int argc, char* argv[]) {
 #if defined(_WIN32) && !defined(NDEBUG)
 #endif
+    // Initialize logging as early as possible.
+    // LogToFile("Application starting..."); // First log message
+
+    // Determine and set the application base path.
+    determineAppBasePath(argc > 0 ? argv[0] : "");
+
 
 #ifdef _WIN32
     static const wchar_t* kMutexName = L"MCRAW_PLAYER_SINGLE_INSTANCE_MUTEX_V2_UNIQUE";
@@ -154,7 +241,7 @@ int main(int argc, char* argv[]) {
 #endif
 
     try {
-        LogToFile(std::string("[main] Current Working Directory: ") + fs::current_path().string());
+        LogToFile(std::string("[main] Current Working Directory (at start): ") + fs::current_path().string());
     }
     catch (const fs::filesystem_error& e) {
         LogToFile(std::string("[main] Error getting CWD: ") + e.what());
