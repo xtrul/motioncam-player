@@ -12,6 +12,7 @@ double PlaybackController::s_displayFps = 0.0;
 
 PlaybackController::PlaybackController() : m_isPaused(false) {
     m_fpsAvgStart = std::chrono::steady_clock::now();
+    m_lastBenchmarkTime = m_fpsAvgStart;
     LogToFile("[PlaybackController] Constructor: Initialized, paused = false.");
 }
 
@@ -35,6 +36,33 @@ void PlaybackController::togglePause() {
 bool PlaybackController::isPaused() const {
     std::scoped_lock lock(m_mutex);
     return m_isPaused;
+}
+
+void PlaybackController::setPlaybackMode(PlaybackMode mode) {
+    std::scoped_lock lock(m_mutex);
+    m_playbackMode = mode;
+    switch (mode) {
+    case PlaybackMode::FIXED_24FPS:
+        m_frameDurationNs = 41666667;
+        break;
+    case PlaybackMode::FIXED_30FPS:
+        m_frameDurationNs = 33333333;
+        break;
+    case PlaybackMode::FIXED_60FPS:
+    case PlaybackMode::BENCHMARK:
+        m_frameDurationNs = 16666667;
+        break;
+    case PlaybackMode::REALTIME:
+    default:
+        m_frameDurationNs = 16666667;
+        break;
+    }
+    m_lastBenchmarkTime = std::chrono::steady_clock::now();
+}
+
+PlaybackController::PlaybackMode PlaybackController::getPlaybackMode() const {
+    std::scoped_lock lock(m_mutex);
+    return m_playbackMode;
 }
 
 void PlaybackController::processNewSegment(
@@ -84,66 +112,87 @@ bool PlaybackController::updatePlayhead(
     std::chrono::steady_clock::time_point currentWallClock,
     const std::vector<int64_t>& mediaFrameTimestamps) {
 
-    auto frameEndTimeForFps = std::chrono::steady_clock::now();
-    m_framesForAvg++;
-    double elapsedSecondsForFps = std::chrono::duration<double>(frameEndTimeForFps - m_fpsAvgStart).count();
-    if (elapsedSecondsForFps >= 1.0) {
-        s_displayFps = static_cast<double>(m_framesForAvg) / elapsedSecondsForFps;
-        m_fpsAvgStart = frameEndTimeForFps;
-        m_framesForAvg = 0;
+    auto nowForFps = std::chrono::steady_clock::now();
+    if (m_playbackMode == PlaybackMode::BENCHMARK) {
+        s_displayFps = 1.0 / std::max(1e-6, std::chrono::duration<double>(nowForFps - m_lastBenchmarkTime).count());
+        m_lastBenchmarkTime = nowForFps;
+    } else {
+        m_framesForAvg++;
+        double elapsedSecondsForFps = std::chrono::duration<double>(nowForFps - m_fpsAvgStart).count();
+        if (elapsedSecondsForFps >= 1.0) {
+            s_displayFps = static_cast<double>(m_framesForAvg) / elapsedSecondsForFps;
+            m_fpsAvgStart = nowForFps;
+            m_framesForAvg = 0;
+        }
     }
 
     std::scoped_lock lock(m_mutex);
 
-    if (m_isPaused || mediaFrameTimestamps.empty() || !m_firstFrameMediaTimestampNs_currentSegment.has_value()) {
+    if (m_isPaused) {
         return false;
     }
-
-    auto wallClockElapsedSinceSegmentStart = currentWallClock - m_segmentWallClockStartTime;
-    int64_t wallClockElapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(wallClockElapsedSinceSegmentStart).count();
-
-    int64_t targetMediaTimestampAbsolute = m_firstFrameMediaTimestampNs_currentSegment.value() + wallClockElapsedNs;
-
-    // This log can be very verbose, enable if needed for fine-grained debugging
-    /*
-    std::ostringstream log_oss_up;
-    log_oss_up << "[PB::updatePlayhead] CurrWallClockEpochNs: " << currentWallClock.time_since_epoch().count()
-               << ", SegWallClockStartEpochNs: " << m_segmentWallClockStartTime.time_since_epoch().count()
-               << ", WallClockElapsedNs: " << wallClockElapsedNs
-               << ", FirstFrameMediaTs: " << m_firstFrameMediaTimestampNs_currentSegment.value()
-               << ", TargetMediaTsAbsolute: " << targetMediaTimestampAbsolute;
-    LogToFile(log_oss_up.str());
-    */
-
-    auto it = std::lower_bound(mediaFrameTimestamps.begin(), mediaFrameTimestamps.end(), targetMediaTimestampAbsolute);
 
     bool segmentEnded = false;
     size_t newFrameIdx = m_currentFrameIdx;
 
-    if (it == mediaFrameTimestamps.end()) {
-        if (!mediaFrameTimestamps.empty()) {
-            newFrameIdx = mediaFrameTimestamps.size() - 1;
+    switch (m_playbackMode) {
+    case PlaybackMode::REALTIME: {
+        if (mediaFrameTimestamps.empty() || !m_firstFrameMediaTimestampNs_currentSegment.has_value()) {
+            return false;
         }
-        else {
+
+        auto wallClockElapsedSinceSegmentStart = currentWallClock - m_segmentWallClockStartTime;
+        int64_t wallClockElapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(wallClockElapsedSinceSegmentStart).count();
+
+        int64_t targetMediaTimestampAbsolute = m_firstFrameMediaTimestampNs_currentSegment.value() + wallClockElapsedNs;
+
+        auto it = std::lower_bound(mediaFrameTimestamps.begin(), mediaFrameTimestamps.end(), targetMediaTimestampAbsolute);
+
+        if (it == mediaFrameTimestamps.end()) {
+            if (!mediaFrameTimestamps.empty()) {
+                newFrameIdx = mediaFrameTimestamps.size() - 1;
+            } else {
+                newFrameIdx = 0;
+            }
+            segmentEnded = true;
+        } else if (it == mediaFrameTimestamps.begin()) {
+            newFrameIdx = 0;
+        } else {
+            if (*it > targetMediaTimestampAbsolute) {
+                it = std::prev(it);
+            }
+            newFrameIdx = static_cast<size_t>(std::distance(mediaFrameTimestamps.begin(), it));
+        }
+
+        if (!mediaFrameTimestamps.empty()) {
+            newFrameIdx = std::min(newFrameIdx, mediaFrameTimestamps.size() - 1);
+        } else {
             newFrameIdx = 0;
         }
-        segmentEnded = true;
+        break;
     }
-    else if (it == mediaFrameTimestamps.begin()) {
-        newFrameIdx = 0;
-    }
-    else {
-        if (*it > targetMediaTimestampAbsolute) {
-            it = std::prev(it);
+    case PlaybackMode::FIXED_24FPS:
+    case PlaybackMode::FIXED_30FPS:
+    case PlaybackMode::FIXED_60FPS: {
+        auto wallClockElapsedSinceSegmentStart = currentWallClock - m_segmentWallClockStartTime;
+        int64_t wallClockElapsedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(wallClockElapsedSinceSegmentStart).count();
+        newFrameIdx = static_cast<size_t>(wallClockElapsedNs / m_frameDurationNs);
+        if (m_totalFramesInCurrentSegment > 0 && newFrameIdx >= m_totalFramesInCurrentSegment) {
+            newFrameIdx = m_totalFramesInCurrentSegment - 1;
+            segmentEnded = true;
         }
-        newFrameIdx = static_cast<size_t>(std::distance(mediaFrameTimestamps.begin(), it));
+        break;
     }
-
-    if (!mediaFrameTimestamps.empty()) {
-        newFrameIdx = std::min(newFrameIdx, mediaFrameTimestamps.size() - 1);
+    case PlaybackMode::BENCHMARK: {
+        if (m_totalFramesInCurrentSegment > 0) {
+            newFrameIdx = m_currentFrameIdx + 1;
+            if (newFrameIdx >= m_totalFramesInCurrentSegment) {
+                newFrameIdx = m_totalFramesInCurrentSegment - 1;
+                segmentEnded = true;
+            }
+        }
+        break;
     }
-    else {
-        newFrameIdx = 0;
     }
 
     if (newFrameIdx != m_currentFrameIdx) {
@@ -248,13 +297,19 @@ void PlaybackController::seekToFrame(
 
     int64_t firstTsOfSegment = m_firstFrameMediaTimestampNs_currentSegment.value();
     int64_t targetFrameMediaTs = mediaFrameTimestamps[m_currentFrameIdx];
-    int64_t deltaVideoNsFromSegmentStart = targetFrameMediaTs - firstTsOfSegment;
+    int64_t deltaVideoNsFromSegmentStart = 0;
 
-    if (deltaVideoNsFromSegmentStart < 0) {
-        log_oss_seek << " | WARN: Negative deltaVideoNsFromSegmentStart (" << deltaVideoNsFromSegmentStart
-            << "). TargetFrameMediaTs: " << targetFrameMediaTs
-            << ", FirstTsOfSegment: " << firstTsOfSegment << ". Clamping delta to 0.";
-        deltaVideoNsFromSegmentStart = 0;
+    if (m_playbackMode == PlaybackMode::REALTIME) {
+        deltaVideoNsFromSegmentStart = targetFrameMediaTs - firstTsOfSegment;
+        if (deltaVideoNsFromSegmentStart < 0) {
+            log_oss_seek << " | WARN: Negative deltaVideoNsFromSegmentStart (" << deltaVideoNsFromSegmentStart
+                << "). TargetFrameMediaTs: " << targetFrameMediaTs
+                << ", FirstTsOfSegment: " << firstTsOfSegment << ". Clamping delta to 0.";
+            deltaVideoNsFromSegmentStart = 0;
+        }
+    }
+    else {
+        deltaVideoNsFromSegmentStart = static_cast<int64_t>(m_currentFrameIdx) * m_frameDurationNs;
     }
 
     auto now_for_anchor = std::chrono::steady_clock::now();

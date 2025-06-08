@@ -624,11 +624,17 @@ void App::anchorPlaybackTimeForResume() {
             << ", firstFrameMediaTsOpt (Segment Start): " << (firstFrameMediaTsOpt.has_value() ? std::to_string(firstFrameMediaTsOpt.value()) : "null");
 
         if (currentFrameMediaTsOpt.has_value() && firstFrameMediaTsOpt.has_value()) {
-            int64_t deltaVideoNsFromSegmentStart = currentFrameMediaTsOpt.value() - firstFrameMediaTsOpt.value();
-            if (deltaVideoNsFromSegmentStart < 0) {
-                log_stream << " | WARN: Negative deltaVideoNsFromSegmentStart (" << deltaVideoNsFromSegmentStart << ") for frame "
-                    << m_playbackController_ptr->getCurrentFrameIndex() << ". Clamping to 0.";
-                deltaVideoNsFromSegmentStart = 0;
+            int64_t deltaVideoNsFromSegmentStart = 0;
+            if (m_playbackController_ptr->getPlaybackMode() == PlaybackController::PlaybackMode::REALTIME) {
+                deltaVideoNsFromSegmentStart = currentFrameMediaTsOpt.value() - firstFrameMediaTsOpt.value();
+                if (deltaVideoNsFromSegmentStart < 0) {
+                    log_stream << " | WARN: Negative deltaVideoNsFromSegmentStart (" << deltaVideoNsFromSegmentStart << ") for frame "
+                        << m_playbackController_ptr->getCurrentFrameIndex() << ". Clamping to 0.";
+                    deltaVideoNsFromSegmentStart = 0;
+                }
+            } else {
+                deltaVideoNsFromSegmentStart = static_cast<int64_t>(m_playbackController_ptr->getCurrentFrameIndex()) *
+                    m_playbackController_ptr->getFrameDurationNs();
             }
             auto now_for_anchor = std::chrono::steady_clock::now();
             new_wall_clock_anchor = now_for_anchor - std::chrono::nanoseconds(deltaVideoNsFromSegmentStart);
@@ -1148,4 +1154,15 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 
     LogToFile(std::string("[App::sendAllToMotionCamFS] Done. Success: ")
         + std::to_string(ok) + ", Fail: " + std::to_string(fail));
+}
+
+void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
+    if (!m_playbackController_ptr) return;
+    PlaybackController::PlaybackMode old = m_playbackController_ptr->getPlaybackMode();
+    m_playbackController_ptr->setPlaybackMode(mode);
+    if (m_audio) {
+        m_audio->setForceMute(mode != PlaybackController::PlaybackMode::REALTIME);
+    }
+    LogToFile(std::string("[App::setPlaybackMode] Changed from ") + std::to_string(static_cast<int>(old)) +
+        " to " + std::to_string(static_cast<int>(mode)));
 }

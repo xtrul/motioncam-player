@@ -29,7 +29,8 @@
 #include "Utils/vma_usage.h" 
 
 #include "App/AppConfig.h"
-#include "App/AppState.h" 
+#include "App/AppState.h"
+#include "Playback/PlaybackController.h"
 
 class AudioController;
 class DecoderWrapper;
@@ -110,6 +111,7 @@ public:
     void convertCurrentFileToDngs();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
+	void setPlaybackMode(PlaybackController::PlaybackMode mode);
 
     std::vector<VkImage> m_swapChainImages;
     std::atomic<size_t> m_activeFileLoadID{ 0 };

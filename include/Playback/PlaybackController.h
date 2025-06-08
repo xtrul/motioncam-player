@@ -16,6 +16,14 @@ class PlaybackController {
 public:
     PlaybackController();
 
+    enum class PlaybackMode {
+        REALTIME = 0,
+        FIXED_24FPS,
+        FIXED_30FPS,
+        FIXED_60FPS,
+        BENCHMARK
+    };
+
     void handleKey(int key, GLFWwindow* window);
     void togglePause();
     bool isPaused() const;
@@ -52,6 +60,8 @@ public:
 
     static double getDisplayFps();
     inline int64_t getFrameDurationNs() const { return m_frameDurationNs; }
+    void setPlaybackMode(PlaybackMode mode);
+    PlaybackMode getPlaybackMode() const;
 
 
 private:
@@ -71,7 +81,9 @@ private:
     // For FPS calculation
     std::chrono::steady_clock::time_point m_fpsAvgStart;
     int m_framesForAvg = 0;
+    std::chrono::steady_clock::time_point m_lastBenchmarkTime;
     static double s_displayFps;
+    PlaybackMode m_playbackMode = PlaybackMode::REALTIME;
 };
 
 #endif // PLAYBACK_CONTROLLER_H

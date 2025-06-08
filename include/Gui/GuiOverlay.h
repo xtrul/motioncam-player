@@ -37,6 +37,8 @@ namespace GuiOverlay {
         bool isPaused = true;
         bool isZoomedToNative = false;
 
+        int playbackMode = 0;
+
         // New/Updated fields
         int decodedWidth = 0;
         int decodedHeight = 0;

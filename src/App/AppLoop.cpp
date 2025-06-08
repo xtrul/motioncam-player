@@ -79,16 +79,19 @@ bool App::run() {
 
         appLogicStartTime = steady_clock::now();
         if (m_audio && !paused && m_playbackController && m_playbackController->getFirstFrameMediaTimestampOfSegment().has_value()) {
-            auto wall_anchor = m_playbackController->getWallClockAnchorForSegment();
-            auto current_time_for_audio = steady_clock::now(); // Capture exactly when we calculate this
-            auto elapsed_ns_since_segment_start = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                current_time_for_audio - wall_anchor
-            ).count();
-            // --- START: Detailed Logging for Audio Update Trigger ---
-            LogToFile(std::string("[App::run -> AudioUpdate] WallAnchorEpochNs (Playback): ") + std::to_string(wall_anchor.time_since_epoch().count()) +
-                ", CurrentTimeEpochNs: " + std::to_string(current_time_for_audio.time_since_epoch().count()) +
-                ", Passed ElapsedNsForAudio: " + std::to_string(elapsed_ns_since_segment_start));
-            // --- END: Detailed Logging for Audio Update Trigger ---
+            int64_t elapsed_ns_since_segment_start = 0;
+            if (m_playbackController->getPlaybackMode() == PlaybackController::PlaybackMode::REALTIME) {
+                auto wall_anchor = m_playbackController->getWallClockAnchorForSegment();
+                auto current_time_for_audio = steady_clock::now();
+                elapsed_ns_since_segment_start = std::chrono::duration_cast<std::chrono::nanoseconds>(current_time_for_audio - wall_anchor).count();
+                LogToFile(std::string("[App::run -> AudioUpdate] WallAnchorEpochNs (Playback): ") + std::to_string(wall_anchor.time_since_epoch().count()) +
+                    ", CurrentTimeEpochNs: " + std::to_string(current_time_for_audio.time_since_epoch().count()) +
+                    ", Passed ElapsedNsForAudio: " + std::to_string(elapsed_ns_since_segment_start));
+            } else {
+                elapsed_ns_since_segment_start = static_cast<int64_t>(m_playbackController->getCurrentFrameIndex()) *
+                    m_playbackController->getFrameDurationNs();
+                LogToFile(std::string("[App::run -> AudioUpdate] Non-realtime mode, elapsedNs: ") + std::to_string(elapsed_ns_since_segment_start));
+            }
             m_audio->updatePlayback(elapsed_ns_since_segment_start);
         }
         appLogicEndTime = steady_clock::now();

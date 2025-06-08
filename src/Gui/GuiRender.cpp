@@ -67,6 +67,7 @@ namespace GuiOverlay {
             data.isPaused = playbackController->isPaused();
             data.isZoomedToNative = playbackController->isZoomNativePixels();
             data.currentFrameIndex = playbackController->getCurrentFrameIndex();
+            data.playbackMode = static_cast<int>(playbackController->getPlaybackMode());
         }
         else {
             data.isPaused = true;
@@ -286,6 +287,7 @@ namespace GuiOverlay {
                 ImGui::BulletText("[F] or [F11]   : Toggle Fullscreen");
                 ImGui::BulletText("[Z]            : Toggle Zoom (Native Pixels / Fit to Window)");
                 ImGui::BulletText("[M]            : Toggle Metrics Overlay");
+                ImGui::BulletText("[P]            : Cycle Playback Mode");
                 ImGui::BulletText("[H] or [F1]    : Toggle This Help Page");
                 ImGui::BulletText("[Tab]          : Toggle Main UI Controls");
                 ImGui::BulletText("[Esc]          : Exit Fullscreen / Close Popups / Quit");
@@ -573,6 +575,13 @@ namespace GuiOverlay {
                 ImGui::Separator();
                 ImGui::Text("Captured FPS: %.2f", ui.capturedFps);
                 ImGui::Text("Display FPS: %.1f", ui.actualDisplayFps);
+                const char* modeItems[] = { "Realtime", "24 FPS", "30 FPS", "60 FPS", "Benchmark" };
+                int modeTemp = ui.playbackMode;
+                if (ImGui::Combo("Playback Mode", &modeTemp, modeItems, IM_ARRAYSIZE(modeItems))) {
+                    if (appInstance) {
+                        appInstance->setPlaybackMode(static_cast<PlaybackController::PlaybackMode>(modeTemp));
+                    }
+                }
                 ImGui::Text("Audio TS: %s", ui.audioTimestampStr.c_str());
                 ImGui::Text("A/V Sync: %s", ui.avSyncDeltaStr.c_str());
                 ImGui::Separator();

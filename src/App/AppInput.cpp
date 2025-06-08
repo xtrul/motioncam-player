@@ -258,6 +258,21 @@ void App::handleKey(int key, int mods) {
         }
         m_framebufferResized = true;
     }
+    else if (key == GLFW_KEY_P) {
+        keyHandledByAppLogic = true;
+        if (m_playbackController) {
+            auto current = m_playbackController->getPlaybackMode();
+            PlaybackController::PlaybackMode next;
+            switch (current) {
+            case PlaybackController::PlaybackMode::REALTIME: next = PlaybackController::PlaybackMode::FIXED_24FPS; break;
+            case PlaybackController::PlaybackMode::FIXED_24FPS: next = PlaybackController::PlaybackMode::FIXED_30FPS; break;
+            case PlaybackController::PlaybackMode::FIXED_30FPS: next = PlaybackController::PlaybackMode::FIXED_60FPS; break;
+            case PlaybackController::PlaybackMode::FIXED_60FPS: next = PlaybackController::PlaybackMode::BENCHMARK; break;
+            case PlaybackController::PlaybackMode::BENCHMARK: default: next = PlaybackController::PlaybackMode::REALTIME; break;
+            }
+            setPlaybackMode(next);
+        }
+    }
     else if (key == GLFW_KEY_ESCAPE) {
         keyHandledByAppLogic = true;
         if (m_isFullscreen) {
