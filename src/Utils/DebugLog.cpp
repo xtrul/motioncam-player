@@ -12,7 +12,7 @@ static std::mutex g_log_mutex; // Mutex to protect file access
 void LogToFile(const std::string& message) {
     std::lock_guard<std::mutex> lock(g_log_mutex); // Lock for thread safety
 
-    static std::ofstream log_file("mcraw_player_debug_log.txt", std::ios_base::app | std::ios_base::out);
+    static std::ofstream log_file("motioncam_player_log.txt", std::ios_base::app | std::ios_base::out);
 
     if (log_file.is_open()) {
         auto now = std::chrono::system_clock::now();

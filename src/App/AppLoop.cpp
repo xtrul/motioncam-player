@@ -162,7 +162,7 @@ bool App::run() {
             std::string currentTitleString;
 
             std::ostringstream ss;
-            ss << "MCRAW Player (Vulkan) - ";
+            ss << "MotionCam Player -  ";
             if (m_currentFileIndex >= 0 && static_cast<size_t>(m_currentFileIndex) < m_fileList.size()) {
                 ss << fs::path(m_fileList[m_currentFileIndex]).filename().string();
                 if (m_playbackController && m_decoderWrapper && m_decoderWrapper->getDecoder()) {

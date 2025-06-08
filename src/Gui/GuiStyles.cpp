@@ -11,9 +11,6 @@
 
 namespace fs = std::filesystem;
 
-// Declare g_AppBasePath as extern
-extern std::string g_AppBasePath;
-
 namespace GuiStyles {
 
     // Define extern font pointers
@@ -30,14 +27,44 @@ namespace GuiStyles {
 
 
     void LoadFonts(ImGuiIO& io) {
-        fs::path basePathFs(g_AppBasePath);
+        std::string roboto_regular_font_path_str;
+        std::string icon_font_load_path_str;
 
-        std::string roboto_regular_font_path_str = (basePathFs / "assets" / "Roboto-Regular.ttf").string();
-        std::string icon_font_load_path_str = (basePathFs / "assets" / "MaterialIcons-Regular.ttf").string();
-
-        LogToFile(std::string("[GuiStyles::LoadFonts] Roboto font path using g_AppBasePath: ") + roboto_regular_font_path_str);
-        LogToFile(std::string("[GuiStyles::LoadFonts] Icon font path using g_AppBasePath: ") + icon_font_load_path_str);
-
+#ifdef _WIN32
+        char modulePath[MAX_PATH];
+        GetModuleFileNameA(NULL, modulePath, MAX_PATH);
+        char drive[_MAX_DRIVE], dir[_MAX_DIR], fname[_MAX_FNAME], ext[_MAX_EXT];
+        _splitpath_s(modulePath, drive, _MAX_DRIVE, dir, _MAX_DIR, fname, _MAX_FNAME, ext, _MAX_EXT);
+        std::string exeDir = std::string(drive) + std::string(dir);
+        if (!exeDir.empty() && (exeDir.back() == '\\' || exeDir.back() == '/')) {
+            exeDir.pop_back();
+        }
+        try {
+            fs::path full_roboto_path = fs::path(exeDir) / "assets" / "Roboto-Regular.ttf";
+            roboto_regular_font_path_str = full_roboto_path.string();
+            LogToFile(std::string("[GuiStyles::LoadFonts] Roboto font path (Win32): ") + roboto_regular_font_path_str);
+        }
+        catch (...) {
+            roboto_regular_font_path_str = "assets/Roboto-Regular.ttf"; // Fallback
+            LogToFile(std::string("[GuiStyles::LoadFonts] Roboto font path (Win32 fallback): ") + roboto_regular_font_path_str);
+        }
+        try {
+            fs::path full_icon_path = fs::path(exeDir) / "assets" / "MaterialIcons-Regular.ttf";
+            icon_font_load_path_str = full_icon_path.string();
+            LogToFile(std::string("[GuiStyles::LoadFonts] Icon font path (Win32): ") + icon_font_load_path_str);
+        }
+        catch (...) {
+            icon_font_load_path_str = "assets/MaterialIcons-Regular.ttf"; // Fallback
+            LogToFile(std::string("[GuiStyles::LoadFonts] Icon font path (Win32 fallback): ") + icon_font_load_path_str);
+        }
+#else
+        // For non-Windows, assume assets are relative to executable or CWD
+        // This might need adjustment based on deployment (e.g., using resource paths from CMake)
+        roboto_regular_font_path_str = "assets/Roboto-Regular.ttf";
+        icon_font_load_path_str = "assets/MaterialIcons-Regular.ttf";
+        LogToFile(std::string("[GuiStyles::LoadFonts] Roboto font path (Unix-like): ") + roboto_regular_font_path_str);
+        LogToFile(std::string("[GuiStyles::LoadFonts] Icon font path (Unix-like): ") + icon_font_load_path_str);
+#endif
 
         if (!fs::exists(roboto_regular_font_path_str)) LogToFile(std::string("WARNING: Roboto font file not found at: ") + roboto_regular_font_path_str);
         if (!fs::exists(icon_font_load_path_str)) LogToFile(std::string("WARNING: Icon font file not found at: ") + icon_font_load_path_str);
