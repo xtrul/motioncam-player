@@ -112,6 +112,7 @@ public:
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
+    void showActionMessage(const std::string& msg);
 
     std::vector<VkImage> m_swapChainImages;
     std::atomic<size_t> m_activeFileLoadID{ 0 };
@@ -198,6 +199,11 @@ private:
 
     std::string m_lastWindowTitle;
     std::chrono::steady_clock::time_point m_lastTitleUpdateTime;
+	
+	std::string m_actionMessage;
+    std::chrono::steady_clock::time_point m_actionMessageTime;
+    double m_actionMessageDurationSec = 1.0;
+
 
 #ifdef _WIN32
     HWND _ipcWnd = nullptr;

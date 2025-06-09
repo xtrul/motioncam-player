@@ -599,6 +599,24 @@ namespace GuiOverlay {
             }
             ImGui::End();
         }
+
+        // Show transient action message
+        if (!appInstance->m_actionMessage.empty()) {
+            double age = std::chrono::duration<double>(std::chrono::steady_clock::now() - appInstance->m_actionMessageTime).count();
+            if (age < appInstance->m_actionMessageDurationSec) {
+                ImGui::SetNextWindowBgAlpha(0.35f);
+                ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                                              viewport->WorkPos.y + viewport->WorkSize.y * 0.2f),
+                                        ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                ImGui::Begin("ACTION_MSG", nullptr,
+                            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
+                ImGui::SetWindowFontScale(2.0f);
+                ImGui::TextUnformatted(appInstance->m_actionMessage.c_str());
+                ImGui::End();
+            } else {
+                appInstance->m_actionMessage.clear();
+            }
+        }
     }
 
     void endFrame(VkCommandBuffer commandBuffer) {

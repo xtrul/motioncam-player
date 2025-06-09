@@ -22,6 +22,7 @@ namespace DebugLogHelper {
 #include <iostream>
 #include <algorithm>
 #include <stdexcept>
+#include <chrono> // Required for std::chrono::steady_clock
 
 namespace fs = std::filesystem;
 
@@ -80,16 +81,19 @@ void App::handleKey(int key, int mods) {
     if (key == GLFW_KEY_TAB && mods == 0) {
         m_showUI = !m_showUI;
         LogToFile(std::string("[App::handleKey] UI Toggled: ") + (m_showUI ? "ON" : "OFF"));
+        showActionMessage(m_showUI ? "UI On" : "UI Off");
         return;
     }
     if (key == GLFW_KEY_M && mods == 0) {
         m_showMetrics = !m_showMetrics;
         LogToFile(std::string("[App::handleKey] Metrics Toggled: ") + (m_showMetrics ? "ON" : "OFF"));
+        showActionMessage(m_showMetrics ? "Metrics On" : "Metrics Off");
         return;
     }
     if ((key == GLFW_KEY_H && mods == 0) || key == GLFW_KEY_F1) {
         toggleHelpPage();
         if (m_showHelpPage) GuiOverlay::show_playlist_aux = false;
+        showActionMessage(m_showHelpPage ? "Help On" : "Help Off");
         return;
     }
 
@@ -123,6 +127,7 @@ void App::handleKey(int key, int mods) {
             loadFileAtIndex((m_currentFileIndex - 1 + static_cast<int>(m_fileList.size())) % static_cast<int>(m_fileList.size()));
             m_firstFileLoaded = tempFirstLoaded;
         }
+        showActionMessage("Previous File");
     }
     else if (key == GLFW_KEY_RIGHT_BRACKET) {
         keyHandledByAppLogic = true;
@@ -133,6 +138,7 @@ void App::handleKey(int key, int mods) {
             loadFileAtIndex((m_currentFileIndex + 1) % static_cast<int>(m_fileList.size()));
             m_firstFileLoaded = tempFirstLoaded;
         }
+        showActionMessage("Next File");
     }
     else if (key == GLFW_KEY_LEFT) {
         keyHandledByAppLogic = true;
@@ -147,6 +153,7 @@ void App::handleKey(int key, int mods) {
             seekActionTookPlace = true;
             LogToFile(std::string("[App::handleKey] Left Arrow. Seeked to frame index: ") + std::to_string(new_idx));
         }
+        showActionMessage("Prev Frame");
     }
     else if (key == GLFW_KEY_RIGHT) {
         keyHandledByAppLogic = true;
@@ -161,6 +168,7 @@ void App::handleKey(int key, int mods) {
             seekActionTookPlace = true;
             LogToFile(std::string("[App::handleKey] Right Arrow. Seeked to frame index: ") + std::to_string(new_idx));
         }
+        showActionMessage("Next Frame");
     }
     else if (key == GLFW_KEY_HOME) {
         keyHandledByAppLogic = true;
@@ -173,6 +181,7 @@ void App::handleKey(int key, int mods) {
             seekActionTookPlace = true;
             LogToFile("[App::handleKey] Home. Seeked to frame index: 0");
         }
+        showActionMessage("First Frame");
     }
     else if (key == GLFW_KEY_END) {
         keyHandledByAppLogic = true;
@@ -186,6 +195,7 @@ void App::handleKey(int key, int mods) {
             seekActionTookPlace = true;
             LogToFile(std::string("[App::handleKey] End. Seeked to frame index: ") + std::to_string(last_frame_idx));
         }
+        showActionMessage("Last Frame");
     }
     else if (key == GLFW_KEY_Z) {
         keyHandledByAppLogic = true;
@@ -224,6 +234,7 @@ void App::handleKey(int key, int mods) {
                 }
             }
         }
+        showActionMessage(m_playbackController && m_playbackController->isZoomNativePixels() ? "Zoom Native" : "Zoom Fit");
     }
     else if (key == GLFW_KEY_0 || key == GLFW_KEY_KP_0) {
         keyHandledByAppLogic = true;
@@ -257,6 +268,7 @@ void App::handleKey(int key, int mods) {
             }
         }
         m_framebufferResized = true;
+        showActionMessage(m_isFullscreen ? "Fullscreen" : "Windowed");
     }
     else if (key == GLFW_KEY_P) {
         keyHandledByAppLogic = true;
@@ -271,6 +283,15 @@ void App::handleKey(int key, int mods) {
             case PlaybackController::PlaybackMode::BENCHMARK: default: next = PlaybackController::PlaybackMode::REALTIME; break;
             }
             setPlaybackMode(next);
+            const char* modeMsg = "Realtime";
+            switch (next) {
+            case PlaybackController::PlaybackMode::FIXED_24FPS: modeMsg = "24 FPS"; break;
+            case PlaybackController::PlaybackMode::FIXED_30FPS: modeMsg = "30 FPS"; break;
+            case PlaybackController::PlaybackMode::FIXED_60FPS: modeMsg = "60 FPS"; break;
+            case PlaybackController::PlaybackMode::BENCHMARK:   modeMsg = "Benchmark"; break;
+            case PlaybackController::PlaybackMode::REALTIME: default: modeMsg = "Realtime"; break;
+            }
+            showActionMessage(modeMsg);
         }
     }
     else if (key == GLFW_KEY_ESCAPE) {
@@ -299,10 +320,15 @@ void App::handleKey(int key, int mods) {
         keyHandledByAppLogic = true;
         LogToFile("[App::handleKey] DELETE/BACKSPACE pressed. Attempting soft delete.");
         softDeleteCurrentFile();
+        showActionMessage("Deleted");
     }
 
     if (!keyHandledByAppLogic) {
+        bool wasPaused = m_playbackController->isPaused();
         m_playbackController->handleKey(key, m_window);
+        if (key == GLFW_KEY_SPACE) {
+            showActionMessage(wasPaused ? "Play" : "Pause");
+        }
     }
 
     bool isPausedAfterKeyAction = m_playbackController->isPaused();
@@ -318,6 +344,15 @@ void App::handleKey(int key, int mods) {
         m_ioThreadFileCv.notify_all();
     }
     else if (seekActionTookPlace && isPausedAfterKeyAction) {
+        // If a seek action occurred AND the playback is paused (either was paused or paused by the seek action),
+        // we need to ensure the wall clock anchor is updated correctly for the new paused frame.
+        // performSeek already calls PB's seekToFrame which updates the anchor.
+        // anchorPlaybackTimeForResume is for resuming. recordPauseTime is for entering pause.
+        // The key actions for step/home/end already ensure it's paused *then* call performSeek.
+        // performSeek updates the PB anchor.
+        // For audio, performSeek also resets audio with the new current frame's media timestamp.
+        // So, this specific else-if branch might not need additional action here, as performSeek should handle it.
+        // LogToFile("[App::handleKey] Seek action occurred while paused. Anchor already updated by performSeek. Audio reset by performSeek.");
     }
 }
 
@@ -444,4 +479,12 @@ void App::triggerOpenFileViaDialog() {
             m_firstFileLoaded = tempFirstLoaded;
         }
     }
+}
+
+// Definition of App::showActionMessage
+void App::showActionMessage(const std::string& msg) {
+    m_actionMessage = msg;
+    m_actionMessageTime = std::chrono::steady_clock::now();
+    // m_actionMessageDurationSec is already initialized (e.g., to 1.0)
+    LogToFile(std::string("[App UI] Action message set: \"") + msg + "\"");
 }
