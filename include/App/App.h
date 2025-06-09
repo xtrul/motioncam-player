@@ -26,20 +26,20 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
-#include "Utils/vma_usage.h" 
+#include "Utils/vma_usage.h"
 
 #include "App/AppConfig.h"
 #include "App/AppState.h"
-#include "Playback/PlaybackController.h"
+#include "Playback/PlaybackController.h" // Included for PlaybackController::PlaybackMode
 
 class AudioController;
 class DecoderWrapper;
-class PlaybackController;
+// class PlaybackController; // Already included above
 class Renderer_VK;
 
 #include "Gui/GuiOverlay.h"
 #include "Utils/ThreadSafeQueue.h"
-#include "Decoder/DecoderTypes.h" 
+#include "Decoder/DecoderTypes.h"
 
 class App {
 public:
@@ -150,6 +150,7 @@ private:
     int m_storedWindowedHeight = 720;
     bool m_isFullscreen = false;
     bool m_framebufferResized = false;
+    // bool m_vsyncEnabled; // THIS IS THE LINE TO REMOVE IF IT EXISTS
 
     VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
     VkFormat m_swapChainImageFormat = VK_FORMAT_UNDEFINED;
@@ -199,7 +200,7 @@ private:
 
     std::string m_lastWindowTitle;
     std::chrono::steady_clock::time_point m_lastTitleUpdateTime;
-	
+
 	std::string m_actionMessage;
     std::chrono::steady_clock::time_point m_actionMessageTime;
     double m_actionMessageDurationSec = 1.0;

@@ -6,7 +6,7 @@
 #define NOMINMAX
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <windows.h>
-#include <GLFW/glfw3native.h> 
+#include <GLFW/glfw3native.h>
 #include <shlwapi.h>
 #include <dwmapi.h>
 #include <commdlg.h>
@@ -599,12 +599,32 @@ VkSurfaceFormatKHR App::chooseSwapSurfaceFormat(const std::vector<VkSurfaceForma
 }
 
 VkPresentModeKHR App::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+    PlaybackController::PlaybackMode currentMode = PlaybackController::PlaybackMode::REALTIME; // Default if controller doesn't exist yet
+    if (m_playbackController_ptr) {
+        currentMode = m_playbackController_ptr->getPlaybackMode();
+    }
+
+    if (currentMode == PlaybackController::PlaybackMode::BENCHMARK) {
+        LogToFile("[App::chooseSwapPresentMode] Benchmark mode active. Checking for VK_PRESENT_MODE_IMMEDIATE_KHR.");
+        for (const auto& availablePresentMode : availablePresentModes) {
+            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+                LogToFile("[App::chooseSwapPresentMode] Benchmark mode: Using VK_PRESENT_MODE_IMMEDIATE_KHR (VSync Off).");
+                return availablePresentMode;
+            }
+        }
+        LogToFile("[App::chooseSwapPresentMode] Benchmark mode: VK_PRESENT_MODE_IMMEDIATE_KHR not supported. Falling back to Mailbox/FIFO.");
+        // Fallback to standard preference if IMMEDIATE is not available
+    }
+
+    // Default preference: Mailbox for low latency, then FIFO (standard VSync)
     for (const auto& availablePresentMode : availablePresentModes) {
         if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+            LogToFile("[App::chooseSwapPresentMode] Using VK_PRESENT_MODE_MAILBOX_KHR.");
             return availablePresentMode;
         }
     }
-    return VK_PRESENT_MODE_FIFO_KHR;
+    LogToFile("[App::chooseSwapPresentMode] Using VK_PRESENT_MODE_FIFO_KHR (Standard VSync).");
+    return VK_PRESENT_MODE_FIFO_KHR; // Guaranteed to be available
 }
 
 VkExtent2D App::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {

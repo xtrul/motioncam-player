@@ -9,7 +9,7 @@
 #include <motioncam/Decoder.hpp>
 #include <motioncam/RawData.hpp>
 
-#include "App/AppConfig.h" 
+#include "App/AppConfig.h"
 
 #ifndef TINY_DNG_WRITER_IMPLEMENTATION
 #define TINY_DNG_WRITER_IMPLEMENTATION
@@ -23,7 +23,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <sstream> 
+#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -686,7 +686,7 @@ void App::anchorPlaybackTimeForResume() {
                 m_audio->reset(freshAudioLoader, currentFrameMediaTsOpt.value());
             }
             else {
-                // Fallback if currentFrameMediaTsOpt is not available 
+                // Fallback if currentFrameMediaTsOpt is not available
                 // (e.g. no frames loaded yet, or some error in getting the current frame's TS)
                 // In this case, firstFrameMediaTsOpt (which is the segment's start) is the best guess.
                 LogToFile("[App::anchorPlaybackTimeForResume] WARNING: currentFrameMediaTsOpt was null for audio reset on resume. Falling back to segment's first frame TS or 0.");
@@ -1026,7 +1026,7 @@ void App::sendCurrentFileToMotionCamFS()
 #endif
 
     bool motionCamFsFound = fs::exists(motionCamFsExePath);
-#ifndef _WIN32 
+#ifndef _WIN32
     // If not found via relative path, try checking if it's in PATH
     if (!motionCamFsFound && motionCamFsExePath.find('/') == std::string::npos) {
         motionCamFsFound = (system(("command -v " + motionCamFsExePath + " >/dev/null 2>&1").c_str()) == 0);
@@ -1158,11 +1158,23 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 
 void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
     if (!m_playbackController_ptr) return;
-    PlaybackController::PlaybackMode old = m_playbackController_ptr->getPlaybackMode();
+    PlaybackController::PlaybackMode oldMode = m_playbackController_ptr->getPlaybackMode();
     m_playbackController_ptr->setPlaybackMode(mode);
+
+    bool oldModeWasBenchmark = (oldMode == PlaybackController::PlaybackMode::BENCHMARK);
+    bool newModeIsBenchmark = (mode == PlaybackController::PlaybackMode::BENCHMARK);
+
     if (m_audio) {
         m_audio->setForceMute(mode != PlaybackController::PlaybackMode::REALTIME);
     }
-    LogToFile(std::string("[App::setPlaybackMode] Changed from ") + std::to_string(static_cast<int>(old)) +
+
+    // If VSync behavior might change due to switching to/from benchmark mode,
+    // flag for swapchain recreation.
+    if (oldModeWasBenchmark != newModeIsBenchmark) {
+        LogToFile("[App::setPlaybackMode] VSync characteristic changed due to benchmark mode switch. Flagging for swapchain recreate.");
+        m_framebufferResized = true; // Trigger recreateSwapChain in the main loop
+    }
+
+    LogToFile(std::string("[App::setPlaybackMode] Changed from ") + std::to_string(static_cast<int>(oldMode)) +
         " to " + std::to_string(static_cast<int>(mode)));
 }
