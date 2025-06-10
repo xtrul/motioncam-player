@@ -261,8 +261,8 @@ namespace GuiOverlay {
             ImGui::PopStyleColor();
             ImGui::PopStyleVar(2);
         }
-        (void)current_playlist_window_width;
-        (void)playlist_window_is_visible;
+        (void)current_playlist_window_width; // Mark as used to suppress warnings if NDEBUG
+        (void)playlist_window_is_visible; // Mark as used
 
 
         if (ui.showHelpPage) {
@@ -324,6 +324,7 @@ namespace GuiOverlay {
         sizeAuxOverlayButton = ImVec2(aux_overlay_icon_line_height_sp + GuiStyles::G_AUX_OVERLAY_BUTTON_PADDING.x * 2.0f + 3.0f, aux_overlay_icon_line_height_sp + GuiStyles::G_AUX_OVERLAY_BUTTON_PADDING.y * 2.0f + 1.5f);
         auxOverlayButtonFrameHeight = sizeAuxOverlayButton.y;
         if (GuiStyles::G_AuxOverlayIconFont) ImGui::PopFont();
+        (void)auxOverlayButtonFrameHeight; // Mark as used
 
         const float general_inter_button_gap = style.ItemSpacing.x * 1.0f;
         const float tight_inter_button_gap = style.ItemSpacing.x * 0.3f;
@@ -414,37 +415,51 @@ namespace GuiOverlay {
                 static bool scrub_in_progress = false;
 
                 if (ImGui::IsItemActivated()) {
+#ifndef NDEBUG
                     LogToFile("[GuiRender::Slider] Scrub ACTIVATED.");
+#endif
                     scrub_in_progress = true;
                     was_paused_state_before_scrub = appInstance->m_playbackController_ptr->isPaused();
                     if (!was_paused_state_before_scrub) {
+#ifndef NDEBUG
                         LogToFile("[GuiRender::Slider] Was playing, pausing for scrub via handleKey(SPACE).");
+#endif
                         appInstance->handleKey(GLFW_KEY_SPACE, 0); // This will toggle pause and call recordPauseTime
                     }
                 }
 
                 if (ImGui::IsItemActive() && value_changed_by_user_drag) {
+#ifndef NDEBUG
                     LogToFile(std::string("[GuiRender::Slider] Scrub DRAG, slider val: ") + std::to_string(current_frame_idx_slider) + ". Calling performSeek.");
+#endif
                     appInstance->performSeek(static_cast<size_t>(current_frame_idx_slider));
                 }
 
                 if (scrub_in_progress && ImGui::IsItemDeactivated()) {
+#ifndef NDEBUG
                     LogToFile(std::string("[GuiRender::Slider] Scrub DEACTIVATED. Final slider val: ") + std::to_string(current_frame_idx_slider) +
                         ", Current PB idx (after last drag seek, if any): " + std::to_string(appInstance->m_playbackController_ptr->getCurrentFrameIndex()));
+#endif
                     scrub_in_progress = false;
 
                     if (static_cast<size_t>(current_frame_idx_slider) != appInstance->m_playbackController_ptr->getCurrentFrameIndex()) {
+#ifndef NDEBUG
                         LogToFile(std::string("[GuiRender::Slider] Scrub DEACTIVATED, value different from PB. Final seek to: ") + std::to_string(current_frame_idx_slider));
+#endif
                         appInstance->performSeek(static_cast<size_t>(current_frame_idx_slider));
                     }
 
                     if (!was_paused_state_before_scrub) {
+#ifndef NDEBUG
                         LogToFile("[GuiRender::Slider] Scrub ended, was playing before. Resuming playback via handleKey(SPACE).");
+#endif
                         appInstance->handleKey(GLFW_KEY_SPACE, 0); // This will unpause and call anchorPlaybackTimeForResume
                     }
+#ifndef NDEBUG
                     else {
                         LogToFile("[GuiRender::Slider] Scrub ended, was paused. Stays paused. Anchor already set by (final) performSeek for paused state.");
                     }
+#endif
                     was_paused_state_before_scrub = false;
                 }
             }

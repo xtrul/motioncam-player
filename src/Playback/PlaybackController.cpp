@@ -196,12 +196,14 @@ bool PlaybackController::updatePlayhead(
     }
 
     if (newFrameIdx != m_currentFrameIdx) {
+#ifndef NDEBUG
         std::ostringstream log_oss_idx;
         log_oss_idx << "[PB::updatePlayhead] OldIdx: " << m_currentFrameIdx
             << ", NewIdx: " << newFrameIdx
             << (mediaFrameTimestamps.empty() || newFrameIdx >= mediaFrameTimestamps.size() ? std::string(", NewIdx MediaTS: OOB or Empty") : std::string(", NewIdx MediaTS: ") + std::to_string(mediaFrameTimestamps[newFrameIdx]))
             << ", SegmentEnded: " << (segmentEnded ? "T" : "F");
         LogToFile(log_oss_idx.str());
+#endif
     }
     m_currentFrameIdx = newFrameIdx;
 

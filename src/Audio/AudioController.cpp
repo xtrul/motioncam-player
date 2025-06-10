@@ -155,6 +155,7 @@ void AudioController::updatePlayback(int64_t elapsedNsSinceSegmentStart) {
 
     const int64_t targetQueueUntilMediaTimeNs = elapsedNsSinceSegmentStart + m_latencyNs;
 
+#ifndef NDEBUG
     // More detailed logging for audio queueing decisions
     std::ostringstream log_oss_up;
     log_oss_up << "[Audio::updatePlayback] ElapNsSegStart: " << elapsedNsSinceSegmentStart
@@ -163,6 +164,7 @@ void AudioController::updatePlayback(int64_t elapsedNsSinceSegmentStart) {
         << ", m_firstVideoFrameTs (AudioAnchor): " << m_firstVideoFrameTs
         << ", m_lastQueuedTimestamp (Rel): " << m_lastQueuedTimestamp;
     // LogToFile(log_oss_up.str()); // This can be very verbose, enable if needed
+#endif
 
     const int64_t MAX_QUEUE_AHEAD_OF_LAST_QUEUED_NS = 200LL * 1000000LL; // 200ms
     const int64_t MAX_QUEUE_AHEAD_OF_ELAPSED_NS = 500LL * 1000000LL;     // 500ms
@@ -180,23 +182,29 @@ void AudioController::updatePlayback(int64_t elapsedNsSinceSegmentStart) {
         if (!m_hasCache) {
             motioncam::AudioChunk tempChunk;
             if (!m_loader->next(tempChunk)) {
+#ifndef NDEBUG
                 // LogToFile("[Audio::updatePlayback] No more audio chunks from loader.");
+#endif
                 break;
             }
             int64_t originalAbsoluteTs = tempChunk.first;
             // Make timestamp relative to the first video frame of the *current segment*
             tempChunk.first -= m_firstVideoFrameTs;
 
+#ifndef NDEBUG
             // If original timestamp was -1 (often indicating end of audio stream or error),
             // then after subtraction, it will be a large negative number.
             // We should only process chunks that are meant to be played *after* the first video frame.
             if (tempChunk.first < 0 && originalAbsoluteTs != -1LL) { // -1LL is a special marker from decoder
                 // LogToFile(std::string("[Audio::updatePlayback] Skipping early audio chunk. OrigAbsTS: ") + std::to_string(originalAbsoluteTs) + ", RelTS: " + std::to_string(tempChunk.first));
-                continue;
+                // continue; // Keep this commented for release, but useful for debug
             }
+#endif
             m_cache = std::move(tempChunk);
             m_hasCache = true;
+#ifndef NDEBUG
             // LogToFile(std::string("[Audio::updatePlayback] Loaded chunk. OrigAbsTS: ") + std::to_string(originalAbsoluteTs) + ", RelTS (m_cache.first): " + std::to_string(m_cache.first));
+#endif
         }
 
         // Check if the cached chunk's (relative) timestamp is beyond our target
@@ -204,11 +212,14 @@ void AudioController::updatePlayback(int64_t elapsedNsSinceSegmentStart) {
         bool chunkHasValidTimestamp = (m_cache.first != -1LL - m_firstVideoFrameTs);
 
         if (chunkHasValidTimestamp && (m_cache.first > effectiveTargetQueueUntilNs)) {
+#ifndef NDEBUG
             // LogToFile(std::string("[Audio::updatePlayback] Holding audio. CacheRelTS: ") + std::to_string(m_cache.first) + " > EffectiveTargetRelMediaTimeNs: " + std::to_string(effectiveTargetQueueUntilNs));
+#endif
             break;
         }
-
+#ifndef NDEBUG
         // LogToFile(std::string("[Audio::updatePlayback] Queuing audio chunk. CacheRelTS: ") + std::to_string(m_cache.first) + (chunkHasValidTimestamp ? "" : " (OrigTS was -1, TS estimated)"));
+#endif
         queueSamples(m_cache.second); // This will update m_lastQueuedTimestamp if successful and timestamp is valid
         m_hasCache = false;
         chunksQueuedThisCall++;
