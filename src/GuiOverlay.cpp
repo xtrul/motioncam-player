@@ -289,6 +289,24 @@ void GuiOverlay::render(App* appInstance) {
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
 
+    ImGui::SetNextWindowPos(viewport->WorkPos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(viewport->WorkSize, ImGuiCond_Always);
+    ImGuiWindowFlags ctx_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                 ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBackground;
+    if (ImGui::Begin("RightClickOverlay", nullptr, ctx_flags)) {
+        if (ImGui::BeginPopupContextWindow("MainContextMenu", ImGuiPopupFlags_MouseButtonRight)) {
+            if (ImGui::MenuItem("Save Current Frame as DNG")) {
+                appInstance->saveCurrentFrameAsDng();
+            }
+            if (ImGui::MenuItem("Send to MotionCam Fuse")) {
+                appInstance->sendCurrentFileToMotionCamFuse();
+            }
+            ImGui::EndPopup();
+        }
+    }
+    ImGui::End();
+
     if (GuiOverlay::show_playlist_aux) {
         const float initial_playlist_width = 320.0f * io.FontGlobalScale; float default_playlist_height = viewport->WorkSize.y * 0.80f;
         ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - initial_playlist_width - style.WindowPadding.x, viewport->WorkPos.y + style.WindowPadding.y), ImGuiCond_Appearing);
@@ -458,15 +476,6 @@ void GuiOverlay::render(App* appInstance) {
             ImGui::PopStyleVar(2); ImGui::PopStyleColor(); ImGui::PopFont();
         }
 
-        if (ImGui::BeginPopupContextWindow("MainContextMenu", ImGuiPopupFlags_MouseButtonRight)) {
-            if (ImGui::MenuItem("Save Current Frame as DNG")) {
-                appInstance->saveCurrentFrameAsDng();
-            }
-            if (ImGui::MenuItem("Send to MotionCam Fuse")) {
-                appInstance->sendCurrentFileToMotionCamFuse();
-            }
-            ImGui::EndPopup();
-        }
         ImGui::End();
     }
     ImGui::PopStyleVar(3); ImGui::PopStyleColor(2);
