@@ -46,7 +46,6 @@ public:
     int getImageWidth() const;
     int getImageHeight() const;
     void resetDimensions();
-    void setOrientation(int orientation); // 0=none,1=90deg,2=180deg,3=270deg
 
 private:
     struct ShaderParamsUBO {
@@ -62,7 +61,6 @@ private:
         alignas(4) float gainB;
         alignas(16) glm::mat4 CCM;
         alignas(4) float saturationAdjustment;
-        alignas(4) int orientation;
     };
 
     VkPhysicalDevice m_physicalDevice;
@@ -93,7 +91,6 @@ private:
 
     int m_currentRawW;
     int m_currentRawH;
-    int m_orientation; // 0=none,1=90,2=180,3=270
     bool m_zoomNativePixels;
     float m_panX;
     float m_panY;
