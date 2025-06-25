@@ -44,7 +44,6 @@ Renderer_VK::Renderer_VK(VkPhysicalDevice physicalDevice, VkDevice device, VmaAl
     m_graphicsPipeline(VK_NULL_HANDLE),
     m_descriptorPool(VK_NULL_HANDLE),
     m_currentRawW(0), m_currentRawH(0),
-    m_orientation(0),
     m_zoomNativePixels(false),
     m_panX(0.0f), m_panY(0.0f),
     m_swapChainImageCount(0)
@@ -784,7 +783,6 @@ void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t c
     }
     ubo.CCM = glm::mat4(ccm3x3_glm);
     ubo.saturationAdjustment = 1.0f; // Default saturation
-    ubo.orientation = m_orientation;
 
     updateUniformBuffer(currentFrameIndex, ubo);
 
@@ -804,9 +802,7 @@ void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t c
         scissor.extent = { (uint32_t)windowWidth, (uint32_t)windowHeight };
     }
     else {
-        float dispW = (m_orientation % 2 == 0) ? (float)m_currentRawW : (float)m_currentRawH;
-        float dispH = (m_orientation % 2 == 0) ? (float)m_currentRawH : (float)m_currentRawW;
-        float imgAspect = (dispH == 0.0f) ? 1.0f : (dispW / dispH);
+        float imgAspect = (m_currentRawH == 0) ? 1.0f : ((float)m_currentRawW / (float)m_currentRawH);
         float winAspect = (windowHeight == 0) ? 1.0f : ((float)windowWidth / (float)windowHeight);
         float vpWidth = (float)windowWidth;
         float vpHeight = (float)windowHeight;
@@ -926,7 +922,6 @@ int Renderer_VK::getCfaType(const std::string& c) {
 }
 
 void Renderer_VK::setZoomNativePixels(bool n) { m_zoomNativePixels = n; }
-void Renderer_VK::setOrientation(int orientation) { m_orientation = orientation % 4; }
 void Renderer_VK::setPanOffsets(float x, float y) { m_panX = x; m_panY = y; }
 void Renderer_VK::resetPanOffsets() { m_panX = 0.0f; m_panY = 0.0f; }
 float Renderer_VK::getPanX() const { return m_panX; }

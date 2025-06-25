@@ -20,7 +20,6 @@ layout(binding = 1) uniform ShaderParams {
     mat4 CCM; // Pass as mat4, use top-left 3x3
     // --- ADD SATURATION UNIFORM ---
     float saturationAdjustment; // e.g., 1.0 for no change, 1.25 for +25%
-    int orientation; // 0=none,1=90deg,2=180deg,3=270deg
 } params;
 
 // sRGB EOTF (gamma correction)
@@ -56,15 +55,7 @@ float interpD(int x, int y) {
 }
 
 void main() {
-    vec2 coord = inTexCoord;
-    if (params.orientation == 1) {
-        coord = vec2(inTexCoord.y, 1.0 - inTexCoord.x);
-    } else if (params.orientation == 2) {
-        coord = vec2(1.0 - inTexCoord.x, 1.0 - inTexCoord.y);
-    } else if (params.orientation == 3) {
-        coord = vec2(1.0 - inTexCoord.y, inTexCoord.x);
-    }
-    ivec2 p = ivec2(coord * vec2(params.W, params.H));
+    ivec2 p = ivec2(inTexCoord * vec2(params.W, params.H));
     
     if (p.x >= params.W || p.y >= params.H || p.x < 0 || p.y < 0) {
         outColor = vec4(0.0, 0.0, 0.0, 1.0); 
