@@ -1215,7 +1215,6 @@ void App::drawFrame() {
                 local_raw_width = frame_meta_for_render.value("width", 0);
                 local_raw_height = frame_meta_for_render.value("height", 0);
                 if (m_rendererVk) {
-                    int orient = (local_raw_width < local_raw_height) ? 1 : 0;
                     m_rendererVk->setOrientation(orient);
                 }
             } catch (const std::exception& e) {
