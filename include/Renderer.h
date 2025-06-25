@@ -28,6 +28,7 @@ public:
     void setZoomNativePixels(bool nativePixels);
     void setPanOffsets(float x, float y);
     void resetPanOffsets();
+    void setOrientation(int orientation);
     float getPanX() const;
     float getPanY() const;
     int getImageWidth()  const;
@@ -61,6 +62,7 @@ private:
     bool m_zoomNativePixels = false;
     float m_panX = 0.0f;
     float m_panY = 0.0f;
+    int m_orientation = 0;
 };
 
 #endif // RENDERER_H
