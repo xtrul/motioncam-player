@@ -13,7 +13,7 @@
 void LogToFile(const std::string& message) {
     // Static to ensure it's initialized once and persists.
     // `std::ios_base::app` ensures appending to the file.
-    static std::ofstream log_file("mcraw_player_debug_log.txt", std::ios_base::app | std::ios_base::out);
+    static std::ofstream log_file("MotionCamPlayer_debug_log.txt", std::ios_base::app | std::ios_base::out);
 
     if (log_file.is_open()) {
         auto now = std::chrono::system_clock::now();

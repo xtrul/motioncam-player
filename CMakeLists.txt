@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 cmake_policy(SET CMP0111 NEW) # Important for MACOSX_RPATH behavior
-project(MCRAW_Player VERSION 0.5 LANGUAGES C CXX)
+project(MotionCam_Player VERSION 0.5 LANGUAGES C CXX)
 
 # --- Universal macOS binary (Apple Silicon + Intel) ---
 set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "" FORCE)
@@ -236,7 +236,8 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${PROJECT_SOURCE_DIR}/macos/Info.plist"
-    MACOSX_BUNDLE_GUI_IDENTIFIER "com.motioncamapp.mcrawplayer"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.motioncam.player"
+    OUTPUT_NAME "MotionCam Player"
     MACOSX_RPATH TRUE
     BUILD_RPATH "@executable_path/../Frameworks"
     INSTALL_RPATH "@executable_path/../Frameworks"
@@ -308,9 +309,9 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMENT "Ensuring Frameworks directory exists")
 
 # --- Embed .icns ---
-set_source_files_properties("${PROJECT_SOURCE_DIR}/mcraw_player.icns" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-target_sources(${PROJECT_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/mcraw_player.icns")
-set_target_properties(${PROJECT_NAME} PROPERTIES MACOSX_BUNDLE_ICON_FILE "mcraw_player.icns")
+set_source_files_properties("${PROJECT_SOURCE_DIR}/MotionCamPlayer.icns" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+target_sources(${PROJECT_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/MotionCamPlayer.icns")
+set_target_properties(${PROJECT_NAME} PROPERTIES MACOSX_BUNDLE_ICON_FILE "MotionCamPlayer.icns")
 
 # --- Resource copy ---
 set(APP_BUNDLE_ROOT_DIR "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.app")
@@ -359,7 +360,7 @@ else()
     set(ORIGINAL_JSON_LIB_PATH_STRING "\"../../../lib/libMoltenVK.dylib\"")
     set(CORRECT_JSON_LIB_PATH_STRING  "\"../../../Frameworks/libMoltenVK.dylib\"")
 
-    set(CMAKE_HELPER_SCRIPT_DIR "${CMAKE_CURRENT_BINARY_DIR}/cmake_scripts_mcrawplayer")
+    set(CMAKE_HELPER_SCRIPT_DIR "${CMAKE_CURRENT_BINARY_DIR}/cmake_scripts_MotionCamPlayer")
     file(MAKE_DIRECTORY "${CMAKE_HELPER_SCRIPT_DIR}")
     set(PATCH_SCRIPT_CONTENT
 "# This script is executed by: cmake -P PatchScript.cmake

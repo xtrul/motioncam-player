@@ -95,7 +95,7 @@ Module Details:
    *   Purpose: Simple static logging class.
    *   Responsibilities:
         *   Provides `log` function.
-        *   Writes timestamped messages to console (`std::cout`) and file (`mcraw_player_compute_log.txt`).
+       *   Writes timestamped messages to console (`std::cout`) and file (`MotionCamPlayer_compute_log.txt`).
    *   Dependencies: `<iostream>`, `<fstream>`, `<chrono>`, `<iomanip>`.
 
 5. Module: PlaybackController
