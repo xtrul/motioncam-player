@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+	<key>CFBundleIconFile</key>
+	<string>mcraw_player</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.motioncamapp.mcrawplayer</string>
+	<key>CFBundleName</key>
+	<string>MCRAW Player</string>
+	<key>CFBundleDisplayName</key>
+	<string>MCRAW Player</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.5</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>10.15</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2025 MotionCamApp. All rights reserved. Visit https://www.motioncamapp.com/</string>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>MetalCaptureEnabled</key>
+	<true/>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>MCRAW Player needs access to your Desktop to open .mcraw files.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>MCRAW Player needs access to your Documents to open .mcraw files.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>MCRAW Player needs access to your Downloads to open .mcraw files.</string>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+</dict>
+</plist>
