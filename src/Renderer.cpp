@@ -462,4 +462,5 @@ int Renderer::getCfaType(const std::string& c) {
 void Renderer::setZoomNativePixels(bool n) { m_zoomNativePixels = n; }
 void Renderer::setPanOffsets(float x, float y) { m_panX = x; m_panY = y; }
 void Renderer::resetPanOffsets() { m_panX = 0.0f; m_panY = 0.0f; }
+void Renderer::setOrientation(int orientation) { m_orientation = orientation % 4; }
 void Renderer::resetDimensions() { m_currentW = 0; m_currentH = 0; }

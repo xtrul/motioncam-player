@@ -296,6 +296,13 @@ void GuiOverlay::render(App* appInstance) {
                                  ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBackground;
     if (ImGui::Begin("RightClickOverlay", nullptr, ctx_flags)) {
         if (ImGui::BeginPopupContextWindow("MainContextMenu", ImGuiPopupFlags_MouseButtonRight)) {
+            if (ImGui::MenuItem("Rotate Left")) {
+                appInstance->rotateCurrentClipLeft();
+            }
+            if (ImGui::MenuItem("Rotate Right")) {
+                appInstance->rotateCurrentClipRight();
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Save Current Frame as DNG")) {
                 appInstance->saveCurrentFrameAsDng();
             }
@@ -330,6 +337,7 @@ void GuiOverlay::render(App* appInstance) {
             ImGui::Text("Playback Controls:"); ImGui::BulletText("[Space]        : Play / Pause"); ImGui::BulletText("[Left Arrow]   : Previous Frame (Step Back)"); ImGui::BulletText("[Right Arrow]  : Next Frame (Step Forward)"); ImGui::BulletText("[Home]         : Go to First Frame"); ImGui::BulletText("[End]          : Go to Last Frame");
             ImGui::Separator(); ImGui::Text("File Navigation:"); ImGui::BulletText("[[ (L-Bracket)]: Previous File in Playlist"); ImGui::BulletText("[] (R-Bracket)]: Next File in Playlist"); ImGui::BulletText("[Ctrl + O]     : Open File Dialog");
             ImGui::Separator(); ImGui::Text("Display & UI:"); ImGui::BulletText("[F] or [F11]   : Toggle Fullscreen"); ImGui::BulletText("[Z]            : Toggle Zoom (Native Pixels / Fit to Window)"); ImGui::BulletText("[M]            : Toggle Metrics Overlay"); ImGui::BulletText("[H] or [F1]    : Toggle This Help Page"); ImGui::BulletText("[Tab]          : Toggle Main UI Controls"); ImGui::BulletText("[Esc]          : Exit Fullscreen / Close Popups / Quit");
+            ImGui::BulletText("Right Click     : Rotate Left/Right via menu");
             ImGui::Separator(); ImGui::Text("Application:"); ImGui::BulletText("[Ctrl + Q]     : Quit Application");
         }
         ImGui::End();
@@ -481,6 +489,13 @@ void GuiOverlay::render(App* appInstance) {
     ImGui::PopStyleVar(3); ImGui::PopStyleColor(2);
 
     if (ImGui::BeginPopupContextWindow("MainContextMenu", ImGuiPopupFlags_MouseButtonRight)) {
+        if (ImGui::MenuItem("Rotate Left")) {
+            appInstance->rotateCurrentClipLeft();
+        }
+        if (ImGui::MenuItem("Rotate Right")) {
+            appInstance->rotateCurrentClipRight();
+        }
+        ImGui::Separator();
         if (ImGui::MenuItem("Save Current Frame as DNG")) {
             appInstance->saveCurrentFrameAsDng();
         }

@@ -17,6 +17,7 @@
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <unordered_map>
 
 // 2. Third-party library preprocessor definitions that might affect other headers
 #define GLFW_INCLUDE_VULKAN
@@ -111,6 +112,7 @@ public:
     double m_lastMouseY;
     bool m_firstFileLoaded;
     bool m_isFullscreen;
+    std::unordered_map<std::string, int> m_manualOrientation;
 
     void handleKey(int key, int mods);
     void handleDrop(int count, const char** paths);
@@ -124,6 +126,8 @@ public:
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void sendCurrentFileToMotionCamFuse();
+    void rotateCurrentClipLeft();
+    void rotateCurrentClipRight();
 
     static void framebuffer_size_callback_static(GLFWwindow* window, int w, int h);
     static void key_callback_static(GLFWwindow* window, int key, int scancode, int action, int mods);
