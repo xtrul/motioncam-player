@@ -1214,6 +1214,41 @@ void App::drawFrame() {
                 m_decoderWrapper->getDecoder()->loadFrame(dec_frames[idx], frame_data_for_render, frame_meta_for_render);
                 local_raw_width = frame_meta_for_render.value("width", 0);
                 local_raw_height = frame_meta_for_render.value("height", 0);
+                if (m_rendererVk) {
+                    int orient = 0;
+                    std::string curPath = m_fileList[m_currentFileIndex];
+                    auto itOrient = m_manualOrientation.find(curPath);
+                    if (itOrient != m_manualOrientation.end()) {
+                        orient = itOrient->second;
+                    } else {
+                        auto get_int_if = [&](const char* key) -> std::optional<int> {
+                            if (frame_meta_for_render.contains(key) && frame_meta_for_render[key].is_number()) {
+                                return frame_meta_for_render[key].get<int>();
+                            }
+                            return std::nullopt;
+                        };
+
+                        std::optional<int> meta_orient = get_int_if("orientation");
+                        if (!meta_orient) meta_orient = get_int_if("Orientation");
+                        if (!meta_orient) meta_orient = get_int_if("rotation");
+                        if (!meta_orient) meta_orient = get_int_if("rotationDegrees");
+                        if (!meta_orient) meta_orient = get_int_if("deviceOrientation");
+
+                        if (meta_orient) {
+                            int val = *meta_orient;
+                            if (val == 6 || val == 90) orient = 1;
+                            else if (val == 3 || val == 180) orient = 2;
+                            else if (val == 8 || val == 270) orient = 3;
+                            else if (val == 0 || val == 1) orient = 0;
+                            else orient = ((val % 360) / 90) % 4;
+                        } else if (local_raw_width < local_raw_height) {
+                            orient = 1;
+                        }
+                        m_manualOrientation[curPath] = orient;
+                    }
+
+                    m_rendererVk->setOrientation(orient);
+                }
             } catch (const std::exception& e) {
                 LogToFile(std::string("[App::drawFrame] Error loading frame ") + std::to_string(idx) + ": " + e.what());
                 std::cerr << "[App::drawFrame] Error loading frame " << idx << ": " << e.what() << std::endl;
@@ -1786,4 +1821,26 @@ void App::sendCurrentFileToMotionCamFuse() {
 #else
     std::cerr << "Fuse Launch: Only supported on macOS." << std::endl;
 #endif
+}
+
+void App::rotateCurrentClipLeft() {
+    if (m_fileList.empty()) return;
+    std::string path = m_fileList[m_currentFileIndex];
+    int orient = 0;
+    auto it = m_manualOrientation.find(path);
+    if (it != m_manualOrientation.end()) orient = it->second;
+    orient = (orient + 3) % 4; // rotate -90 degrees
+    m_manualOrientation[path] = orient;
+    if (m_rendererVk) m_rendererVk->setOrientation(orient);
+}
+
+void App::rotateCurrentClipRight() {
+    if (m_fileList.empty()) return;
+    std::string path = m_fileList[m_currentFileIndex];
+    int orient = 0;
+    auto it = m_manualOrientation.find(path);
+    if (it != m_manualOrientation.end()) orient = it->second;
+    orient = (orient + 1) % 4; // rotate +90 degrees
+    m_manualOrientation[path] = orient;
+    if (m_rendererVk) m_rendererVk->setOrientation(orient);
 }
