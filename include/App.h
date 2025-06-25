@@ -123,6 +123,7 @@ public:
     void handleCursorPos(double xpos, double ypos);
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
+    void sendCurrentFileToMotionCamFuse();
 
     static void framebuffer_size_callback_static(GLFWwindow* window, int w, int h);
     static void key_callback_static(GLFWwindow* window, int key, int scancode, int action, int mods);

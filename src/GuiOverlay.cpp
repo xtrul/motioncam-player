@@ -289,6 +289,24 @@ void GuiOverlay::render(App* appInstance) {
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
 
+    ImGui::SetNextWindowPos(viewport->WorkPos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(viewport->WorkSize, ImGuiCond_Always);
+    ImGuiWindowFlags ctx_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                 ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBackground;
+    if (ImGui::Begin("RightClickOverlay", nullptr, ctx_flags)) {
+        if (ImGui::BeginPopupContextWindow("MainContextMenu", ImGuiPopupFlags_MouseButtonRight)) {
+            if (ImGui::MenuItem("Save Current Frame as DNG")) {
+                appInstance->saveCurrentFrameAsDng();
+            }
+            if (ImGui::MenuItem("Send to MotionCam Fuse")) {
+                appInstance->sendCurrentFileToMotionCamFuse();
+            }
+            ImGui::EndPopup();
+        }
+    }
+    ImGui::End();
+
     if (GuiOverlay::show_playlist_aux) {
         const float initial_playlist_width = 320.0f * io.FontGlobalScale; float default_playlist_height = viewport->WorkSize.y * 0.80f;
         ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - initial_playlist_width - style.WindowPadding.x, viewport->WorkPos.y + style.WindowPadding.y), ImGuiCond_Appearing);
@@ -455,13 +473,9 @@ void GuiOverlay::render(App* appInstance) {
             if (ImGui::Button(ICON_MD_HELP_OUTLINE, sizeAuxOverlayButton)) { appInstance->toggleHelpPage(); if (appInstance->m_showHelpPage) GuiOverlay::show_playlist_aux = false; }
             ImGui::SameLine(0.0f, aux_button_effective_item_spacing_x);
             if (ImGui::Button(ICON_MD_MENU, sizeAuxOverlayButton)) { GuiOverlay::show_playlist_aux = !GuiOverlay::show_playlist_aux; if (GuiOverlay::show_playlist_aux && appInstance->m_showHelpPage) appInstance->toggleHelpPage(); }
-            float screen_y_for_aux_grid_bottom_row = screen_y_for_aux_grid_middle_row + sizeAuxOverlayButton.y + aux_vertical_spacing_tight;
-            ImGui::SetCursorScreenPos(ImVec2(screen_x_for_aux_grid_left_col, screen_y_for_aux_grid_bottom_row));
-            if (ImGui::Button(ICON_MD_SAVE, sizeAuxOverlayButton)) { appInstance->saveCurrentFrameAsDng(); }
-            ImGui::SameLine(0.0f, aux_button_effective_item_spacing_x);
-            if (ImGui::Button(ICON_MD_COLLECTIONS, sizeAuxOverlayButton)) { appInstance->convertCurrentFileToDngs(); }
             ImGui::PopStyleVar(2); ImGui::PopStyleColor(); ImGui::PopFont();
         }
+
         ImGui::End();
     }
     ImGui::PopStyleVar(3); ImGui::PopStyleColor(2);
