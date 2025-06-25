@@ -1214,6 +1214,28 @@ void App::drawFrame() {
                 m_decoderWrapper->getDecoder()->loadFrame(dec_frames[idx], frame_data_for_render, frame_meta_for_render);
                 local_raw_width = frame_meta_for_render.value("width", 0);
                 local_raw_height = frame_meta_for_render.value("height", 0);
+                if (m_rendererVk) {
+                    int orient = 0;
+                    auto get_int_if = [&](const char* key) -> std::optional<int> {
+                        if (frame_meta_for_render.contains(key) && frame_meta_for_render[key].is_number()) {
+                            return frame_meta_for_render[key].get<int>();
+                        }
+                        return std::nullopt;
+                    };
+
+                    std::optional<int> meta_orient = get_int_if("orientation");
+                    if (!meta_orient) meta_orient = get_int_if("Orientation");
+                    if (!meta_orient) meta_orient = get_int_if("rotation");
+                    if (!meta_orient) meta_orient = get_int_if("rotationDegrees");
+                    if (!meta_orient) meta_orient = get_int_if("deviceOrientation");
+
+                    if (meta_orient)
+                        orient = (*meta_orient / 90) % 4;
+                    else if (local_raw_width < local_raw_height)
+                        orient = 1;
+
+                    m_rendererVk->setOrientation(orient);
+                }
             } catch (const std::exception& e) {
                 LogToFile(std::string("[App::drawFrame] Error loading frame ") + std::to_string(idx) + ": " + e.what());
                 std::cerr << "[App::drawFrame] Error loading frame " << idx << ": " << e.what() << std::endl;
