@@ -41,6 +41,7 @@
 #include <chrono>
 #include <cmath>
 #include <set>
+#include <cstdlib>
 
 #define TINY_DNG_WRITER_IMPLEMENTATION
 #include <tinydng/tiny_dng_writer.h>

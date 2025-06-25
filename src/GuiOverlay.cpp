@@ -457,6 +457,16 @@ void GuiOverlay::render(App* appInstance) {
             if (ImGui::Button(ICON_MD_MENU, sizeAuxOverlayButton)) { GuiOverlay::show_playlist_aux = !GuiOverlay::show_playlist_aux; if (GuiOverlay::show_playlist_aux && appInstance->m_showHelpPage) appInstance->toggleHelpPage(); }
             ImGui::PopStyleVar(2); ImGui::PopStyleColor(); ImGui::PopFont();
         }
+
+        if (ImGui::BeginPopupContextWindow("MainContextMenu", ImGuiPopupFlags_MouseButtonRight)) {
+            if (ImGui::MenuItem("Save Current Frame as DNG")) {
+                appInstance->saveCurrentFrameAsDng();
+            }
+            if (ImGui::MenuItem("Send to MotionCam Fuse")) {
+                appInstance->sendCurrentFileToMotionCamFuse();
+            }
+            ImGui::EndPopup();
+        }
         ImGui::End();
     }
     ImGui::PopStyleVar(3); ImGui::PopStyleColor(2);
