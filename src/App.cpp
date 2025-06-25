@@ -1214,6 +1214,10 @@ void App::drawFrame() {
                 m_decoderWrapper->getDecoder()->loadFrame(dec_frames[idx], frame_data_for_render, frame_meta_for_render);
                 local_raw_width = frame_meta_for_render.value("width", 0);
                 local_raw_height = frame_meta_for_render.value("height", 0);
+                if (m_rendererVk) {
+                    int orient = (local_raw_width < local_raw_height) ? 1 : 0;
+                    m_rendererVk->setOrientation(orient);
+                }
             } catch (const std::exception& e) {
                 LogToFile(std::string("[App::drawFrame] Error loading frame ") + std::to_string(idx) + ": " + e.what());
                 std::cerr << "[App::drawFrame] Error loading frame " << idx << ": " << e.what() << std::endl;
