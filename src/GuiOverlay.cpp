@@ -455,12 +455,17 @@ void GuiOverlay::render(App* appInstance) {
             if (ImGui::Button(ICON_MD_HELP_OUTLINE, sizeAuxOverlayButton)) { appInstance->toggleHelpPage(); if (appInstance->m_showHelpPage) GuiOverlay::show_playlist_aux = false; }
             ImGui::SameLine(0.0f, aux_button_effective_item_spacing_x);
             if (ImGui::Button(ICON_MD_MENU, sizeAuxOverlayButton)) { GuiOverlay::show_playlist_aux = !GuiOverlay::show_playlist_aux; if (GuiOverlay::show_playlist_aux && appInstance->m_showHelpPage) appInstance->toggleHelpPage(); }
-            float screen_y_for_aux_grid_bottom_row = screen_y_for_aux_grid_middle_row + sizeAuxOverlayButton.y + aux_vertical_spacing_tight;
-            ImGui::SetCursorScreenPos(ImVec2(screen_x_for_aux_grid_left_col, screen_y_for_aux_grid_bottom_row));
-            if (ImGui::Button(ICON_MD_SAVE, sizeAuxOverlayButton)) { appInstance->saveCurrentFrameAsDng(); }
-            ImGui::SameLine(0.0f, aux_button_effective_item_spacing_x);
-            if (ImGui::Button(ICON_MD_COLLECTIONS, sizeAuxOverlayButton)) { appInstance->convertCurrentFileToDngs(); }
             ImGui::PopStyleVar(2); ImGui::PopStyleColor(); ImGui::PopFont();
+        }
+
+        if (ImGui::BeginPopupContextWindow("MainContextMenu", ImGuiPopupFlags_MouseButtonRight)) {
+            if (ImGui::MenuItem("Save Current Frame as DNG")) {
+                appInstance->saveCurrentFrameAsDng();
+            }
+            if (ImGui::MenuItem("Send to MotionCam Fuse")) {
+                appInstance->sendCurrentFileToMotionCamFuse();
+            }
+            ImGui::EndPopup();
         }
         ImGui::End();
     }

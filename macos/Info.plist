@@ -7,11 +7,11 @@
 	<key>CFBundleIconFile</key>
 	<string>mcraw_player</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.motioncamapp.mcrawplayer</string>
+	<string>com.motioncam.player</string>
 	<key>CFBundleName</key>
-	<string>MCRAW Player</string>
+	<string>MotionCam Player</string>
 	<key>CFBundleDisplayName</key>
-	<string>MCRAW Player</string>
+	<string>MotionCam Player</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -31,11 +31,11 @@
 	<key>MetalCaptureEnabled</key>
 	<true/>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>MCRAW Player needs access to your Desktop to open .mcraw files.</string>
+	<string>MotionCam Player needs access to your Desktop to open .mcraw files.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>MCRAW Player needs access to your Documents to open .mcraw files.</string>
+	<string>MotionCam Player needs access to your Documents to open .mcraw files.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>MCRAW Player needs access to your Downloads to open .mcraw files.</string>
+	<string>MotionCam Player needs access to your Downloads to open .mcraw files.</string>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
 	<key>CFBundleDevelopmentRegion</key>
