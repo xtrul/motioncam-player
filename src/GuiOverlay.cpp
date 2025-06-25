@@ -480,6 +480,16 @@ void GuiOverlay::render(App* appInstance) {
     }
     ImGui::PopStyleVar(3); ImGui::PopStyleColor(2);
 
+    if (ImGui::BeginPopupContextWindow("MainContextMenu", ImGuiPopupFlags_MouseButtonRight)) {
+        if (ImGui::MenuItem("Save Current Frame as DNG")) {
+            appInstance->saveCurrentFrameAsDng();
+        }
+        if (ImGui::MenuItem("Send to MotionCam Fuse")) {
+            appInstance->sendCurrentFileToMotionCamFuse();
+        }
+        ImGui::EndPopup();
+    }
+
 
     if (ui.showMetrics) {
         ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + style.WindowPadding.x, viewport->WorkPos.y + style.WindowPadding.y), ImGuiCond_Appearing);
