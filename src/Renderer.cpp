@@ -104,7 +104,20 @@ layout(location=1) in vec2 aTex;
 out vec2 Tex;
 uniform vec2 uScale;
 uniform vec2 uOffset;
-void main(){ Tex = aTex; gl_Position = vec4(aPos * uScale + uOffset, 0.0, 1.0); }
+uniform int uRotation;
+vec2 rotatePos(vec2 p){
+    if(uRotation==1) return vec2(p.y,-p.x);
+    if(uRotation==2) return vec2(-p.x,-p.y);
+    if(uRotation==3) return vec2(-p.y,p.x);
+    return p;
+}
+vec2 rotateTex(vec2 t){
+    if(uRotation==1) return vec2(t.y,1.0-t.x);
+    if(uRotation==2) return vec2(1.0-t.x,1.0-t.y);
+    if(uRotation==3) return vec2(1.0-t.y,t.x);
+    return t;
+}
+void main(){ Tex = rotateTex(aTex); gl_Position = vec4(rotatePos(aPos) * uScale + uOffset, 0.0, 1.0); }
 )GLSL";
 
 const char* Renderer::fragmentShaderSrc = R"GLSL(#version 300 es
@@ -355,6 +368,7 @@ void Renderer::renderFrame(const std::vector<uint16_t>& rawData,
     GL_CHECK(glUseProgram(m_quadProg));
     GL_CHECK(glUniform2f(glGetUniformLocation(m_quadProg, "uScale"), sX, sY));
     GL_CHECK(glUniform2f(glGetUniformLocation(m_quadProg, "uOffset"), nX, nY));
+    GL_CHECK(glUniform1i(glGetUniformLocation(m_quadProg, "uRotation"), m_rotation));
     GL_CHECK(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
     GL_CHECK(glClear(GL_COLOR_BUFFER_BIT));
     GL_CHECK(glActiveTexture(GL_TEXTURE0));
@@ -462,4 +476,6 @@ int Renderer::getCfaType(const std::string& c) {
 void Renderer::setZoomNativePixels(bool n) { m_zoomNativePixels = n; }
 void Renderer::setPanOffsets(float x, float y) { m_panX = x; m_panY = y; }
 void Renderer::resetPanOffsets() { m_panX = 0.0f; m_panY = 0.0f; }
+void Renderer::setRotation(int r) { m_rotation = r % 4; }
+int  Renderer::getRotation() const { return m_rotation; }
 void Renderer::resetDimensions() { m_currentW = 0; m_currentH = 0; }
