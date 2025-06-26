@@ -109,7 +109,6 @@ public:
     bool m_isPanning;
     double m_lastMouseX;
     double m_lastMouseY;
-    std::chrono::steady_clock::time_point m_lastWheelClick;
     bool m_firstFileLoaded;
     bool m_isFullscreen;
 
@@ -122,8 +121,6 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void handleMouseButton(int button, int action, int mods);
     void handleCursorPos(double xpos, double ypos);
-    void rotateLeft();
-    void rotateRight();
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void sendCurrentFileToMotionCamFuse();

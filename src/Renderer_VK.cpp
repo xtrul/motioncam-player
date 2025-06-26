@@ -46,7 +46,6 @@ Renderer_VK::Renderer_VK(VkPhysicalDevice physicalDevice, VkDevice device, VmaAl
     m_currentRawW(0), m_currentRawH(0),
     m_zoomNativePixels(false),
     m_panX(0.0f), m_panY(0.0f),
-    m_rotation(0),
     m_swapChainImageCount(0)
 {
     LogToFile("[Renderer_VK] Constructor called.");
@@ -785,7 +784,6 @@ void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t c
     ubo.CCM = glm::mat4(ccm3x3_glm);
     // Increase saturation by 50%
     ubo.saturationAdjustment = 1.5f;
-    ubo.rotation = m_rotation;
 
     updateUniformBuffer(currentFrameIndex, ubo);
 
@@ -927,8 +925,6 @@ int Renderer_VK::getCfaType(const std::string& c) {
 void Renderer_VK::setZoomNativePixels(bool n) { m_zoomNativePixels = n; }
 void Renderer_VK::setPanOffsets(float x, float y) { m_panX = x; m_panY = y; }
 void Renderer_VK::resetPanOffsets() { m_panX = 0.0f; m_panY = 0.0f; }
-void Renderer_VK::setRotation(int r) { m_rotation = r % 4; }
-int  Renderer_VK::getRotation() const { return m_rotation; }
 float Renderer_VK::getPanX() const { return m_panX; }
 float Renderer_VK::getPanY() const { return m_panY; }
 int Renderer_VK::getImageWidth() const { return m_currentRawW; }
