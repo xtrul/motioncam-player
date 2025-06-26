@@ -243,7 +243,7 @@ App::App(const std::string& filePath) : m_filePath(filePath) {
     m_dumpMetadata = false; m_currentFileIndex = 0; m_showMetrics = false; m_showHelpPage = false;
     m_decodingTimeMs = 0.0; m_renderSubmitTimeMs = 0.0; m_gpuWaitTimeMs = 0.0;
     m_sleepTimeMs = 0.0; m_totalLoopTimeMs = 0.0; m_showUI = true;
-    m_isPanning = false; m_lastMouseX = 0.0; m_lastMouseY = 0.0;
+    m_isPanning = false; m_lastMouseX = 0.0; m_lastMouseY = 0.0; m_lastWheelClick = std::chrono::steady_clock::now();
     m_firstFileLoaded = false;
 
     LogToFile(std::string("[App::App] Constructor called for file: ") + this->m_filePath);
@@ -1635,141 +1635,34 @@ void App::handleKey(int key, int mods) {
 }
 
 void App::handleMouseButton(int button, int action, int mods) {
-    if (!m_rendererVk || !m_playbackController || !m_playbackController->isZoomNativePixels()) { if(m_isPanning){ m_isPanning=false; } return; }
-    if (button == GLFW_MOUSE_BUTTON_LEFT) { if (action == GLFW_PRESS) { m_isPanning = true; glfwGetCursorPos(m_window, &m_lastMouseX, &m_lastMouseY); } else if (action == GLFW_RELEASE) { if (m_isPanning) { m_isPanning = false; } } }
-}
-void App::handleCursorPos(double xpos, double ypos) {
-    if (m_isPanning && m_rendererVk && m_playbackController && m_playbackController->isZoomNativePixels()) {
-        double dx = xpos - m_lastMouseX; double dy = ypos - m_lastMouseY;
-        m_rendererVk->setPanOffsets(m_rendererVk->getPanX() + static_cast<float>(dx), m_rendererVk->getPanY() + static_cast<float>(dy));
-        m_lastMouseX = xpos; m_lastMouseY = ypos;
-    } else if(m_isPanning) {
-        m_isPanning = false;
-    }
-}
-std::string App::openMcrawDialog() {
-#ifdef _WIN32
-    OPENFILENAMEW ofn{}; wchar_t szFile[MAX_PATH] = {0}; ofn.lStructSize = sizeof(ofn);
-    GLFWwindow* currentCtx = glfwGetCurrentContext();
-    ofn.hwndOwner = currentCtx ? glfwGetWin32Window(currentCtx) : NULL;
-    ofn.lpstrFilter = L"MotionCam RAW files\0*.mcraw\0All Files\0*.*\0"; ofn.lpstrFile = szFile; ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR; ofn.lpstrDefExt = L"mcraw";
-    if (GetOpenFileNameW(&ofn)) { char buf[MAX_PATH]; WideCharToMultiByte(CP_UTF8, 0, szFile, -1, buf, MAX_PATH, nullptr, nullptr); return std::string(buf); }
-#else
-    std::cerr << "File dialog not implemented for this platform. Drag-and-drop or use command line." << std::endl;
-#endif
-    return {};
-}
-void App::triggerOpenFileViaDialog() {
-    std::string newPath = openMcrawDialog();
-    if (!newPath.empty()) {
-        auto it_existing = std::find(m_fileList.begin(), m_fileList.end(), newPath);
-        if (it_existing == m_fileList.end()) { m_fileList.push_back(newPath); std::sort(m_fileList.begin(), m_fileList.end()); it_existing = std::find(m_fileList.begin(), m_fileList.end(), newPath); }
-        if (it_existing != m_fileList.end()) { m_firstFileLoaded = false; loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing))); m_firstFileLoaded = true; }
-    }
-}
-void App::recordPauseTime() { m_pauseBegan = std::chrono::steady_clock::now(); }
-void App::anchorPlaybackTimeForResume() {
-    const std::vector<int64_t>* pFrames = nullptr;
-    if (m_decoderWrapper && m_decoderWrapper->getDecoder()) pFrames = &m_decoderWrapper->getDecoder()->getFrames();
-    std::optional<int64_t> curVideoTs, firstVideoTs;
-    if (m_playbackController && pFrames && !pFrames->empty()) {
-        curVideoTs = m_playbackController->getCurrentFrameMediaTimestamp(*pFrames);
-        firstVideoTs = m_playbackController->getFirstFrameMediaTimestampOfSegment();
-    }
-    if (curVideoTs && firstVideoTs) {
-        int64_t deltaNs = *curVideoTs - *firstVideoTs; if (deltaNs < 0) deltaNs = 0;
-        m_playbackStartTime = std::chrono::steady_clock::now() - std::chrono::nanoseconds(deltaNs);
-    } else {
-        m_playbackStartTime += (std::chrono::steady_clock::now() - m_pauseBegan);
-    }
-    if (m_playbackController) m_playbackController->setWallClockAnchorForSegment(m_playbackStartTime);
-    if (m_audio && m_decoderWrapper && m_decoderWrapper->getDecoder() && curVideoTs) {
-        auto* freshLoader = m_decoderWrapper->makeFreshAudioLoader();
-        m_audio->reset(freshLoader, *curVideoTs);
-        m_audio->setPaused(m_playbackController->isPaused());
-    }
-}
-void App::handleDrop(int count, const char** paths) {
-    if (count <= 0) return; std::string firstValidPathDropped; bool newFilesAddedToPlaylist = false;
-    for (int i = 0; i < count; ++i) { if (paths[i] == nullptr) continue; try { fs::path p = fs::absolute(paths[i]); if (p.extension() == ".mcraw" && fs::is_regular_file(p)) { std::string s = p.string(); if (firstValidPathDropped.empty()) { firstValidPathDropped = s; } if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) { m_fileList.push_back(s); newFilesAddedToPlaylist = true; } } } catch (const fs::filesystem_error&) {} }
-    if (newFilesAddedToPlaylist) { std::sort(m_fileList.begin(), m_fileList.end()); }
-    if (!firstValidPathDropped.empty()) { auto it = std::find(m_fileList.begin(), m_fileList.end(), firstValidPathDropped); if (it != m_fileList.end()) { m_firstFileLoaded = false; loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it))); m_firstFileLoaded = true; } }
-}
-void App::softDeleteCurrentFile() {
-    if (m_fileList.empty() || m_currentFileIndex < 0 || static_cast<size_t>(m_currentFileIndex) >= m_fileList.size()) return;
-    fs::path currentFilePath = m_fileList[m_currentFileIndex];
-    if(m_playbackController) { if(!m_playbackController->isPaused()) { handleKey(GLFW_KEY_SPACE, 0); } }
-    m_decoderWrapper.reset(); if (m_audio) { m_audio->setForceMute(true); m_audio->reset(nullptr, 0); }
-    fs::path folder = currentFilePath.parent_path(); fs::path deletedFolder = folder / "_deleted";
-    try {
-        if (!fs::exists(deletedFolder)) { fs::create_directory(deletedFolder); }
-        fs::path destinationPath = deletedFolder / currentFilePath.filename();
-        if (fs::exists(destinationPath)) { std::string base = destinationPath.stem().string(); std::string ext = destinationPath.extension().string(); int counter = 1; while(fs::exists(destinationPath)) { destinationPath = deletedFolder / (base + "_" + std::to_string(counter++) + ext); } }
-        fs::rename(currentFilePath, destinationPath); std::cout << "Moved " << currentFilePath << " to " << destinationPath << std::endl;
-        m_fileList.erase(m_fileList.begin() + m_currentFileIndex);
-        if (m_fileList.empty()) { std::cout << "Playlist empty after delete." << std::endl; if(m_window) glfwSetWindowShouldClose(m_window, GLFW_TRUE); return; }
-        if (static_cast<size_t>(m_currentFileIndex) >= m_fileList.size()) { m_currentFileIndex = static_cast<int>(m_fileList.size()) - 1; }
-        if (m_currentFileIndex < 0 && !m_fileList.empty()) m_currentFileIndex = 0;
-        m_firstFileLoaded = false; loadFileAtIndex(m_currentFileIndex); m_firstFileLoaded = true;
-    } catch (const fs::filesystem_error& e) {
-        std::cerr << "Error during soft delete: " << e.what() << std::endl;
-        std::string originalAnchorFilePath = this->m_filePath;
-        if (m_currentFileIndex >= 0 && static_cast<size_t>(m_currentFileIndex) < m_fileList.size() && fs::exists(m_fileList[m_currentFileIndex])) {
-             originalAnchorFilePath = m_fileList[m_currentFileIndex];
-        } else if (!m_fileList.empty() && fs::exists(m_fileList[0])) {
-             originalAnchorFilePath = m_fileList[0];
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
+        auto now = std::chrono::steady_clock::now();
+        if (now - m_lastWheelClick < std::chrono::milliseconds(500)) {
+            if (m_playbackController) {
+                m_playbackController->toggleZoomNativePixels();
+                if (m_rendererVk) {
+                    m_rendererVk->setZoomNativePixels(m_playbackController->isZoomNativePixels());
+                    if (!m_playbackController->isZoomNativePixels()) {
+                        m_rendererVk->resetPanOffsets();
+                        if (m_isPanning) m_isPanning = false;
+                }
+            }
         }
-        m_fileList.clear(); fs::path anchorPathFs = fs::absolute(originalAnchorFilePath); fs::path parent_folder_of_anchor = anchorPathFs.parent_path();
-        if (!fs::exists(parent_folder_of_anchor)) parent_folder_of_anchor = fs::current_path();
-        for (const auto& entry : fs::directory_iterator(parent_folder_of_anchor)) { if (entry.is_regular_file() && entry.path().extension() == ".mcraw") { m_fileList.push_back(entry.path().string()); } }
-        std::sort(m_fileList.begin(), m_fileList.end()); auto it = std::find(m_fileList.begin(), m_fileList.end(), anchorPathFs.string());
-        if (it != m_fileList.end()) { m_currentFileIndex = static_cast<int>(std::distance(m_fileList.begin(), it)); }
-        else if (!m_fileList.empty()) { m_currentFileIndex = 0; }
-        else { if(m_window) glfwSetWindowShouldClose(m_window, GLFW_TRUE); return; }
-        m_firstFileLoaded = false; loadFileAtIndex(m_currentFileIndex); m_firstFileLoaded = true;
+        m_lastWheelClick = now;
+        return;
     }
-}
-void App::saveCurrentFrameAsDng() {
-    if (!m_decoderWrapper || !m_decoderWrapper->getDecoder() || !m_playbackController || m_fileList.empty()) { std::cerr << "DNG Save: No file loaded, decoder not ready, or playback controller missing." << std::endl; return; }
-    std::string currentMcrawPathStr = m_fileList[m_currentFileIndex]; fs::path currentMcrawPath = currentMcrawPathStr; fs::path dngOutputDir = currentMcrawPath.parent_path() / (currentMcrawPath.stem().string() + "_DNG_Current");
-    try { fs::create_directories(dngOutputDir); }
-    catch (const fs::filesystem_error& e) { std::cerr << "DNG Save: Failed to create output directory " << dngOutputDir << ": " << e.what() << std::endl; return; }
-    size_t currentIndex = m_playbackController->getCurrentFrameIndex(); const auto& frameTimestamps = m_decoderWrapper->getDecoder()->getFrames();
-    if (currentIndex >= frameTimestamps.size()) { std::cerr << "DNG Save: Current frame index out of bounds." << std::endl; return; }
-    motioncam::Timestamp ts = frameTimestamps[currentIndex]; std::vector<uint16_t> rawFrameData; nlohmann::json frameMetadata;
-    try { m_decoderWrapper->getDecoder()->loadFrame(ts, rawFrameData, frameMetadata); }
-    catch (const std::exception& e) { std::cerr << "DNG Save: Failed to load frame " << currentIndex << ": " << e.what() << std::endl; return; }
-    const auto& containerMetadata = m_decoderWrapper->getContainerMetadata(); char dngFilename[256];
-    snprintf(dngFilename, sizeof(dngFilename), "frame_%06zu_ts_%lld.dng", currentIndex, static_cast<long long>(ts));
-    fs::path outputDngPath = dngOutputDir / dngFilename; std::string errorMsg;
-    std::cout << "DNG Save: Attempting to save current frame to " << outputDngPath << std::endl;
-    if (writeDngInternal(outputDngPath.string(), rawFrameData, frameMetadata, containerMetadata, errorMsg)) { std::cout << "DNG Save: Successfully saved " << outputDngPath << std::endl; }
-    else { std::cerr << "DNG Save: Failed to write DNG " << outputDngPath << ": " << errorMsg << std::endl; }
-}
-void App::convertCurrentFileToDngs() {
-    if (!m_decoderWrapper || !m_decoderWrapper->getDecoder() || m_fileList.empty()) { std::cerr << "DNG Export All: No file loaded or decoder not ready." << std::endl; return; }
-    std::string currentMcrawPathStr = m_fileList[m_currentFileIndex]; fs::path currentMcrawPath = currentMcrawPathStr; fs::path dngOutputDir = currentMcrawPath.parent_path() / (currentMcrawPath.stem().string() + "_DNG_All");
-    try { fs::create_directories(dngOutputDir); }
-    catch (const fs::filesystem_error& e) { std::cerr << "DNG Export All: Failed to create output directory " << dngOutputDir << ": " << e.what() << std::endl; return; }
-    const auto& frameTimestamps = m_decoderWrapper->getDecoder()->getFrames(); const auto& containerMetadata = m_decoderWrapper->getContainerMetadata();
-    std::cout << "DNG Export All: Starting DNG conversion for " << frameTimestamps.size() << " frames to " << dngOutputDir << std::endl;
-    bool wasPausedOriginalState = m_playbackController ? m_playbackController->isPaused() : true;
-    if (m_playbackController && !wasPausedOriginalState) { m_playbackController->togglePause(); if(m_playbackController->isPaused()) recordPauseTime(); }
-    for (size_t i = 0; i < frameTimestamps.size(); ++i) {
-        motioncam::Timestamp ts = frameTimestamps[i]; std::vector<uint16_t> rawFrameData; nlohmann::json frameMetadata;
-        try {
-            m_decoderWrapper->getDecoder()->loadFrame(ts, rawFrameData, frameMetadata); char dngFilename[256];
-            snprintf(dngFilename, sizeof(dngFilename), "frame_%06zu_ts_%lld.dng", i, static_cast<long long>(ts));
-            fs::path outputDngPath = dngOutputDir / dngFilename; std::string errorMsg;
-            bool success = writeDngInternal(outputDngPath.string(), rawFrameData, frameMetadata, containerMetadata, errorMsg);
-            if (!success) { std::cerr << "DNG Export All: Failed to write DNG " << outputDngPath << ": " << errorMsg << std::endl; }
-            else { if ((i+1) % 20 == 0 || i == frameTimestamps.size() -1) { std::cout << "DNG Export All: Converted " << (i+1) << "/" << frameTimestamps.size() << " frames." << std::endl; } }
+    if (!m_rendererVk || !m_playbackController || !m_playbackController->isZoomNativePixels()) {
+        if (m_isPanning) { m_isPanning = false; }
+        return;
+    }
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            m_isPanning = true;
+            glfwGetCursorPos(m_window, &m_lastMouseX, &m_lastMouseY);
+        } else if (action == GLFW_RELEASE) {
+            if (m_isPanning) { m_isPanning = false; }
         }
-        catch (const std::exception& e) { std::cerr << "DNG Export All: Error processing frame " << i << " (ts: " << ts << "): " << e.what() << std::endl; }
     }
-    std::cout << "DNG Export All: Conversion complete." << std::endl;
-    if (m_playbackController && m_playbackController->isPaused() && !wasPausedOriginalState) { m_playbackController->togglePause(); if(!m_playbackController->isPaused()) anchorPlaybackTimeForResume(); }
 }
 
 void App::sendCurrentFileToMotionCamFuse() {
@@ -1786,4 +1679,18 @@ void App::sendCurrentFileToMotionCamFuse() {
 #else
     std::cerr << "Fuse Launch: Only supported on macOS." << std::endl;
 #endif
+}
+
+void App::rotateLeft() {
+    if (m_rendererVk) {
+        int r = (m_rendererVk->getRotation() + 3) % 4;
+        m_rendererVk->setRotation(r);
+    }
+}
+
+void App::rotateRight() {
+    if (m_rendererVk) {
+        int r = (m_rendererVk->getRotation() + 1) % 4;
+        m_rendererVk->setRotation(r);
+    }
 }
