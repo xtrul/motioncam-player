@@ -8,7 +8,6 @@ static NSMutableArray<NSString*>* gPendingFiles = nil;
 - (void)handleOpenFiles:(NSAppleEventDescriptor*)event withReply:(NSAppleEventDescriptor*)reply;
 @end
 
-@implementation MCOpenFileHandler
 - (void)handleOpenFiles:(NSAppleEventDescriptor*)event withReply:(NSAppleEventDescriptor*)reply {
     NSAppleEventDescriptor* list = [event paramDescriptorForKeyword:keyDirectObject];
     for (NSInteger i = 1; i <= [list numberOfItems]; ++i) {
@@ -25,32 +24,6 @@ static NSMutableArray<NSString*>* gPendingFiles = nil;
 }
 @end
 
-static void InstallHandlerOnce() {
-    static bool installed = false;
-    if (!installed) {
-        installed = true;
-        MCOpenFileHandler* handler = [[MCOpenFileHandler alloc] init];
-        NSAppleEventManager* em = [NSAppleEventManager sharedAppleEventManager];
-        [em setEventHandler:handler
-                andSelector:@selector(handleOpenFiles:withReply:)
-                forEventClass:kCoreEventClass
-                   eventID:kAEOpenDocuments];
-    }
-}
-
-std::vector<std::string> GetStartupOpenFiles() {
-    std::vector<std::string> result;
-    @autoreleasepool {
-        NSApplication* app = [NSApplication sharedApplication];
-        InstallHandlerOnce();
-        [app finishLaunching];
-        NSDate* end = [NSDate dateWithTimeIntervalSinceNow:2.0];
-        while ([end timeIntervalSinceNow] > 0 && (!gPendingFiles || [gPendingFiles count] == 0)) {
-            NSEvent* event = [app nextEventMatchingMask:NSEventMaskAny
-                                          untilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]
-                                             inMode:NSDefaultRunLoopMode
-                                            dequeue:YES];
-            if (event) [app sendEvent:event];
         }
 
         if (gPendingFiles) {
