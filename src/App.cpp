@@ -48,6 +48,29 @@
 namespace fs = std::filesystem;
 
 namespace {
+    int computeOrientationTag(const nlohmann::json& j, bool flipped, int defTag) {
+        if (!j.is_null()) {
+            if (j.is_number_integer()) {
+                int v = j.get<int>();
+                if (v >= 1 && v <= 8) return v;
+                switch (v) {
+                    case 0: return flipped ? tinydngwriter::ORIENTATION_LEFTTOP : tinydngwriter::ORIENTATION_RIGHTTOP; // PORTRAIT
+                    case 1: return flipped ? tinydngwriter::ORIENTATION_RIGHTBOT : tinydngwriter::ORIENTATION_LEFTBOT; // REVERSE_PORTRAIT
+                    case 2: return flipped ? tinydngwriter::ORIENTATION_BOTLEFT : tinydngwriter::ORIENTATION_BOTRIGHT; // REVERSE_LANDSCAPE
+                    case 3: return flipped ? tinydngwriter::ORIENTATION_TOPRIGHT : tinydngwriter::ORIENTATION_TOPLEFT; // LANDSCAPE
+                }
+            } else if (j.is_string()) {
+                std::string o = j.get<std::string>();
+                std::transform(o.begin(), o.end(), o.begin(), ::toupper);
+                if (o == "PORTRAIT") return flipped ? tinydngwriter::ORIENTATION_LEFTTOP : tinydngwriter::ORIENTATION_RIGHTTOP;
+                if (o == "REVERSE_PORTRAIT") return flipped ? tinydngwriter::ORIENTATION_RIGHTBOT : tinydngwriter::ORIENTATION_LEFTBOT;
+                if (o == "REVERSE_LANDSCAPE") return flipped ? tinydngwriter::ORIENTATION_BOTLEFT : tinydngwriter::ORIENTATION_BOTRIGHT;
+                if (o == "LANDSCAPE") return flipped ? tinydngwriter::ORIENTATION_TOPRIGHT : tinydngwriter::ORIENTATION_TOPLEFT;
+            }
+        }
+        return defTag;
+    }
+
     bool writeDngInternal(
         const std::string& outputPath,
         const std::vector<uint16_t>& data,
@@ -118,10 +141,27 @@ namespace {
         if (fwd2_json.is_array() && fwd2_json.size() == 9) {
             for (size_t i = 0; i < 9; ++i) forwardMatrix2[i] = fwd2_json[i].get<float>();
         }
+
+        bool isFlipped = false;
+        if (containerMetadata.contains("extraData") &&
+            containerMetadata["extraData"].contains("postProcessSettings") &&
+            containerMetadata["extraData"]["postProcessSettings"].contains("flipped")) {
+            isFlipped = containerMetadata["extraData"]["postProcessSettings"]["flipped"].get<bool>();
+        }
+
+        int containerTag = computeOrientationTag(
+            containerMetadata.contains("orientation") ? containerMetadata["orientation"] : nlohmann::json(),
+            isFlipped,
+            tinydngwriter::ORIENTATION_TOPLEFT);
+        unsigned short dngOrientation = static_cast<unsigned short>(computeOrientationTag(
+            frameMetadata.contains("orientation") ? frameMetadata["orientation"] : nlohmann::json(),
+            isFlipped,
+            containerTag));
         tinydngwriter::DNGImage dng;
         dng.SetBigEndian(false);
         dng.SetDNGVersion(1, 4, 0, 0);
         dng.SetDNGBackwardVersion(1, 1, 0, 0);
+        dng.SetOrientation(dngOrientation);
         dng.SetImageData(reinterpret_cast<const unsigned char*>(data.data()), static_cast<size_t>(width) * height * sizeof(uint16_t));
         dng.SetImageWidth(width);
         dng.SetImageLength(height);
@@ -238,7 +278,7 @@ App::App(const std::string& filePath) : m_filePath(filePath) {
     m_swapChain = VK_NULL_HANDLE; m_swapChainImageFormat = VK_FORMAT_UNDEFINED;
     m_renderPass = VK_NULL_HANDLE; m_commandPool = VK_NULL_HANDLE;
     m_currentFrame = 0; m_imguiDescriptorPool = VK_NULL_HANDLE;
-    m_isFullscreen = false; m_cfaTypeFromMetadata = 0; m_staticBlack = 0.0; m_staticWhite = 65535.0;
+    m_isFullscreen = false; m_cfaTypeFromMetadata = 0; m_staticBlack = 0.0; m_staticWhite = 65535.0; m_containerFlipped = false; m_containerOrientationTag = tinydngwriter::ORIENTATION_TOPLEFT;
     m_dumpMetadata = false; m_currentFileIndex = 0; m_showMetrics = false; m_showHelpPage = false;
     m_decodingTimeMs = 0.0; m_renderSubmitTimeMs = 0.0; m_gpuWaitTimeMs = 0.0;
     m_sleepTimeMs = 0.0; m_totalLoopTimeMs = 0.0; m_showUI = true;
@@ -1246,10 +1286,18 @@ void App::drawFrame() {
         int cfa = m_cfaOverride.value_or(m_cfaTypeFromMetadata);
         glfwGetFramebufferSize(m_window, &m_windowWidth, &m_windowHeight);
         
+        int orientationTag = m_containerOrientationTag;
+        if (frame_meta_for_render.contains("orientation")) {
+            orientationTag = computeOrientationTag(frame_meta_for_render["orientation"], m_containerFlipped, m_containerOrientationTag);
+        }
+        LogToFile(std::string("[App::drawFrame] orientation tag: ") + std::to_string(orientationTag));
+        std::cout << "[App::drawFrame] orientation tag: " << orientationTag << std::endl;
+
         m_rendererVk->recordRenderCommands(currentCommandBuffer, m_currentFrame,
                                            frame_meta_for_render,
                                            m_staticBlack, m_staticWhite, cfa,
-                                           m_windowWidth, m_windowHeight);
+                                           m_windowWidth, m_windowHeight,
+                                           orientationTag);
     }
 
     if (m_showUI) {
@@ -1500,6 +1548,17 @@ void App::loadFileAtIndex(int index) {
         return;
     }
     auto meta = m_decoderWrapper->getContainerMetadata();
+    m_containerFlipped = false;
+    if (meta.contains("extraData") && meta["extraData"].contains("postProcessSettings") &&
+        meta["extraData"]["postProcessSettings"].contains("flipped")) {
+        m_containerFlipped = meta["extraData"]["postProcessSettings"]["flipped"].get<bool>();
+    }
+    m_containerOrientationTag = tinydngwriter::ORIENTATION_TOPLEFT;
+    if (meta.contains("orientation")) {
+        m_containerOrientationTag = computeOrientationTag(meta["orientation"], m_containerFlipped, tinydngwriter::ORIENTATION_TOPLEFT);
+    }
+    LogToFile(std::string("[App::loadFileAtIndex] container orientation tag: ") + std::to_string(m_containerOrientationTag));
+    std::cout << "[App::loadFileAtIndex] container orientation tag: " << m_containerOrientationTag << std::endl;
     auto blackLevelVec = meta.value("blackLevel", std::vector<double>{0.0});
     m_staticBlack = blackLevelVec.empty() ? 0.0 : std::accumulate(blackLevelVec.begin(), blackLevelVec.end(), 0.0) / blackLevelVec.size();
     m_staticWhite = meta.value("whiteLevel", 65535.0);
