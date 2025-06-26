@@ -49,11 +49,7 @@ function(copy_and_fixup_dylib)
         return()
     endif()
 
-    get_target_property(_bundle_output_name ${ARG_TARGET_NAME} OUTPUT_NAME)
-    if(NOT _bundle_output_name)
-        set(_bundle_output_name ${ARG_TARGET_NAME})
-    endif()
-    set(BUNDLE_LIB_DIR "${CMAKE_BINARY_DIR}/${_bundle_output_name}.app/Contents/Frameworks")
+    set(BUNDLE_LIB_DIR "${CMAKE_BINARY_DIR}/${ARG_TARGET_NAME}.app/Contents/Frameworks")
     set(FINAL_BUNDLE_PATH "${BUNDLE_LIB_DIR}/${ARG_BUNDLE_LINK_NAME}") # File in bundle will have this name
     set(TARGET_EXECUTABLE_PATH "$<TARGET_FILE:${ARG_TARGET_NAME}>")
 
@@ -230,13 +226,10 @@ add_subdirectory(motioncam-decoder           EXCLUDE_FROM_ALL)
 set(APP_SOURCES
   src/main.cpp src/App.cpp src/Renderer_VK.cpp src/GuiOverlay.cpp
   src/PlaybackController.cpp src/AudioController.cpp src/DecoderWrapper.cpp
-  src/Logger.cpp src/DebugLog.cpp src/SingleInstance.cpp
+  src/Logger.cpp src/DebugLog.cpp
   ${EXTERNAL_DIR}/imgui/backends/imgui_impl_glfw.cpp
   ${EXTERNAL_DIR}/imgui/backends/imgui_impl_vulkan.cpp
 )
-if(APPLE)
-  list(APPEND APP_SOURCES src/MacOpenFile.mm)
-endif()
 add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${APP_SOURCES})
 add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
@@ -244,7 +237,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 set_target_properties(${PROJECT_NAME} PROPERTIES
     MACOSX_BUNDLE_INFO_PLIST "${PROJECT_SOURCE_DIR}/macos/Info.plist"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.motioncamapp.mcrawplayer"
-    OUTPUT_NAME "MotionCam Player"
     MACOSX_RPATH TRUE
     BUILD_RPATH "@executable_path/../Frameworks"
     INSTALL_RPATH "@executable_path/../Frameworks"
@@ -310,11 +302,7 @@ else()
     message(WARNING "MoltenVK library (MOLTENVK_LIBRARY_TO_BUNDLE) not found or variable empty.")
 endif()
 
-get_target_property(APP_BUNDLE_OUTPUT_NAME ${PROJECT_NAME} OUTPUT_NAME)
-if(NOT APP_BUNDLE_OUTPUT_NAME)
-    set(APP_BUNDLE_OUTPUT_NAME ${PROJECT_NAME})
-endif()
-set(MACOS_BUNDLE_FRAMEWORKS_DIR "${CMAKE_BINARY_DIR}/${APP_BUNDLE_OUTPUT_NAME}.app/Contents/Frameworks")
+set(MACOS_BUNDLE_FRAMEWORKS_DIR "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.app/Contents/Frameworks")
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${MACOS_BUNDLE_FRAMEWORKS_DIR}"
     COMMENT "Ensuring Frameworks directory exists")
@@ -325,7 +313,7 @@ target_sources(${PROJECT_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/mcraw_player.icns"
 set_target_properties(${PROJECT_NAME} PROPERTIES MACOSX_BUNDLE_ICON_FILE "mcraw_player.icns")
 
 # --- Resource copy ---
-set(APP_BUNDLE_ROOT_DIR "${CMAKE_BINARY_DIR}/${APP_BUNDLE_OUTPUT_NAME}.app")
+set(APP_BUNDLE_ROOT_DIR "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.app")
 set(APP_BUNDLE_RESOURCES_DIR "${APP_BUNDLE_ROOT_DIR}/Contents/Resources")
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

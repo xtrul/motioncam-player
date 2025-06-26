@@ -27,10 +27,6 @@
 // GuiOverlay.h is included via App.h
 #include <imgui_impl_vulkan.h> // For ImGui_ImplVulkan_Shutdown
 
-#if defined(__APPLE__)
-#include "MacOpenFile.h"
-#endif
-
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
@@ -485,14 +481,6 @@ bool App::run() {
 
     while (!glfwWindowShouldClose(m_window)) {
         glfwPollEvents();
-
-#if defined(__APPLE__)
-        auto newlyOpened = GetPendingOpenFiles();
-        for (const std::string& p : newlyOpened) {
-            const char* paths[1] = { p.c_str() };
-            handleDrop(1, paths);
-        }
-#endif
 
         bool paused = m_playbackController->isPaused();
         bool segment_looped_or_ended = false;
