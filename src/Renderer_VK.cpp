@@ -46,6 +46,7 @@ Renderer_VK::Renderer_VK(VkPhysicalDevice physicalDevice, VkDevice device, VmaAl
     m_currentRawW(0), m_currentRawH(0),
     m_zoomNativePixels(false),
     m_panX(0.0f), m_panY(0.0f),
+    m_rotation(0),
     m_swapChainImageCount(0)
 {
     LogToFile("[Renderer_VK] Constructor called.");
@@ -784,6 +785,7 @@ void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t c
     ubo.CCM = glm::mat4(ccm3x3_glm);
     // Increase saturation by 50%
     ubo.saturationAdjustment = 1.5f;
+    ubo.rotation = m_rotation;
 
     updateUniformBuffer(currentFrameIndex, ubo);
 
@@ -792,18 +794,22 @@ void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t c
     VkViewport viewport{};
     VkRect2D scissor{};
 
+    bool rotSwap = (m_rotation % 2) != 0;
+
     if (m_zoomNativePixels) {
-        viewport.x = m_panX;
-        viewport.y = m_panY;
-        viewport.width = (float)m_currentRawW;
-        viewport.height = (float)m_currentRawH;
+        viewport.x = rotSwap ? m_panY : m_panX;
+        viewport.y = rotSwap ? m_panX : m_panY;
+        viewport.width  = rotSwap ? (float)m_currentRawH : (float)m_currentRawW;
+        viewport.height = rotSwap ? (float)m_currentRawW : (float)m_currentRawH;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         scissor.offset = { 0, 0 };
         scissor.extent = { (uint32_t)windowWidth, (uint32_t)windowHeight };
     }
     else {
-        float imgAspect = (m_currentRawH == 0) ? 1.0f : ((float)m_currentRawW / (float)m_currentRawH);
+        float imgW = rotSwap ? (float)m_currentRawH : (float)m_currentRawW;
+        float imgH = rotSwap ? (float)m_currentRawW : (float)m_currentRawH;
+        float imgAspect = (imgH == 0.0f) ? 1.0f : (imgW / imgH);
         float winAspect = (windowHeight == 0) ? 1.0f : ((float)windowWidth / (float)windowHeight);
         float vpWidth = (float)windowWidth;
         float vpHeight = (float)windowHeight;
@@ -925,6 +931,8 @@ int Renderer_VK::getCfaType(const std::string& c) {
 void Renderer_VK::setZoomNativePixels(bool n) { m_zoomNativePixels = n; }
 void Renderer_VK::setPanOffsets(float x, float y) { m_panX = x; m_panY = y; }
 void Renderer_VK::resetPanOffsets() { m_panX = 0.0f; m_panY = 0.0f; }
+void Renderer_VK::setRotation(int r) { m_rotation = r % 4; }
+int  Renderer_VK::getRotation() const { return m_rotation; }
 float Renderer_VK::getPanX() const { return m_panX; }
 float Renderer_VK::getPanY() const { return m_panY; }
 int Renderer_VK::getImageWidth() const { return m_currentRawW; }

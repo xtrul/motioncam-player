@@ -302,6 +302,12 @@ void GuiOverlay::render(App* appInstance) {
             if (ImGui::MenuItem("Send to MotionCam Fuse")) {
                 appInstance->sendCurrentFileToMotionCamFuse();
             }
+            if (ImGui::MenuItem("Rotate Left")) {
+                appInstance->rotateLeft();
+            }
+            if (ImGui::MenuItem("Rotate Right")) {
+                appInstance->rotateRight();
+            }
             ImGui::EndPopup();
         }
     }
@@ -328,8 +334,9 @@ void GuiOverlay::render(App* appInstance) {
         bool help_open_flag = ui.showHelpPage;
         if (ImGui::Begin("Help - Keyboard Shortcuts", &help_open_flag, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
             ImGui::Text("Playback Controls:"); ImGui::BulletText("[Space]        : Play / Pause"); ImGui::BulletText("[Left Arrow]   : Previous Frame (Step Back)"); ImGui::BulletText("[Right Arrow]  : Next Frame (Step Forward)"); ImGui::BulletText("[Home]         : Go to First Frame"); ImGui::BulletText("[End]          : Go to Last Frame");
-            ImGui::Separator(); ImGui::Text("File Navigation:"); ImGui::BulletText("[[ (L-Bracket)]: Previous File in Playlist"); ImGui::BulletText("[] (R-Bracket)]: Next File in Playlist"); ImGui::BulletText("[Ctrl + O]     : Open File Dialog");
+            ImGui::Separator(); ImGui::Text("File Navigation:"); ImGui::BulletText("[[ (L-Bracket)]: Previous File in Playlist"); ImGui::BulletText("[] (R-Bracket)]: Next File in Playlist"); ImGui::BulletText("[Ctrl + O]     : Open File Dialog"); ImGui::BulletText("[Delete]       : Soft Delete Current File");
             ImGui::Separator(); ImGui::Text("Display & UI:"); ImGui::BulletText("[F] or [F11]   : Toggle Fullscreen"); ImGui::BulletText("[Z]            : Toggle Zoom (Native Pixels / Fit to Window)"); ImGui::BulletText("[M]            : Toggle Metrics Overlay"); ImGui::BulletText("[H] or [F1]    : Toggle This Help Page"); ImGui::BulletText("[Tab]          : Toggle Main UI Controls"); ImGui::BulletText("[Esc]          : Exit Fullscreen / Close Popups / Quit");
+            ImGui::Separator(); ImGui::Text("Color Filter Override:"); ImGui::BulletText("[0]            : Use Metadata CFA"); ImGui::BulletText("[1-4]         : Force CFA BGGR/RGGB/GBRG/GRBG");
             ImGui::Separator(); ImGui::Text("Application:"); ImGui::BulletText("[Ctrl + Q]     : Quit Application");
         }
         ImGui::End();
@@ -486,6 +493,12 @@ void GuiOverlay::render(App* appInstance) {
         }
         if (ImGui::MenuItem("Send to MotionCam Fuse")) {
             appInstance->sendCurrentFileToMotionCamFuse();
+        }
+        if (ImGui::MenuItem("Rotate Left")) {
+            appInstance->rotateLeft();
+        }
+        if (ImGui::MenuItem("Rotate Right")) {
+            appInstance->rotateRight();
         }
         ImGui::EndPopup();
     }
