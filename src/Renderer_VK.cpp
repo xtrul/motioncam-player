@@ -712,7 +712,7 @@ void Renderer_VK::updateUniformBuffer(uint32_t currentImageIndex, const ShaderPa
 void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t currentFrameIndex,
     const nlohmann::json& frameMetadata,
     double staticBlack, double staticWhite, int cfaTypeOverride,
-    int windowWidth, int windowHeight, int orientationTag) {
+    int windowWidth, int windowHeight) {
     
     int w = m_currentRawW;
     int h = m_currentRawH;
@@ -783,7 +783,6 @@ void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t c
     }
     ubo.CCM = glm::mat4(ccm3x3_glm);
     ubo.saturationAdjustment = 1.5f; // +50% saturation
-    ubo.orientation = orientationTag;
 
     updateUniformBuffer(currentFrameIndex, ubo);
 
@@ -803,12 +802,7 @@ void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t c
         scissor.extent = { (uint32_t)windowWidth, (uint32_t)windowHeight };
     }
     else {
-        bool swapWH = (orientationTag >= 5 && orientationTag <= 8);
-        float imgAspect = 1.0f;
-        if (m_currentRawH != 0) {
-            imgAspect = swapWH ? ((float)m_currentRawH / (float)m_currentRawW)
-                               : ((float)m_currentRawW / (float)m_currentRawH);
-        }
+        float imgAspect = (m_currentRawH == 0) ? 1.0f : ((float)m_currentRawW / (float)m_currentRawH);
         float winAspect = (windowHeight == 0) ? 1.0f : ((float)windowWidth / (float)windowHeight);
         float vpWidth = (float)windowWidth;
         float vpHeight = (float)windowHeight;

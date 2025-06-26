@@ -20,7 +20,6 @@ layout(binding = 1) uniform ShaderParams {
     mat4 CCM; // Pass as mat4, use top-left 3x3
     // --- ADD SATURATION UNIFORM ---
     float saturationAdjustment; // e.g., 1.0 for no change, 1.25 for +25%
-    int orientation;
 } params;
 
 // sRGB EOTF (gamma correction)
@@ -33,19 +32,6 @@ uint readU16_val(int x, int y) {
     x = clamp(x, 0, params.W - 1);
     y = clamp(y, 0, params.H - 1);
     return texelFetch(rawImageBufferTexture, ivec2(x, y), 0).r;
-}
-
-vec2 applyOrientation(vec2 uv) {
-    int o = params.orientation;
-    if (o == 1) return uv;
-    if (o == 2) return vec2(1.0 - uv.x, uv.y);
-    if (o == 3) return vec2(1.0 - uv.x, 1.0 - uv.y);
-    if (o == 4) return vec2(uv.x, 1.0 - uv.y);
-    if (o == 5) return vec2(uv.y, uv.x);
-    if (o == 6) return vec2(uv.y, 1.0 - uv.x);
-    if (o == 7) return vec2(1.0 - uv.y, 1.0 - uv.x);
-    if (o == 8) return vec2(1.0 - uv.y, uv.x);
-    return uv;
 }
 
 float lin(uint v_u16) {
@@ -69,8 +55,7 @@ float interpD(int x, int y) {
 }
 
 void main() {
-    vec2 oriented = applyOrientation(inTexCoord);
-    ivec2 p = ivec2(oriented * vec2(params.W, params.H));
+    ivec2 p = ivec2(inTexCoord * vec2(params.W, params.H));
     
     if (p.x >= params.W || p.y >= params.H || p.x < 0 || p.y < 0) {
         outColor = vec4(0.0, 0.0, 0.0, 1.0); 

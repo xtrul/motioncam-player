@@ -118,64 +118,10 @@ namespace {
         if (fwd2_json.is_array() && fwd2_json.size() == 9) {
             for (size_t i = 0; i < 9; ++i) forwardMatrix2[i] = fwd2_json[i].get<float>();
         }
-
-        // ------------------------------------------------------------------
-        // Add orientation tag based on frame metadata and container settings
-        enum class ScreenOrientation {
-            PORTRAIT,
-            REVERSE_PORTRAIT,
-            REVERSE_LANDSCAPE,
-            LANDSCAPE,
-            UNKNOWN
-        };
-
-        auto parseOrientation = [&](const nlohmann::json& j) -> ScreenOrientation {
-            if (j.is_string()) {
-                std::string o = j.get<std::string>();
-                std::transform(o.begin(), o.end(), o.begin(), ::toupper);
-                if (o == "PORTRAIT") return ScreenOrientation::PORTRAIT;
-                if (o == "REVERSE_PORTRAIT") return ScreenOrientation::REVERSE_PORTRAIT;
-                if (o == "REVERSE_LANDSCAPE") return ScreenOrientation::REVERSE_LANDSCAPE;
-                if (o == "LANDSCAPE") return ScreenOrientation::LANDSCAPE;
-            }
-            return ScreenOrientation::UNKNOWN;
-        };
-
-        ScreenOrientation screenOrientation = ScreenOrientation::UNKNOWN;
-        if (frameMetadata.contains("orientation")) {
-            screenOrientation = parseOrientation(frameMetadata["orientation"]);
-        }
-
-        bool isFlipped = false;
-        if (containerMetadata.contains("extraData") &&
-            containerMetadata["extraData"].contains("postProcessSettings") &&
-            containerMetadata["extraData"]["postProcessSettings"].contains("flipped")) {
-            isFlipped = containerMetadata["extraData"]["postProcessSettings"]["flipped"].get<bool>();
-        }
-
-        unsigned short dngOrientation = tinydngwriter::ORIENTATION_TOPLEFT; // default Normal
-        switch (screenOrientation) {
-        case ScreenOrientation::PORTRAIT:
-            dngOrientation = isFlipped ? tinydngwriter::ORIENTATION_LEFTTOP : tinydngwriter::ORIENTATION_RIGHTTOP;
-            break;
-        case ScreenOrientation::REVERSE_PORTRAIT:
-            dngOrientation = isFlipped ? tinydngwriter::ORIENTATION_RIGHTBOT : tinydngwriter::ORIENTATION_LEFTBOT;
-            break;
-        case ScreenOrientation::REVERSE_LANDSCAPE:
-            dngOrientation = isFlipped ? tinydngwriter::ORIENTATION_BOTLEFT : tinydngwriter::ORIENTATION_BOTRIGHT;
-            break;
-        case ScreenOrientation::LANDSCAPE:
-            dngOrientation = isFlipped ? tinydngwriter::ORIENTATION_TOPRIGHT : tinydngwriter::ORIENTATION_TOPLEFT;
-            break;
-        default:
-            dngOrientation = tinydngwriter::ORIENTATION_TOPLEFT;
-            break;
-        }
         tinydngwriter::DNGImage dng;
         dng.SetBigEndian(false);
         dng.SetDNGVersion(1, 4, 0, 0);
         dng.SetDNGBackwardVersion(1, 1, 0, 0);
-        dng.SetOrientation(dngOrientation);
         dng.SetImageData(reinterpret_cast<const unsigned char*>(data.data()), static_cast<size_t>(width) * height * sizeof(uint16_t));
         dng.SetImageWidth(width);
         dng.SetImageLength(height);
@@ -292,7 +238,7 @@ App::App(const std::string& filePath) : m_filePath(filePath) {
     m_swapChain = VK_NULL_HANDLE; m_swapChainImageFormat = VK_FORMAT_UNDEFINED;
     m_renderPass = VK_NULL_HANDLE; m_commandPool = VK_NULL_HANDLE;
     m_currentFrame = 0; m_imguiDescriptorPool = VK_NULL_HANDLE;
-    m_isFullscreen = false; m_cfaTypeFromMetadata = 0; m_staticBlack = 0.0; m_staticWhite = 65535.0; m_containerFlipped = false;
+    m_isFullscreen = false; m_cfaTypeFromMetadata = 0; m_staticBlack = 0.0; m_staticWhite = 65535.0;
     m_dumpMetadata = false; m_currentFileIndex = 0; m_showMetrics = false; m_showHelpPage = false;
     m_decodingTimeMs = 0.0; m_renderSubmitTimeMs = 0.0; m_gpuWaitTimeMs = 0.0;
     m_sleepTimeMs = 0.0; m_totalLoopTimeMs = 0.0; m_showUI = true;
@@ -1300,44 +1246,10 @@ void App::drawFrame() {
         int cfa = m_cfaOverride.value_or(m_cfaTypeFromMetadata);
         glfwGetFramebufferSize(m_window, &m_windowWidth, &m_windowHeight);
         
-        // Determine orientation tag for rendering
-        auto parseOrientation = [&](const nlohmann::json& j) {
-            if (j.is_string()) {
-                std::string o = j.get<std::string>();
-                std::transform(o.begin(), o.end(), o.begin(), ::toupper);
-                if (o == "PORTRAIT") return 0;
-                if (o == "REVERSE_PORTRAIT") return 1;
-                if (o == "REVERSE_LANDSCAPE") return 2;
-                if (o == "LANDSCAPE") return 3;
-            }
-            return 3; // default landscape
-        };
-
-        int orientationIndex = parseOrientation(frame_meta_for_render.contains("orientation") ?
-                                     frame_meta_for_render["orientation"] : nlohmann::json("LANDSCAPE"));
-        // Map to DNG orientation constants
-        int orientationTag = tinydngwriter::ORIENTATION_TOPLEFT;
-        switch (orientationIndex) {
-        case 0: // PORTRAIT
-            orientationTag = m_containerFlipped ? tinydngwriter::ORIENTATION_LEFTTOP : tinydngwriter::ORIENTATION_RIGHTTOP;
-            break;
-        case 1: // REVERSE_PORTRAIT
-            orientationTag = m_containerFlipped ? tinydngwriter::ORIENTATION_RIGHTBOT : tinydngwriter::ORIENTATION_LEFTBOT;
-            break;
-        case 2: // REVERSE_LANDSCAPE
-            orientationTag = m_containerFlipped ? tinydngwriter::ORIENTATION_BOTLEFT : tinydngwriter::ORIENTATION_BOTRIGHT;
-            break;
-        case 3: // LANDSCAPE or UNKNOWN
-        default:
-            orientationTag = m_containerFlipped ? tinydngwriter::ORIENTATION_TOPRIGHT : tinydngwriter::ORIENTATION_TOPLEFT;
-            break;
-        }
-
         m_rendererVk->recordRenderCommands(currentCommandBuffer, m_currentFrame,
                                            frame_meta_for_render,
                                            m_staticBlack, m_staticWhite, cfa,
-                                           m_windowWidth, m_windowHeight,
-                                           orientationTag);
+                                           m_windowWidth, m_windowHeight);
     }
 
     if (m_showUI) {
@@ -1588,11 +1500,6 @@ void App::loadFileAtIndex(int index) {
         return;
     }
     auto meta = m_decoderWrapper->getContainerMetadata();
-    m_containerFlipped = false;
-    if (meta.contains("extraData") && meta["extraData"].contains("postProcessSettings") &&
-        meta["extraData"]["postProcessSettings"].contains("flipped")) {
-        m_containerFlipped = meta["extraData"]["postProcessSettings"]["flipped"].get<bool>();
-    }
     auto blackLevelVec = meta.value("blackLevel", std::vector<double>{0.0});
     m_staticBlack = blackLevelVec.empty() ? 0.0 : std::accumulate(blackLevelVec.begin(), blackLevelVec.end(), 0.0) / blackLevelVec.size();
     m_staticWhite = meta.value("whiteLevel", 65535.0);

@@ -92,7 +92,6 @@ public:
     int m_cfaTypeFromMetadata;
     double m_staticBlack;
     double m_staticWhite;
-    bool m_containerFlipped;
     bool m_dumpMetadata;
     std::vector<std::string> m_fileList;
     int m_currentFileIndex;

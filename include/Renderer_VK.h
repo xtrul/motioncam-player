@@ -32,9 +32,10 @@ public:
 
     // CORRECTED: Removed rawData from recordRenderCommands declaration
     void recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t currentFrameIndex,
+        // const std::vector<uint16_t>& rawData, // REMOVED
         const nlohmann::json& frameMetadata,
         double staticBlack, double staticWhite, int cfaTypeOverride,
-        int windowWidth, int windowHeight, int orientationTag);
+        int windowWidth, int windowHeight);
 
     static int getCfaType(const std::string& cfa);
     void setZoomNativePixels(bool nativePixels);
@@ -60,7 +61,6 @@ private:
         alignas(4) float gainB;
         alignas(16) glm::mat4 CCM;
         alignas(4) float saturationAdjustment;
-        alignas(4) int   orientation;
     };
 
     VkPhysicalDevice m_physicalDevice;
