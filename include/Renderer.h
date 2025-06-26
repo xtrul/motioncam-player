@@ -30,8 +30,6 @@ public:
     void resetPanOffsets();
     float getPanX() const;
     float getPanY() const;
-    void setRotation(int r);
-    int  getRotation() const;
     int getImageWidth()  const;
     int getImageHeight() const;
 
@@ -63,7 +61,6 @@ private:
     bool m_zoomNativePixels = false;
     float m_panX = 0.0f;
     float m_panY = 0.0f;
-    int   m_rotation = 0;
 };
 
 #endif // RENDERER_H

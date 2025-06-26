@@ -104,20 +104,7 @@ layout(location=1) in vec2 aTex;
 out vec2 Tex;
 uniform vec2 uScale;
 uniform vec2 uOffset;
-uniform int uRotation;
-vec2 rotatePos(vec2 p){
-    if(uRotation==1) return vec2(p.y,-p.x);
-    if(uRotation==2) return vec2(-p.x,-p.y);
-    if(uRotation==3) return vec2(-p.y,p.x);
-    return p;
-}
-vec2 rotateTex(vec2 t){
-    if(uRotation==1) return vec2(t.y,1.0-t.x);
-    if(uRotation==2) return vec2(1.0-t.x,1.0-t.y);
-    if(uRotation==3) return vec2(1.0-t.y,t.x);
-    return t;
-}
-void main(){ Tex = rotateTex(aTex); gl_Position = vec4(rotatePos(aPos) * uScale + uOffset, 0.0, 1.0); }
+void main(){ Tex = aTex; gl_Position = vec4(aPos * uScale + uOffset, 0.0, 1.0); }
 )GLSL";
 
 const char* Renderer::fragmentShaderSrc = R"GLSL(#version 300 es
@@ -343,19 +330,15 @@ void Renderer::renderFrame(const std::vector<uint16_t>& rawData,
     float imgW = static_cast<float>(w);
     float imgH = static_cast<float>(h);
 
-    bool rotSwap = (m_rotation % 2) != 0;
-    float dispW = rotSwap ? imgH : imgW;
-    float dispH = rotSwap ? imgW : imgH;
-
     float sX = 1.0f, sY = 1.0f;
     if (winW > 0 && winH > 0 && imgW > 0 && imgH > 0) {
         if (m_zoomNativePixels) {
-            sX = dispW / winW;
-            sY = dispH / winH;
+            sX = imgW / winW;
+            sY = imgH / winH;
         }
         else {
             float windowAspectRatio = winW / winH;
-            float imageAspectRatio = dispW / dispH;
+            float imageAspectRatio = imgW / imgH;
             if (windowAspectRatio > imageAspectRatio) {
                 sX = imageAspectRatio / windowAspectRatio;
                 sY = 1.0f;
@@ -366,22 +349,12 @@ void Renderer::renderFrame(const std::vector<uint16_t>& rawData,
             }
         }
     }
-    float nX = 0.f;
-    float nY = 0.f;
-    if (winW > 0 && winH > 0 && m_zoomNativePixels) {
-        if (rotSwap) {
-            nX = 2.f * m_panY / winW;
-            nY = -2.f * m_panX / winH;
-        } else {
-            nX = 2.f * m_panX / winW;
-            nY = -2.f * m_panY / winH;
-        }
-    }
+    float nX = (winW > 0 && m_zoomNativePixels) ? (2.f * m_panX / winW) : 0.f;
+    float nY = (winH > 0 && m_zoomNativePixels) ? (-2.f * m_panY / winH) : 0.f;
 
     GL_CHECK(glUseProgram(m_quadProg));
     GL_CHECK(glUniform2f(glGetUniformLocation(m_quadProg, "uScale"), sX, sY));
     GL_CHECK(glUniform2f(glGetUniformLocation(m_quadProg, "uOffset"), nX, nY));
-    GL_CHECK(glUniform1i(glGetUniformLocation(m_quadProg, "uRotation"), m_rotation));
     GL_CHECK(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
     GL_CHECK(glClear(GL_COLOR_BUFFER_BIT));
     GL_CHECK(glActiveTexture(GL_TEXTURE0));
@@ -489,6 +462,4 @@ int Renderer::getCfaType(const std::string& c) {
 void Renderer::setZoomNativePixels(bool n) { m_zoomNativePixels = n; }
 void Renderer::setPanOffsets(float x, float y) { m_panX = x; m_panY = y; }
 void Renderer::resetPanOffsets() { m_panX = 0.0f; m_panY = 0.0f; }
-void Renderer::setRotation(int r) { m_rotation = r % 4; }
-int  Renderer::getRotation() const { return m_rotation; }
 void Renderer::resetDimensions() { m_currentW = 0; m_currentH = 0; }
