@@ -12,6 +12,7 @@ class App;
 
 namespace GuiOverlay {
     extern bool show_playlist_aux;
+    void requestContextMenu(float x, float y);
 
     struct UIData {
         std::string currentFileName;

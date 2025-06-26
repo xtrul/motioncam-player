@@ -1,9 +1,9 @@
-Project Name: MCRAW Player
+Project Name: MotionCam Player
 
 ---
 
 🎯 What It Is:
-MCRAW Player is a modern C++ desktop application built for viewing, decoding, and playing `.mcraw` video files (raw video from MotionCam and similar tools). It will use:
+MotionCam Player is a modern C++ desktop application built for viewing, decoding, and playing `.mcraw` video files (raw video from MotionCam and similar tools). It will use:
 - **C++17**
 - **Qt 6** (Widgets + OpenGL)
 - **OpenGL 4.3+** (compute shader pipeline)
@@ -95,7 +95,7 @@ These come only after the solid MVP core (Phase 2) is complete and stable.
 ---
 
 🧠 SUMMARY:
-This is a Qt 6 + OpenGL C++17 application called **MCRAW Player**, focused first on doing a small number of things **extremely well**:
+This is a Qt 6 + OpenGL C++17 application called **MotionCam Player**, focused first on doing a small number of things **extremely well**:
 - Opening `.mcraw` videos
 - Playing and navigating them
 - Moving them to a rejected folder
