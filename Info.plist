@@ -28,6 +28,26 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.motioncam.mcraw</string>
+            <key>UTTypeDescription</key>
+            <string>MotionCam RAW File</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <string>mcraw</string>
+                <key>public.mime-type</key>
+                <string>application/octet-stream</string>
+            </dict>
+        </dict>
+    </array>
     <!-- For file drag-and-drop -->
     <key>CFBundleDocumentTypes</key>
     <array>
@@ -46,6 +66,8 @@
             <array>
                 <string>mcraw</string>
             </array>
+            <key>CFBundleTypeIconFile</key>
+            <string>mcraw_player.icns</string>
         </dict>
     </array>
 </dict>
