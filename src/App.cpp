@@ -118,64 +118,10 @@ namespace {
         if (fwd2_json.is_array() && fwd2_json.size() == 9) {
             for (size_t i = 0; i < 9; ++i) forwardMatrix2[i] = fwd2_json[i].get<float>();
         }
-
-        // ------------------------------------------------------------------
-        // Add orientation tag based on frame metadata and container settings
-        enum class ScreenOrientation {
-            PORTRAIT,
-            REVERSE_PORTRAIT,
-            REVERSE_LANDSCAPE,
-            LANDSCAPE,
-            UNKNOWN
-        };
-
-        auto parseOrientation = [&](const nlohmann::json& j) -> ScreenOrientation {
-            if (j.is_string()) {
-                std::string o = j.get<std::string>();
-                std::transform(o.begin(), o.end(), o.begin(), ::toupper);
-                if (o == "PORTRAIT") return ScreenOrientation::PORTRAIT;
-                if (o == "REVERSE_PORTRAIT") return ScreenOrientation::REVERSE_PORTRAIT;
-                if (o == "REVERSE_LANDSCAPE") return ScreenOrientation::REVERSE_LANDSCAPE;
-                if (o == "LANDSCAPE") return ScreenOrientation::LANDSCAPE;
-            }
-            return ScreenOrientation::UNKNOWN;
-        };
-
-        ScreenOrientation screenOrientation = ScreenOrientation::UNKNOWN;
-        if (frameMetadata.contains("orientation")) {
-            screenOrientation = parseOrientation(frameMetadata["orientation"]);
-        }
-
-        bool isFlipped = false;
-        if (containerMetadata.contains("extraData") &&
-            containerMetadata["extraData"].contains("postProcessSettings") &&
-            containerMetadata["extraData"]["postProcessSettings"].contains("flipped")) {
-            isFlipped = containerMetadata["extraData"]["postProcessSettings"]["flipped"].get<bool>();
-        }
-
-        unsigned short dngOrientation = tinydngwriter::ORIENTATION_TOPLEFT; // default Normal
-        switch (screenOrientation) {
-        case ScreenOrientation::PORTRAIT:
-            dngOrientation = isFlipped ? tinydngwriter::ORIENTATION_LEFTTOP : tinydngwriter::ORIENTATION_RIGHTTOP;
-            break;
-        case ScreenOrientation::REVERSE_PORTRAIT:
-            dngOrientation = isFlipped ? tinydngwriter::ORIENTATION_RIGHTBOT : tinydngwriter::ORIENTATION_LEFTBOT;
-            break;
-        case ScreenOrientation::REVERSE_LANDSCAPE:
-            dngOrientation = isFlipped ? tinydngwriter::ORIENTATION_BOTLEFT : tinydngwriter::ORIENTATION_BOTRIGHT;
-            break;
-        case ScreenOrientation::LANDSCAPE:
-            dngOrientation = isFlipped ? tinydngwriter::ORIENTATION_TOPRIGHT : tinydngwriter::ORIENTATION_TOPLEFT;
-            break;
-        default:
-            dngOrientation = tinydngwriter::ORIENTATION_TOPLEFT;
-            break;
-        }
         tinydngwriter::DNGImage dng;
         dng.SetBigEndian(false);
         dng.SetDNGVersion(1, 4, 0, 0);
         dng.SetDNGBackwardVersion(1, 1, 0, 0);
-        dng.SetOrientation(dngOrientation);
         dng.SetImageData(reinterpret_cast<const unsigned char*>(data.data()), static_cast<size_t>(width) * height * sizeof(uint16_t));
         dng.SetImageWidth(width);
         dng.SetImageLength(height);
