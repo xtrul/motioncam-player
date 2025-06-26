@@ -20,6 +20,7 @@ layout(binding = 1) uniform ShaderParams {
     mat4 CCM; // Pass as mat4, use top-left 3x3
     // --- ADD SATURATION UNIFORM ---
     float saturationAdjustment; // e.g., 1.0 for no change, 1.25 for +25%
+    int rotation;
 } params;
 
 // sRGB EOTF (gamma correction)

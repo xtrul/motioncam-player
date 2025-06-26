@@ -302,6 +302,12 @@ void GuiOverlay::render(App* appInstance) {
             if (ImGui::MenuItem("Send to MotionCam Fuse")) {
                 appInstance->sendCurrentFileToMotionCamFuse();
             }
+            if (ImGui::MenuItem("Rotate Left")) {
+                appInstance->rotateLeft();
+            }
+            if (ImGui::MenuItem("Rotate Right")) {
+                appInstance->rotateRight();
+            }
             ImGui::EndPopup();
         }
     }
@@ -486,6 +492,12 @@ void GuiOverlay::render(App* appInstance) {
         }
         if (ImGui::MenuItem("Send to MotionCam Fuse")) {
             appInstance->sendCurrentFileToMotionCamFuse();
+        }
+        if (ImGui::MenuItem("Rotate Left")) {
+            appInstance->rotateLeft();
+        }
+        if (ImGui::MenuItem("Rotate Right")) {
+            appInstance->rotateRight();
         }
         ImGui::EndPopup();
     }
