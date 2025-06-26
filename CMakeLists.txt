@@ -226,10 +226,13 @@ add_subdirectory(motioncam-decoder           EXCLUDE_FROM_ALL)
 set(APP_SOURCES
   src/main.cpp src/App.cpp src/Renderer_VK.cpp src/GuiOverlay.cpp
   src/PlaybackController.cpp src/AudioController.cpp src/DecoderWrapper.cpp
-  src/Logger.cpp src/DebugLog.cpp
+  src/Logger.cpp src/DebugLog.cpp src/SingleInstance.cpp
   ${EXTERNAL_DIR}/imgui/backends/imgui_impl_glfw.cpp
   ${EXTERNAL_DIR}/imgui/backends/imgui_impl_vulkan.cpp
 )
+if(APPLE)
+  list(APPEND APP_SOURCES src/MacOpenFile.mm)
+endif()
 add_executable(${PROJECT_NAME} MACOSX_BUNDLE ${APP_SOURCES})
 add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
