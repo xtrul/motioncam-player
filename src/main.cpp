@@ -33,10 +33,6 @@
 // 4. Your Project's Headers
 #include "App.h"
 #include "DebugLog.h"
-#include "SingleInstance.h"
-#if defined(__APPLE__)
-#include "MacOpenFile.h"
-#endif
 
 namespace fs = std::filesystem;
 
@@ -205,12 +201,6 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "[MAIN_VERY_EARLY] After macOS CWD trick attempt.\n"); fflush(stderr);
 #endif
 
-    SingleInstanceGuard instanceGuard;
-    if (!instanceGuard.acquired) {
-        fprintf(stderr, "[main] Another instance is already running. Exiting.\n");
-        return 0;
-    }
-
 #if defined(_WIN32) && !defined(NDEBUG)
     fprintf(stderr, "[MAIN_VERY_EARLY] Attempting Windows IO redirection.\n"); fflush(stderr);
     RedirectIOToConsole();
@@ -242,21 +232,13 @@ int main(int argc, char* argv[]) {
     if (argc > 0) LogToFile(std::string("[main] argv[0]: ") + argv[0]);
 
     std::string inPath;
-#if defined(__APPLE__)
-    auto openFiles = GetStartupOpenFiles();
-    if (!openFiles.empty()) {
-        inPath = openFiles.front();
-        LogToFile(std::string("[main] File from macOS open event: ") + inPath);
-    }
-#endif
-    if (inPath.empty() && argc >= 2 && strncmp(argv[1], "-psn", 4) != 0) {
+    if (argc == 2) {
         inPath = argv[1];
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
         fprintf(stderr, "[main] Input file from command line: %s\n", inPath.c_str()); fflush(stderr);
-    }
-    if (inPath.empty()) {
-        LogToFile("[main] No input argument or open event, opening file dialog...");
-        fprintf(stderr, "[main] No input argument or open event, opening file dialog...\n"); fflush(stderr);
+    } else {
+        LogToFile("[main] No command line argument, opening file dialog...");
+        fprintf(stderr, "[main] No command line argument, opening file dialog...\n"); fflush(stderr);
         inPath = OpenMcrawDialog();
         if (inPath.empty()) {
             LogToFile("[main] No input file selected or dialog cancelled. Exiting.");
