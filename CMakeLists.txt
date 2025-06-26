@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 cmake_policy(SET CMP0111 NEW) # Important for MACOSX_RPATH behavior
-project(MCRAW_Player VERSION 0.5 LANGUAGES C CXX)
+project(MotionCam_Player VERSION 0.5 LANGUAGES C CXX)
 
 # --- Universal macOS binary (Apple Silicon + Intel) ---
 set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "" FORCE)
