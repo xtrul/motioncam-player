@@ -500,7 +500,7 @@ bool App::run() {
         m_totalLoopTimeMs = m_decodingTimeMs + m_renderSubmitTimeMs + m_gpuWaitTimeMs + m_sleepTimeMs;
 
         {
-            std::ostringstream ss; ss << "MCRAW Player (Vulkan) - ";
+            std::ostringstream ss; ss << "MotionCam Player - ";
             if (m_currentFileIndex >= 0 && static_cast<size_t>(m_currentFileIndex) < m_fileList.size()) {
                 ss << fs::path(m_fileList[m_currentFileIndex]).filename().string();
                 if (m_playbackController && m_decoderWrapper && m_decoderWrapper->getDecoder()) {
@@ -545,7 +545,7 @@ bool App::initVulkan() {
     std::cout << "[App::initVulkan] GLFW initialized." << std::endl;
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "MCRAW Player (Vulkan)", nullptr, nullptr);
+    m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "MotionCam Player", nullptr, nullptr);
     if (!m_window) {
         LogToFile("[App::initVulkan] ERROR: Failed to create GLFW window");
         std::cerr << "[App::initVulkan] Failed to create GLFW window" << std::endl;
@@ -634,7 +634,7 @@ void App::createInstance() {
 
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "MCRAW Player";
+    appInfo.pApplicationName = "MotionCam Player";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 2, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -1608,7 +1608,22 @@ void App::handleKey(int key, int mods) {
     else if (key == GLFW_KEY_END) { if (totalFramesInCurrentFile > 0) { if (!m_playbackController->isPaused()) m_playbackController->togglePause(); m_playbackController->seekFrame(totalFramesInCurrentFile - 1, totalFramesInCurrentFile); anchorPlaybackTimeForResume(); }}
     else if (key == GLFW_KEY_Z) {
         m_playbackController->toggleZoomNativePixels();
-        if (m_rendererVk) { m_rendererVk->setZoomNativePixels(m_playbackController->isZoomNativePixels()); if (!m_playbackController->isZoomNativePixels()) { m_rendererVk->resetPanOffsets(); if (m_isPanning) { m_isPanning = false; } } }
+        if (m_rendererVk) {
+            bool zoomOn = m_playbackController->isZoomNativePixels();
+            m_rendererVk->setZoomNativePixels(zoomOn);
+            if (!zoomOn) {
+                m_rendererVk->resetPanOffsets();
+                if (m_isPanning) { m_isPanning = false; }
+            } else {
+                int imgW = m_rendererVk->getImageWidth();
+                int imgH = m_rendererVk->getImageHeight();
+                int winW = 0, winH = 0;
+                glfwGetFramebufferSize(m_window, &winW, &winH);
+                float offsetX = std::max(0.0f, (imgW - winW) / 2.0f);
+                float offsetY = std::max(0.0f, (imgH - winH) / 2.0f);
+                m_rendererVk->setPanOffsets(offsetX, offsetY);
+            }
+        }
     }
     else if (key == GLFW_KEY_0 || key == GLFW_KEY_KP_0) { m_cfaOverride = std::nullopt; }
     else if (key >= GLFW_KEY_1 && key <= GLFW_KEY_4) { m_cfaOverride = key - GLFW_KEY_1; }
@@ -1634,6 +1649,11 @@ void App::handleKey(int key, int mods) {
 }
 
 void App::handleMouseButton(int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+        double cx, cy; glfwGetCursorPos(m_window, &cx, &cy);
+        GuiOverlay::requestContextMenu(static_cast<float>(cx), static_cast<float>(cy));
+        return;
+    }
     if (!m_rendererVk || !m_playbackController || !m_playbackController->isZoomNativePixels()) { if(m_isPanning){ m_isPanning=false; } return; }
     if (button == GLFW_MOUSE_BUTTON_LEFT) { if (action == GLFW_PRESS) { m_isPanning = true; glfwGetCursorPos(m_window, &m_lastMouseX, &m_lastMouseY); } else if (action == GLFW_RELEASE) { if (m_isPanning) { m_isPanning = false; } } }
 }
@@ -1769,4 +1789,20 @@ void App::convertCurrentFileToDngs() {
     }
     std::cout << "DNG Export All: Conversion complete." << std::endl;
     if (m_playbackController && m_playbackController->isPaused() && !wasPausedOriginalState) { m_playbackController->togglePause(); if(!m_playbackController->isPaused()) anchorPlaybackTimeForResume(); }
+}
+
+void App::sendCurrentFileToMotionCamFuse() {
+#ifdef __APPLE__
+    if (m_fileList.empty() || m_currentFileIndex < 0 || static_cast<size_t>(m_currentFileIndex) >= m_fileList.size()) {
+        std::cerr << "MotionCam Fuse: No current file." << std::endl;
+        return;
+    }
+    std::string cmd = std::string("/usr/bin/open -a \"MotionCam Fuse\" --args -f \"") + m_fileList[m_currentFileIndex] + "\"";
+    int ret = std::system(cmd.c_str());
+    if (ret != 0) {
+        std::cerr << "MotionCam Fuse: launch failed." << std::endl;
+    }
+#else
+    std::cerr << "MotionCam Fuse integration is only available on macOS." << std::endl;
+#endif
 }
