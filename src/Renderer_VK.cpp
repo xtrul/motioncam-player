@@ -782,7 +782,7 @@ void Renderer_VK::recordRenderCommands(VkCommandBuffer commandBuffer, uint32_t c
         if (!valid_ccm) ccm3x3_glm = glm::mat3(1.0f);
     }
     ubo.CCM = glm::mat4(ccm3x3_glm);
-    ubo.saturationAdjustment = 1.5f; // +50% saturation
+    ubo.saturationAdjustment = 1.0f; // Default saturation
 
     updateUniformBuffer(currentFrameIndex, ubo);
 
