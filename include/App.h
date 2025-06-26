@@ -17,6 +17,7 @@
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <unordered_map>
 
 // 2. Third-party library preprocessor definitions that might affect other headers
 #define GLFW_INCLUDE_VULKAN
@@ -109,8 +110,10 @@ public:
     bool m_isPanning;
     double m_lastMouseX;
     double m_lastMouseY;
+    std::chrono::steady_clock::time_point m_lastWheelClick;
     bool m_firstFileLoaded;
     bool m_isFullscreen;
+    std::unordered_map<std::string, int> m_manualOrientation;
 
     void handleKey(int key, int mods);
     void handleDrop(int count, const char** paths);
@@ -121,6 +124,8 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void handleMouseButton(int button, int action, int mods);
     void handleCursorPos(double xpos, double ypos);
+    void rotateLeft();
+    void rotateRight();
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void sendCurrentFileToMotionCamFuse();
