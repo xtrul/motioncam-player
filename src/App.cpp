@@ -288,6 +288,8 @@ App::App(const std::string& filePath) : m_filePath(filePath) {
     m_sleepTimeMs = 0.0; m_totalLoopTimeMs = 0.0; m_showUI = true;
     m_isPanning = false; m_lastMouseX = 0.0; m_lastMouseY = 0.0;
     m_firstFileLoaded = false;
+    m_lastWindowTitle = "";
+    m_lastTitleUpdate = std::chrono::steady_clock::now();
 
     LogToFile(std::string("[App::App] Constructor called for file: ") + this->m_filePath);
     std::cout << "[App::App] Constructor called for file: " << this->m_filePath << std::endl;
@@ -558,10 +560,24 @@ bool App::run() {
                 if (m_playbackController && m_decoderWrapper && m_decoderWrapper->getDecoder()) {
                     size_t cur = m_playbackController->getCurrentFrameIndex() + 1;
                     size_t tot = m_decoderWrapper->getDecoder()->getFrames().size();
-                    if (tot > 0) ss << " (" << cur << "/" << tot << ")"; else ss << " (0 frames)";
+                    if (tot > 0) {
+                        size_t width = std::max<size_t>(6, std::to_string(tot).size());
+                        ss << " (" << std::setfill('0') << std::setw(static_cast<int>(width)) << cur
+                           << "/" << std::setfill('0') << std::setw(static_cast<int>(width)) << tot << ")";
+                    } else {
+                        ss << " (0 frames)";
+                    }
                 }
             } else { ss << "(no file)"; }
-            glfwSetWindowTitle(m_window, ss.str().c_str());
+
+            auto newTitle = ss.str();
+            auto now = steady_clock::now();
+            if (newTitle != m_lastWindowTitle &&
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastTitleUpdate).count() > 200) {
+                glfwSetWindowTitle(m_window, newTitle.c_str());
+                m_lastWindowTitle = std::move(newTitle);
+                m_lastTitleUpdate = now;
+            }
         }
     }
     LogToFile("[App::run] Exited main loop.");
@@ -1302,8 +1318,6 @@ void App::drawFrame() {
         if (frame_meta_for_render.contains("orientation")) {
             orientationTag = computeOrientationTag(frame_meta_for_render["orientation"], m_containerFlipped, m_containerOrientationTag);
         }
-        LogToFile(std::string("[App::drawFrame] orientation tag: ") + std::to_string(orientationTag));
-        std::cout << "[App::drawFrame] orientation tag: " << orientationTag << std::endl;
 
         m_rendererVk->recordRenderCommands(currentCommandBuffer, m_currentFrame,
                                            frame_meta_for_render,
@@ -1569,8 +1583,6 @@ void App::loadFileAtIndex(int index) {
     if (meta.contains("orientation")) {
         m_containerOrientationTag = computeOrientationTag(meta["orientation"], m_containerFlipped, tinydngwriter::ORIENTATION_TOPLEFT);
     }
-    LogToFile(std::string("[App::loadFileAtIndex] container orientation tag: ") + std::to_string(m_containerOrientationTag));
-    std::cout << "[App::loadFileAtIndex] container orientation tag: " << m_containerOrientationTag << std::endl;
     auto blackLevelVec = meta.value("blackLevel", std::vector<double>{0.0});
     m_staticBlack = blackLevelVec.empty() ? 0.0 : std::accumulate(blackLevelVec.begin(), blackLevelVec.end(), 0.0) / blackLevelVec.size();
     m_staticWhite = meta.value("whiteLevel", 65535.0);
