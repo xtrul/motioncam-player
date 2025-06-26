@@ -558,12 +558,7 @@ bool App::run() {
                 if (m_playbackController && m_decoderWrapper && m_decoderWrapper->getDecoder()) {
                     size_t cur = m_playbackController->getCurrentFrameIndex() + 1;
                     size_t tot = m_decoderWrapper->getDecoder()->getFrames().size();
-                    if (tot > 0) {
-                        ss << " (" << std::setfill('0') << std::setw(6) << cur
-                           << "/" << std::setfill('0') << std::setw(6) << tot << ")";
-                    } else {
-                        ss << " (0 frames)";
-                    }
+                    if (tot > 0) ss << " (" << cur << "/" << tot << ")"; else ss << " (0 frames)";
                 }
             } else { ss << "(no file)"; }
             glfwSetWindowTitle(m_window, ss.str().c_str());

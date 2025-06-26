@@ -313,7 +313,7 @@ void GuiOverlay::render(App* appInstance) {
         ImGui::SetNextWindowSize(ImVec2(initial_playlist_width, default_playlist_height), ImGuiCond_Appearing);
         ImGui::SetNextWindowSizeConstraints(ImVec2(initial_playlist_width * 0.5f, 100.0f * io.FontGlobalScale), ImVec2(viewport->WorkSize.x * 0.5f, viewport->WorkSize.y - 2 * style.WindowPadding.y));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4,4)); ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6,4)); ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.09f, 0.95f));
-        if (ImGui::Begin("Playlist", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings )) {
+        if (ImGui::Begin("PLAYLIST_AUX_TOGGLED", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings )) {
             current_playlist_window_width = ImGui::GetWindowSize().x; playlist_window_is_visible = true;
             if (appInstance->m_fileList.empty()) ImGui::TextDisabled(" (empty)");
             else { for (int i = 0; i < static_cast<int>(appInstance->m_fileList.size()); ++i) { const std::string& filePath = appInstance->m_fileList[i]; std::string filename_to_display = fs::path(filePath).stem().string(); bool is_selected = (appInstance->m_currentFileIndex == i); char entry_buf[512]; snprintf(entry_buf, sizeof(entry_buf), "%2d. %s ", i+1, filename_to_display.c_str()); if (is_selected) ImGui::PushStyleColor(ImGuiCol_Header, style.Colors[ImGuiCol_HeaderActive]); if (ImGui::Selectable(entry_buf, is_selected, ImGuiSelectableFlags_SpanAllColumns)) { if (!is_selected) { appInstance->m_firstFileLoaded = false; appInstance->loadFileAtIndex(i); appInstance->m_firstFileLoaded = true; } } if (is_selected) ImGui::PopStyleColor(); } }
@@ -327,30 +327,10 @@ void GuiOverlay::render(App* appInstance) {
 
         bool help_open_flag = ui.showHelpPage;
         if (ImGui::Begin("Help - Keyboard Shortcuts", &help_open_flag, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
-            ImGui::Text("Playback Controls:");
-            ImGui::BulletText("[Space]        : Play / Pause");
-            ImGui::BulletText("[Left Arrow]   : Previous Frame (Step Back)");
-            ImGui::BulletText("[Right Arrow]  : Next Frame (Step Forward)");
-            ImGui::BulletText("[Home]         : Go to First Frame");
-            ImGui::BulletText("[End]          : Go to Last Frame");
-            ImGui::Separator();
-            ImGui::Text("File Navigation:");
-            ImGui::BulletText("[[ (L-Bracket)]: Previous File in Playlist");
-            ImGui::BulletText("] (R-Bracket)]: Next File in Playlist");
-            ImGui::BulletText("[⌘O]           : Open File Dialog");
-            ImGui::BulletText("[Delete] or [Backspace] : Delete Current File");
-            ImGui::Separator();
-            ImGui::Text("Display & UI:");
-            ImGui::BulletText("[F] or [F11]   : Toggle Fullscreen");
-            ImGui::BulletText("[Z]            : Toggle Zoom (Native Pixels / Fit to Window)");
-            ImGui::BulletText("[M]            : Toggle Metrics Overlay");
-            ImGui::BulletText("[H] or [F1]    : Toggle This Help Page");
-            ImGui::BulletText("[Tab]          : Toggle Main UI Controls");
-            ImGui::BulletText("[Esc]          : Exit Fullscreen / Close Popups / Quit");
-            ImGui::Separator();
-            ImGui::Text("Application:");
-            ImGui::BulletText("[⌘Q]           : Quit Application");
-            ImGui::BulletText("[0-4]          : Set CFA Override (0 to reset)");
+            ImGui::Text("Playback Controls:"); ImGui::BulletText("[Space]        : Play / Pause"); ImGui::BulletText("[Left Arrow]   : Previous Frame (Step Back)"); ImGui::BulletText("[Right Arrow]  : Next Frame (Step Forward)"); ImGui::BulletText("[Home]         : Go to First Frame"); ImGui::BulletText("[End]          : Go to Last Frame");
+            ImGui::Separator(); ImGui::Text("File Navigation:"); ImGui::BulletText("[[ (L-Bracket)]: Previous File in Playlist"); ImGui::BulletText("[] (R-Bracket)]: Next File in Playlist"); ImGui::BulletText("[Ctrl + O]     : Open File Dialog");
+            ImGui::Separator(); ImGui::Text("Display & UI:"); ImGui::BulletText("[F] or [F11]   : Toggle Fullscreen"); ImGui::BulletText("[Z]            : Toggle Zoom (Native Pixels / Fit to Window)"); ImGui::BulletText("[M]            : Toggle Metrics Overlay"); ImGui::BulletText("[H] or [F1]    : Toggle This Help Page"); ImGui::BulletText("[Tab]          : Toggle Main UI Controls"); ImGui::BulletText("[Esc]          : Exit Fullscreen / Close Popups / Quit");
+            ImGui::Separator(); ImGui::Text("Application:"); ImGui::BulletText("[Ctrl + Q]     : Quit Application");
         }
         ImGui::End();
         if (!help_open_flag && ui.showHelpPage) { appInstance->toggleHelpPage(); }
