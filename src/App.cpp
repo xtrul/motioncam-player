@@ -1645,7 +1645,6 @@ void App::handleMouseButton(int button, int action, int mods) {
                     if (!m_playbackController->isZoomNativePixels()) {
                         m_rendererVk->resetPanOffsets();
                         if (m_isPanning) m_isPanning = false;
-                    }
                 }
             }
         }
@@ -1664,7 +1663,6 @@ void App::handleMouseButton(int button, int action, int mods) {
             if (m_isPanning) { m_isPanning = false; }
         }
     }
-}
 }
 
 void App::sendCurrentFileToMotionCamFuse() {
