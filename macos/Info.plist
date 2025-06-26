@@ -38,7 +38,48 @@
         <string>MotionCam Player needs access to your Downloads to open .mcraw files.</string>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+        <key>CFBundleDevelopmentRegion</key>
+        <string>en</string>
+        <key>UTExportedTypeDeclarations</key>
+        <array>
+            <dict>
+                <key>UTTypeIdentifier</key>
+                <string>com.motioncam.mcraw</string>
+                <key>UTTypeDescription</key>
+                <string>MotionCam RAW File</string>
+                <key>UTTypeConformsTo</key>
+                <array>
+                    <string>public.data</string>
+                </array>
+                <key>UTTypeTagSpecification</key>
+                <dict>
+                    <key>public.filename-extension</key>
+                    <string>mcraw</string>
+                    <key>public.mime-type</key>
+                    <string>application/octet-stream</string>
+                </dict>
+            </dict>
+        </array>
+        <key>CFBundleDocumentTypes</key>
+        <array>
+            <dict>
+                <key>CFBundleTypeName</key>
+                <string>MotionCam RAW File</string>
+                <key>CFBundleTypeRole</key>
+                <string>Viewer</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                    <string>com.motioncam.mcraw</string>
+                </array>
+                <key>CFBundleTypeExtensions</key>
+                <array>
+                    <string>mcraw</string>
+                </array>
+                <key>LSHandlerRank</key>
+                <string>Owner</string>
+                <key>CFBundleTypeIconFile</key>
+                <string>mcraw_player.icns</string>
+            </dict>
+        </array>
 </dict>
 </plist>
