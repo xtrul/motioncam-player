@@ -114,6 +114,9 @@ public:
     bool m_firstFileLoaded;
     bool m_isFullscreen;
 
+    std::string m_lastWindowTitle;
+    std::chrono::steady_clock::time_point m_lastTitleUpdate;
+
     void handleKey(int key, int mods);
     void handleDrop(int count, const char** paths);
     void loadFileAtIndex(int index);
