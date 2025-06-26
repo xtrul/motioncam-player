@@ -102,3 +102,8 @@ This is a Qt 6 + OpenGL C++17 application called **MotionCam Player**, focused f
 - Looking clean and usable as a standalone tool
 
 Everything else is postponed until the core is polished.
+
+## Utilities
+
+See [tools/README.md](tools/README.md) for a command-line program to generate PNG thumbnails from `.mcraw` files.
+
