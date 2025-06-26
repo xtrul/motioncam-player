@@ -40,5 +40,24 @@
 	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>MotionCam RAW File</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.motioncam.mcraw</string>
+            </array>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>mcraw</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
