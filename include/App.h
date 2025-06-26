@@ -17,6 +17,8 @@
 #include <sstream>
 #include <iomanip>
 #include <filesystem>
+#include <thread>
+#include <atomic>
 
 // 2. Third-party library preprocessor definitions that might affect other headers
 #define GLFW_INCLUDE_VULKAN
@@ -38,6 +40,7 @@ class App; // Forward declare App for GuiOverlay
 
 #include "GuiOverlay.h"
 #include "DebugLog.h"
+#include "ThumbnailGenerator.h"
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -128,6 +131,7 @@ public:
     void handleCursorPos(double xpos, double ypos);
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
+    void previewThumbnailForIndex(int index);
     void sendCurrentFileToMotionCamFuse();
 
     static void framebuffer_size_callback_static(GLFWwindow* window, int w, int h);
@@ -186,6 +190,10 @@ private:
         VkDebugUtilsMessageTypeFlagsEXT messageType,
         const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
         void* pUserData);
+
+    // Thumbnail generation
+    std::thread m_thumbThread;
+    std::atomic<bool> m_stopThumbThread{false};
 };
 
 #endif // APP_H
