@@ -7,11 +7,11 @@
 	<key>CFBundleIconFile</key>
 	<string>icon.icns</string> <!-- Make sure you have an icon.icns -->
 	<key>CFBundleIdentifier</key>
-        <string>com.motioncam.player</string>
+	<string>com.yourcompany.${PRODUCT_NAME}</string> <!-- Change this -->
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-        <string>MotionCam Player</string>
+	<string>${PRODUCT_NAME}</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

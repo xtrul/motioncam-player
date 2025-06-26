@@ -41,8 +41,6 @@ public:
     void setZoomNativePixels(bool nativePixels);
     void setPanOffsets(float x, float y);
     void resetPanOffsets();
-    void setRotation(int r);
-    int  getRotation() const;
     float getPanX() const;
     float getPanY() const;
     int getImageWidth() const;
@@ -63,7 +61,6 @@ private:
         alignas(4) float gainB;
         alignas(16) glm::mat4 CCM;
         alignas(4) float saturationAdjustment;
-        alignas(4) int rotation;
     };
 
     VkPhysicalDevice m_physicalDevice;
@@ -97,7 +94,6 @@ private:
     bool m_zoomNativePixels;
     float m_panX;
     float m_panY;
-    int   m_rotation;
     uint32_t m_swapChainImageCount;
 
     bool createRawImageResources(int width, int height);
