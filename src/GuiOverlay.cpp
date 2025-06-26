@@ -316,7 +316,25 @@ void GuiOverlay::render(App* appInstance) {
         if (ImGui::Begin("Playlist", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings )) {
             current_playlist_window_width = ImGui::GetWindowSize().x; playlist_window_is_visible = true;
             if (appInstance->m_fileList.empty()) ImGui::TextDisabled(" (empty)");
-            else { for (int i = 0; i < static_cast<int>(appInstance->m_fileList.size()); ++i) { const std::string& filePath = appInstance->m_fileList[i]; std::string filename_to_display = fs::path(filePath).stem().string(); bool is_selected = (appInstance->m_currentFileIndex == i); char entry_buf[512]; snprintf(entry_buf, sizeof(entry_buf), "%2d. %s ", i+1, filename_to_display.c_str()); if (is_selected) ImGui::PushStyleColor(ImGuiCol_Header, style.Colors[ImGuiCol_HeaderActive]); if (ImGui::Selectable(entry_buf, is_selected, ImGuiSelectableFlags_SpanAllColumns)) { if (!is_selected) { appInstance->m_firstFileLoaded = false; appInstance->loadFileAtIndex(i); appInstance->m_firstFileLoaded = true; } } if (is_selected) ImGui::PopStyleColor(); } }
+            else {
+                for (int i = 0; i < static_cast<int>(appInstance->m_fileList.size()); ++i) {
+                    const std::string& filePath = appInstance->m_fileList[i];
+                    std::string filename_to_display = fs::path(filePath).stem().string();
+                    bool is_selected = (appInstance->m_currentFileIndex == i);
+                    char entry_buf[512];
+                    snprintf(entry_buf, sizeof(entry_buf), "%2d. %s ", i+1, filename_to_display.c_str());
+                    if (is_selected) ImGui::PushStyleColor(ImGuiCol_Header, style.Colors[ImGuiCol_HeaderActive]);
+                    if (ImGui::Selectable(entry_buf, is_selected, ImGuiSelectableFlags_SpanAllColumns)) {
+                        if (!is_selected) { appInstance->m_firstFileLoaded = false; appInstance->loadFileAtIndex(i); appInstance->m_firstFileLoaded = true; }
+                    }
+                    ImGui::SameLine(current_playlist_window_width - 30);
+                    char btn_id[32]; snprintf(btn_id, sizeof(btn_id), "P##%d", i);
+                    if (ImGui::SmallButton(btn_id)) {
+                        appInstance->previewThumbnailForIndex(i);
+                    }
+                    if (is_selected) ImGui::PopStyleColor();
+                }
+            }
         }
         ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(2);
     }
