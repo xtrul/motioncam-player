@@ -1,4 +1,3 @@
-// --- START OF FILE motioncam/Decoder.hpp ---
 #pragma once
 
 #include <motioncam/Container.hpp>
@@ -129,4 +128,3 @@ namespace motioncam {
         std::unique_ptr<AudioChunkLoader> mAudioLoader;
     };
 } // namespace motioncam
-// --- END OF FILE motioncam/Decoder.hpp ---
