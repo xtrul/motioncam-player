@@ -426,3 +426,7 @@ message(STATUS "RPATH for executable ${PROJECT_NAME} should include @executable_
 message(STATUS "MoltenVK_icd.json will be copied and patched for bundle.")
 message(STATUS "Bundled dylibs will be named to match linker expectations (e.g., libvulkan.1.dylib).")
 message(STATUS "---------------------------------------------------------------------")
+
+if(APPLE)
+  add_subdirectory(quicklook)
+endif()
