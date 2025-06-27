@@ -31,7 +31,6 @@
 #include "App/AppConfig.h"
 #include "App/AppState.h"
 #include "Playback/PlaybackController.h" // Included for PlaybackController::PlaybackMode
-#include "Utils/OrientationUtils.h"
 
 class AudioController;
 class DecoderWrapper;
@@ -189,8 +188,6 @@ private:
     double m_staticBlack = 0.0;
     double m_staticWhite = 65535.0;
     bool m_dumpMetadata = false;
-    OrientationTag m_containerOrientationTag = OrientationTag::kNormal;
-    bool m_containerFlipped = false;
 
     std::chrono::steady_clock::time_point m_playbackStartTime;
     std::chrono::steady_clock::time_point m_pauseBegan;

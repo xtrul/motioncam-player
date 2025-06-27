@@ -6,7 +6,6 @@
 #include "Graphics/Renderer_VK.h"
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
-#include "Utils/OrientationUtils.h"
 #include <motioncam/Decoder.hpp>
 #include <motioncam/RawData.hpp>
 
@@ -430,14 +429,6 @@ void App::loadFileAtIndex(int index) {
     m_staticWhite = containerMetaForFile.value("whiteLevel", 65535.0);
     m_cfaStringFromMetadata = containerMetaForFile.value("sensorArrangment", containerMetaForFile.value("sensorArrangement", "BGGR"));
     m_cfaTypeFromMetadata = Renderer_VK::getCfaType(m_cfaStringFromMetadata);
-    m_containerFlipped = containerMetaForFile.value("flipped", false);
-    m_containerOrientationTag = computeOrientationTag(
-        containerMetaForFile.value("orientation", nlohmann::json()),
-        m_containerFlipped,
-        OrientationTag::kNormal);
-    LogToFile(std::string("[App::loadFileAtIndex] Container orientation deg: ") +
-        std::to_string(orientationDegreesFromTag(m_containerOrientationTag)) +
-        ", flipped: " + (m_containerFlipped ? "true" : "false"));
     LogToFile(std::string("[App::loadFileAtIndex] Metadata parsed: Black=") + std::to_string(m_staticBlack) + ", White=" + std::to_string(m_staticWhite) + ", CFA=" + m_cfaStringFromMetadata + " (type " + std::to_string(m_cfaTypeFromMetadata) + ")");
 
     if (!m_firstFileLoaded && !m_isFullscreen && m_window) {
