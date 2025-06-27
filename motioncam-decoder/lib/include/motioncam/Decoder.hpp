@@ -40,7 +40,6 @@ namespace motioncam {
 
     class AudioChunkLoader {
         public:
-            virtual ~AudioChunkLoader() = default;
             virtual bool next(AudioChunk& output) = 0;
     };
     
