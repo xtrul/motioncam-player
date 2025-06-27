@@ -389,7 +389,9 @@ void App::drawFrame() {
                 stagingBufferToUseForUpload,
                 packetToRender.width, packetToRender.height, packetToRender.metadata,
                 m_staticBlack, m_staticWhite, m_cfaOverride.value_or(m_cfaTypeFromMetadata),
-                needsFreshUploadFromStaging
+                needsFreshUploadFromStaging,
+                m_containerOrientationTag,
+                m_containerFlipped
             );
             clearColorValue.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
         }
