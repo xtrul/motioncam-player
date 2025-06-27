@@ -1,4 +1,3 @@
-// --- START OF FILE motioncam/Decoder.cpp ---
 #include <motioncam/Decoder.hpp>
 #include <motioncam/RawData.hpp>
 
@@ -515,4 +514,3 @@ namespace motioncam {
     }
 
 } // namespace motioncam
-// --- END OF FILE motioncam/Decoder.cpp ---
