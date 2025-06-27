@@ -24,7 +24,6 @@
 #include "PlaybackController.h"
 #include "Renderer_VK.h"
 #include "DebugLog.h"
-#include "ThumbnailGenerator.h"
 // GuiOverlay.h is included via App.h
 #include <imgui_impl_vulkan.h> // For ImGui_ImplVulkan_Shutdown
 
@@ -319,25 +318,11 @@ App::App(const std::string& filePath) : m_filePath(filePath) {
     m_currentFileIndex = static_cast<int>(std::distance(m_fileList.begin(), it));
     LogToFile(std::string("[App::App] Constructor finished. Current file index: ") + std::to_string(m_currentFileIndex));
     std::cout << "[App::App] Constructor finished. Current file index: " << m_currentFileIndex << std::endl;
-
-    m_stopThumbThread = false;
-    m_thumbThread = std::thread([this]() {
-        for (const auto& f : m_fileList) {
-            if (m_stopThumbThread) break;
-            fs::path png = fs::path(f).replace_extension(".png");
-            if (!fs::exists(png)) {
-                generateThumbnail(f, png.string());
-            }
-        }
-    });
 }
 
 App::~App() {
     LogToFile("[App::~App] Destructor called.");
     std::cout << "[App::~App] Destructor called." << std::endl;
-
-    m_stopThumbThread = true;
-    if (m_thumbThread.joinable()) m_thumbThread.join();
     cleanupVulkan();
 
     if (m_audio) { LogToFile("[App::~App] Shutting down audio."); std::cout << "[App::~App] Shutting down audio." << std::endl; m_audio->shutdown(); } m_audio.reset();
@@ -1903,20 +1888,4 @@ void App::sendCurrentFileToMotionCamFuse() {
 #else
     std::cerr << "MotionCam Fuse integration is only available on macOS." << std::endl;
 #endif
-}
-
-void App::previewThumbnailForIndex(int index) {
-    if (index < 0 || static_cast<size_t>(index) >= m_fileList.size()) return;
-    fs::path png = fs::path(m_fileList[index]).replace_extension(".png");
-    if (!fs::exists(png)) {
-        generateThumbnail(m_fileList[index], png.string());
-    }
-#ifdef _WIN32
-    std::string cmd = std::string("start \"\" \"") + png.string() + "\"";
-#elif defined(__APPLE__)
-    std::string cmd = std::string("open \"") + png.string() + "\"";
-#else
-    std::string cmd = std::string("xdg-open \"") + png.string() + "\"";
-#endif
-    std::system(cmd.c_str());
 }
