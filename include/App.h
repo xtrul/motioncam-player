@@ -96,6 +96,7 @@ public:
     int m_containerOrientationTag;
     bool m_dumpMetadata;
     std::vector<std::string> m_fileList;
+    std::vector<uint64_t> m_fileThumbIDs; // GPU textures for playlist previews
     int m_currentFileIndex;
     std::string m_filePath;
     std::chrono::steady_clock::time_point m_playbackStartTime;
