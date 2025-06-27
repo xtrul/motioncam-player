@@ -31,7 +31,6 @@ find_package(Vulkan REQUIRED)
 if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
-find_package(Threads REQUIRED)
 message(STATUS "Found Vulkan SDK:")
 message(STATUS "  Libraries:    ${Vulkan_LIBRARIES}")
 message(STATUS "  Include Dirs: ${Vulkan_INCLUDE_DIRS}")
@@ -148,7 +147,6 @@ set(APP_SOURCES
   src/Playback/PlaybackController.cpp
 
   src/Utils/DebugLog.cpp
-  src/Utils/OrientationUtils.cpp
 
   src/main.cpp
 )
