@@ -4,10 +4,7 @@ project(MotionCam_Player VERSION 0.5 LANGUAGES C CXX)
 
 # --- Universal macOS binary (Apple Silicon + Intel) ---
 set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "" FORCE)
-# Quick Look preview extensions require macOS 11 or newer for
-# the QLPreviewProvider API. Bump the minimum macOS version so
-# the headers are available when building the extension.
-set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "" FORCE)
+set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "" FORCE)
 
 # --- Use custom-built universal dependencies from FATPREFIX ---
 if(DEFINED ENV{FATPREFIX})
@@ -429,7 +426,3 @@ message(STATUS "RPATH for executable ${PROJECT_NAME} should include @executable_
 message(STATUS "MoltenVK_icd.json will be copied and patched for bundle.")
 message(STATUS "Bundled dylibs will be named to match linker expectations (e.g., libvulkan.1.dylib).")
 message(STATUS "---------------------------------------------------------------------")
-
-if(APPLE)
-  add_subdirectory(quicklook)
-endif()
