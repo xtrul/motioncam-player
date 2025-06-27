@@ -147,7 +147,6 @@ set(APP_SOURCES
   src/Playback/PlaybackController.cpp
 
   src/Utils/DebugLog.cpp
-  src/Utils/OrientationUtils.cpp
 
   src/main.cpp
 )

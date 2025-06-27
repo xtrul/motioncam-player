@@ -21,7 +21,6 @@
 #include "Graphics/ImageResource.h" // ADD THIS LINE
 #include "Graphics/Pipeline.h"      // ADD THIS LINE
 #include "Graphics/Descriptor.h"    // ADD THIS LINE
-#include "Utils/OrientationUtils.h"
 // For VK_CHECK_RENDERER, if used, and helper function declarations
 // Other headers like ImageResource.h, Pipeline.h, Descriptor.h are not directly included here
 // as their functions are called from Renderer_VK.cpp via namespaces.
@@ -50,9 +49,7 @@ public:
         int frameWidth, int frameHeight,
         const nlohmann::json& frameMetadata,
         double staticBlack, double staticWhite, int cfaTypeOverride,
-        bool forceUpload,
-        OrientationTag defaultOrientation,
-        bool containerFlipped
+        bool forceUpload
     );
 
     void recordDrawCommands(
@@ -112,13 +109,11 @@ private:
         alignas(4) float gainB;
         alignas(16) glm::mat4 CCM;
         alignas(4) float saturationAdjustment;
-        alignas(4) int orientationDegrees;
     };
 
     // Internal state not directly manipulated by namespaced helpers
     int m_currentRawW = 0;
     int m_currentRawH = 0;
-    int m_currentOrientationDegrees = 0;
     bool m_zoomNativePixels = false;
     float m_panX = 0.0f;
     float m_panY = 0.0f;
