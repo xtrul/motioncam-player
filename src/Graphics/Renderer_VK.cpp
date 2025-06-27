@@ -8,7 +8,6 @@
 #include "Graphics/VulkanHelpers.h"
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
-#include "Utils/OrientationUtils.h"
 
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -105,9 +104,7 @@ void Renderer_VK::prepareAndUploadFrameData(
     int frameWidth, int frameHeight,
     const nlohmann::json& frameMetadata,
     double staticBlack, double staticWhite, int cfaTypeOverride,
-    bool forceUpload,
-    OrientationTag defaultOrientation,
-    bool containerFlipped
+    bool forceUpload
 ) {
     if (frameWidth <= 0 || frameHeight <= 0) {
         LogToFile(std::string("[Renderer_VK::prepareAndUploadFrameData] Invalid dimensions ") + std::to_string(frameWidth) + "x" + std::to_string(frameHeight) + ". Skipping upload.");
@@ -249,16 +246,6 @@ void Renderer_VK::prepareAndUploadFrameData(
     }
     ubo.CCM = glm::mat4(ccm3x3_glm);
     ubo.saturationAdjustment = 1.50f;
-    nlohmann::json frameOrientVal = findOrientationValue(frameMetadata);
-    OrientationTag tag = computeOrientationTag(
-        frameOrientVal,
-        frameMetadata.value("flipped", containerFlipped),
-        defaultOrientation);
-    LogToFile(std::string("[Renderer_VK::prepareAndUploadFrameData] Raw frame orientation value: ") +
-        (frameOrientVal.is_null() ? "null" : frameOrientVal.dump()));
-    ubo.orientationDegrees = orientationDegreesFromTag(tag);
-    m_currentOrientationDegrees = ubo.orientationDegrees;
-    LogToFile(std::string("[Renderer_VK::prepareAndUploadFrameData] Orientation degrees: ") + std::to_string(ubo.orientationDegrees));
 
     updateUniformBuffer(uboBindingIndex, ubo);
 }
@@ -282,18 +269,12 @@ void Renderer_VK::recordDrawCommands(
     }
     else if (m_zoomNativePixels) {
         viewport.x = m_panX; viewport.y = m_panY;
-        float w = (float)m_currentRawW;
-        float h = (float)m_currentRawH;
-        if (m_currentOrientationDegrees == 90 || m_currentOrientationDegrees == 270) {
-            std::swap(w, h);
-        }
-        viewport.width = w; viewport.height = h;
+        viewport.width = (float)m_currentRawW; viewport.height = (float)m_currentRawH;
         viewport.minDepth = 0.0f; viewport.maxDepth = 1.0f;
         scissor.offset = { 0, 0 }; scissor.extent = { (uint32_t)windowWidth, (uint32_t)windowHeight };
     }
     else {
-        float imgAspect = (m_currentOrientationDegrees == 90 || m_currentOrientationDegrees == 270) ?
-            (float)m_currentRawH / (float)m_currentRawW : (float)m_currentRawW / (float)m_currentRawH;
+        float imgAspect = (float)m_currentRawW / (float)m_currentRawH;
         float winAspect = (float)windowWidth / (float)windowHeight;
         float vpWidth, vpHeight, vpX, vpY;
         if (imgAspect > winAspect) {
@@ -347,7 +328,6 @@ void Renderer_VK::resetDimensions() {
     LogToFile("[Renderer_VK::resetDimensions] Resetting current raw dimensions to 0x0.");
     m_currentRawW = 0;
     m_currentRawH = 0;
-    m_currentOrientationDegrees = 0;
 }
 
 void Renderer_VK::ensureRawImageCapacity(uint32_t w, uint32_t h)
