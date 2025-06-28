@@ -390,10 +390,9 @@ void App::handleDrop(int count, const char** paths) {
     if (!firstValidPathDropped.empty()) {
         auto it = std::find(m_fileList.begin(), m_fileList.end(), firstValidPathDropped);
         if (it != m_fileList.end()) {
-            bool tempFirstLoaded = m_firstFileLoaded;
             m_firstFileLoaded = false;
             loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it)));
-            m_firstFileLoaded = tempFirstLoaded;
+            m_firstFileLoaded = true;
             LogToFile(std::string("[App::handleDrop] Loaded dropped file: ") + firstValidPathDropped);
         }
     }
@@ -473,10 +472,15 @@ void App::triggerOpenFileViaDialog() {
             it_existing = std::find(m_fileList.begin(), m_fileList.end(), newPath);
         }
         if (it_existing != m_fileList.end()) {
-            bool tempFirstLoaded = m_firstFileLoaded;
-            m_firstFileLoaded = false;
-            loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
-            m_firstFileLoaded = tempFirstLoaded;
+            if (m_firstFileLoaded) {
+                bool tempFirstLoaded = m_firstFileLoaded;
+                m_firstFileLoaded = true;
+                loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
+                m_firstFileLoaded = tempFirstLoaded;
+            } else {
+                loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
+                m_firstFileLoaded = true;
+            }
         }
     }
 }
