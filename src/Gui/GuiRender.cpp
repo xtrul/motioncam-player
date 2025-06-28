@@ -206,10 +206,10 @@ namespace GuiOverlay {
                 if (appInstance) appInstance->softDeleteCurrentFile();
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Send Current to motioncam-fs", nullptr, false, canOperateOnCurrentFile)) {
+            if (ImGui::MenuItem("Send Current to MotionCam Fuse", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->sendCurrentFileToMotionCamFS();
             }
-            if (ImGui::MenuItem("Send All in Playlist to motioncam-fs", nullptr, false, playlistNotEmpty)) {
+            if (ImGui::MenuItem("Send All in Playlist to MotionCam Fuse", nullptr, false, playlistNotEmpty)) {
                 if (appInstance) appInstance->sendAllPlaylistFilesToMotionCamFS();
             }
             ImGui::EndPopup();
@@ -231,7 +231,7 @@ namespace GuiOverlay {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.09f, 0.95f));
 
-            if (ImGui::Begin("PLAYLIST_AUX_TOGGLED", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+            if (ImGui::Begin("Playlist", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
                 current_playlist_window_width = ImGui::GetWindowSize().x;
                 playlist_window_is_visible = true;
                 if (appInstance->m_fileList.empty()) {
