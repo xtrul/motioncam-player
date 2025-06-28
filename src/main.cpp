@@ -254,20 +254,7 @@ int main(int argc, char* argv[]) {
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
         fprintf(stderr, "[main] Input file from command line: %s\n", inPath.c_str()); fflush(stderr);
     }
-    if (inPath.empty()) {
-        LogToFile("[main] No input argument or open event, opening file dialog...");
-        fprintf(stderr, "[main] No input argument or open event, opening file dialog...\n"); fflush(stderr);
-        inPath = OpenMcrawDialog();
-        if (inPath.empty()) {
-            LogToFile("[main] No input file selected or dialog cancelled. Exiting.");
-            fprintf(stderr, "[main] No input file selected or dialog cancelled. Exiting.\n"); fflush(stderr);
-            return 0;
-        }
-        LogToFile(std::string("[main] Input file from dialog: ") + inPath);
-        fprintf(stderr, "[main] Input file from dialog: %s\n", inPath.c_str()); fflush(stderr);
-    }
-
-    if (!fs::exists(inPath) || !fs::is_regular_file(inPath)) {
+    if (!inPath.empty() && (!fs::exists(inPath) || !fs::is_regular_file(inPath))) {
         std::string errorMsg = "[main] Input file not found: " + inPath;
         LogToFile(errorMsg); fprintf(stderr, "%s\n", errorMsg.c_str()); fflush(stderr);
 #ifdef _WIN32
@@ -275,7 +262,7 @@ int main(int argc, char* argv[]) {
 #endif
         return 1;
     }
-    if (fs::path(inPath).extension() != ".mcraw") {
+    if (!inPath.empty() && fs::path(inPath).extension() != ".mcraw") {
         std::string errorMsg = "[main] Input must have .mcraw extension: " + inPath;
         LogToFile(errorMsg); fprintf(stderr, "%s\n", errorMsg.c_str()); fflush(stderr);
 #ifdef _WIN32
@@ -285,7 +272,7 @@ int main(int argc, char* argv[]) {
     }
 
     LogToFile(std::string("[main] Initializing App with file: ") + inPath);
-    fprintf(stderr, "[main] Initializing App with file: %s\n", inPath.c_str()); fflush(stderr);
+    if(!inPath.empty()) fprintf(stderr, "[main] Initializing App with file: %s\n", inPath.c_str());
     try {
         App app(inPath);
         LogToFile("[main] App object created. Calling app.run()...");
