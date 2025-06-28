@@ -306,6 +306,26 @@ void GuiOverlay::render(App* appInstance) {
     bool playlist_window_is_visible = false;
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
+    if (!appInstance->m_firstFileLoaded) {
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                                       viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
+                               ImGuiCond_Always, ImVec2(0.5f,0.5f));
+        ImGui::SetNextWindowBgAlpha(0.0f);
+        if (ImGui::Begin("StartupScreen", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f,1.0f,1.0f,1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(60/255.0f,60/255.0f,60/255.0f,1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(80/255.0f,80/255.0f,80/255.0f,1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(80/255.0f,80/255.0f,80/255.0f,1.0f));
+            if (ImGui::Button("Open or drag a MCRAW file")) {
+                appInstance->triggerOpenFileViaDialog();
+            }
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar();
+        }
+        ImGui::End();
+        return;
+    }
 
     if (GuiOverlay::show_playlist_aux) {
         const float initial_playlist_width = 320.0f * io.FontGlobalScale; float default_playlist_height = viewport->WorkSize.y * 0.80f;
