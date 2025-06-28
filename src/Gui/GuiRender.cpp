@@ -231,7 +231,7 @@ namespace GuiOverlay {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.09f, 0.95f));
 
-            if (ImGui::Begin("Playlist", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+            if (ImGui::Begin("PLAYLIST_AUX_TOGGLED", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
                 current_playlist_window_width = ImGui::GetWindowSize().x;
                 playlist_window_is_visible = true;
                 if (appInstance->m_fileList.empty()) {

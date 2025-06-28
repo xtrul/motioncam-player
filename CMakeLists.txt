@@ -229,10 +229,7 @@ elseif(MSVC)
 endif()
 
 
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    OUTPUT_NAME "MotionCam Player"
-)
+set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -258,7 +255,7 @@ endif()
 
 message(STATUS "---------------------------------------------------------------------")
 message(STATUS "Final Configuration Summary:")
-message(STATUS "  Target Executable: MotionCam Player")
+message(STATUS "  Target Executable: ${PROJECT_NAME}")
 message(STATUS "  Output Directory:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}")
-message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/MotionCam Player${CMAKE_EXECUTABLE_SUFFIX}")
+message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/${PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}")
 message(STATUS "---------------------------------------------------------------------")
