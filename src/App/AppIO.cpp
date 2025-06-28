@@ -1007,7 +1007,7 @@ void App::sendCurrentFileToMotionCamFS()
         static_cast<size_t>(m_currentFileIndex) >= m_fileList.size())
     {
         LogToFile("[App::sendToMotionCamFS] No valid file to send.");
-        std::cerr << "Send to motioncam-fs: no valid file selected.\n";
+        std::cerr << "Send to MotionCam Fuse: no valid file selected.\n";
         return;
     }
 
@@ -1021,18 +1021,18 @@ void App::sendCurrentFileToMotionCamFS()
     GetModuleFileNameA(nullptr, modulePathChars, MAX_PATH);
     fs::path currentExePath(modulePathChars);
     motionCamFsExePath =
-        (currentExePath.parent_path() / "motioncam-fs.exe").string();
+        (currentExePath.parent_path() / "MotionCam Fuse.exe").string();
 #else
     char result[PATH_MAX];
     ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
     fs::path currentExePath = (count > 0) ? fs::path(std::string(result, count)) : fs::path("");
 
-    fs::path рядом_exe = currentExePath.parent_path() / "motioncam-fs";
-    if (fs::exists(рядом_exe)) {
-        motionCamFsExePath = рядом_exe.string();
+    fs::path nearby_exe = currentExePath.parent_path() / "MotionCam Fuse";
+    if (fs::exists(nearby_exe)) {
+        motionCamFsExePath = nearby_exe.string();
     }
     else {
-        motionCamFsExePath = "motioncam-fs"; // Try PATH
+        motionCamFsExePath = "MotionCam Fuse"; // Try PATH
     }
 #endif
 
@@ -1040,14 +1040,13 @@ void App::sendCurrentFileToMotionCamFS()
 #ifndef _WIN32
     // If not found via relative path, try checking if it's in PATH
     if (!motionCamFsFound && motionCamFsExePath.find('/') == std::string::npos) {
-        motionCamFsFound = (system(("command -v " + motionCamFsExePath + " >/dev/null 2>&1").c_str()) == 0);
+        motionCamFsFound = (system(("command -v \"" + motionCamFsExePath + "\" >/dev/null 2>&1").c_str()) == 0);
     }
 #endif
 
     if (!motionCamFsFound)
     {
-        LogToFile(std::string("[App::sendToMotionCamFS] ERROR: motioncam-fs not "
-            "found at expected location or in system PATH. Tried: ") + motionCamFsExePath);
+        LogToFile(std::string("[App::sendToMotionCamFS] ERROR: MotionCam Fuse not found at expected location or in system PATH. Tried: ") + motionCamFsExePath);
         return;
     }
 
@@ -1093,18 +1092,18 @@ void App::sendAllPlaylistFilesToMotionCamFS()
     GetModuleFileNameA(nullptr, modulePathChars, MAX_PATH);
     fs::path exeDir(modulePathChars);
     motionCamFsExePath =
-        (exeDir.parent_path() / "motioncam-fs.exe").string();
+        (exeDir.parent_path() / "MotionCam Fuse.exe").string();
 #else
     char result[PATH_MAX];
     ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
     fs::path currentExePath = (count > 0) ? fs::path(std::string(result, count)) : fs::path("");
 
-    fs::path рядом_exe = currentExePath.parent_path() / "motioncam-fs";
-    if (fs::exists(рядом_exe)) {
-        motionCamFsExePath = рядом_exe.string();
+    fs::path nearby_exe = currentExePath.parent_path() / "MotionCam Fuse";
+    if (fs::exists(nearby_exe)) {
+        motionCamFsExePath = nearby_exe.string();
     }
     else {
-        motionCamFsExePath = "motioncam-fs"; // Try PATH
+        motionCamFsExePath = "MotionCam Fuse"; // Try PATH
     }
 #endif
 
@@ -1112,14 +1111,13 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 #ifndef _WIN32
     // If not found via relative path, try checking if it's in PATH
     if (!motionCamFsFound && motionCamFsExePath.find('/') == std::string::npos) {
-        motionCamFsFound = (system(("command -v " + motionCamFsExePath + " >/dev/null 2>&1").c_str()) == 0);
+        motionCamFsFound = (system(("command -v \"" + motionCamFsExePath + "\" >/dev/null 2>&1").c_str()) == 0);
     }
 #endif
 
     if (!motionCamFsFound)
     {
-        LogToFile(std::string("[App::sendAllToMotionCamFS] ERROR: motioncam-fs "
-            "not found at expected location or in system PATH. Tried: ") + motionCamFsExePath);
+        LogToFile(std::string("[App::sendAllToMotionCamFS] ERROR: MotionCam Fuse not found at expected location or in system PATH. Tried: ") + motionCamFsExePath);
         return;
     }
 
@@ -1159,7 +1157,7 @@ void App::sendAllPlaylistFilesToMotionCamFS()
         if (system((command + " &").c_str()) == 0) ++ok;
         else { ++fail; LogToFile("[App::sendAllToMotionCamFS] system() call failed for: " + mcrawPathStr); }
 #endif
-        // Optional: Small delay to avoid overwhelming system or motioncam-fs if it's not handling rapid launches well
+        // Optional: Small delay to avoid overwhelming system or MotionCam Fuse if it's not handling rapid launches well
         // std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
