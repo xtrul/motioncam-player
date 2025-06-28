@@ -45,17 +45,30 @@ add_subdirectory(${GLM_SOURCE_DIR} ${CMAKE_BINARY_DIR}/glm_build EXCLUDE_FROM_AL
 message(STATUS "Configured GLM from: ${GLM_SOURCE_DIR}")
 
 set(GLFW_PATH "${APP_EXTERNAL_DIR}/glfw" CACHE PATH "Path to GLFW pre-built libraries and headers")
-if(NOT EXISTS "${GLFW_PATH}/include/GLFW/glfw3.h")
-    message(FATAL_ERROR "GLFW headers not found at ${GLFW_PATH}/include. Check GLFW_PATH.")
+if(NOT ANDROID)
+    if(NOT EXISTS "${GLFW_PATH}/include/GLFW/glfw3.h")
+        message(FATAL_ERROR "GLFW headers not found at ${GLFW_PATH}/include. Check GLFW_PATH.")
+    endif()
+    set(glfw3_DIR "${APP_CMAKE_DIR}" CACHE INTERNAL "Path to custom glfw3Config.cmake")
+    message(STATUS "Using pre-built GLFW from: ${GLFW_PATH}")
 endif()
-set(glfw3_DIR "${APP_CMAKE_DIR}" CACHE INTERNAL "Path to custom glfw3Config.cmake")
-message(STATUS "Using pre-built GLFW from: ${GLFW_PATH}")
 
 set(SDL2_PATH "${APP_EXTERNAL_DIR}/SDL2" CACHE PATH "Path to SDL2 development libraries")
 if(NOT EXISTS "${SDL2_PATH}/include/SDL.h")
     message(FATAL_ERROR "SDL2 headers not found at ${SDL2_PATH}/include. Check SDL2_PATH.")
 endif()
 message(STATUS "Using pre-built SDL2 from: ${SDL2_PATH}")
+
+if(ANDROID)
+    set(APP_PLATFORM android-21)
+    add_definitions(-D__ANDROID__)
+    set(GLFW_LIB_PATH_VC_SPECIFIC "")
+    add_library(SDL2 SHARED IMPORTED)
+    set_target_properties(SDL2 PROPERTIES
+        IMPORTED_LOCATION "${SDL2_PATH}/lib/${ANDROID_ABI}/libSDL2.so"
+        INTERFACE_INCLUDE_DIRECTORIES "${SDL2_PATH}/include")
+    message(STATUS "Android build: linking against prebuilt SDL2 for ${ANDROID_ABI}")
+endif()
 
 set(VMA_INCLUDE_DIR "${APP_EXTERNAL_DIR}/vma")
 if(NOT EXISTS "${VMA_INCLUDE_DIR}/vk_mem_alloc.h")
@@ -156,9 +169,13 @@ set(APP_SOURCES
 list(APPEND APP_SOURCES "${IMGUI_SOURCE_DIR}/backends/imgui_impl_glfw.cpp")
 list(APPEND APP_SOURCES "${IMGUI_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp")
 
-message(STATUS "Application sources for executable: ${APP_SOURCES}")
+message(STATUS "Application sources for target: ${APP_SOURCES}")
 
-add_executable(${PROJECT_NAME} WIN32 "")
+if(ANDROID)
+    add_library(${PROJECT_NAME} SHARED "")
+else()
+    add_executable(${PROJECT_NAME} WIN32 "")
+endif()
 target_sources(${PROJECT_NAME} PRIVATE ${APP_SOURCES})
 
 if(WIN32 AND EXISTS "${APP_ROOT_DIR}/icon.rc")
@@ -198,12 +215,14 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${APP_EXTERNAL_DIR}/tinydngwriter"
 )
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(SDL2_ARCH_SUFFIX "x64")
-else()
-    set(SDL2_ARCH_SUFFIX "x86")
+if(NOT ANDROID)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(SDL2_ARCH_SUFFIX "x64")
+    else()
+        set(SDL2_ARCH_SUFFIX "x86")
+    endif()
+    set(SDL2_LIBRARY_DIR "${SDL2_PATH}/lib/${SDL2_ARCH_SUFFIX}")
 endif()
-set(SDL2_LIBRARY_DIR "${SDL2_PATH}/lib/${SDL2_ARCH_SUFFIX}")
 
 set(GLFW_LIB_PATH_VC_SPECIFIC "${GLFW_PATH}/lib-vc2022/glfw3.lib")
 if(NOT EXISTS "${GLFW_LIB_PATH_VC_SPECIFIC}" AND WIN32 AND MSVC)
@@ -214,10 +233,15 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     motioncam_decoder
     imgui
     glm
-    "${GLFW_LIB_PATH_VC_SPECIFIC}"
-    "${SDL2_LIBRARY_DIR}/SDL2.lib"
+    $<IF:$<BOOL:${ANDROID}>,,"${GLFW_LIB_PATH_VC_SPECIFIC}">
     ${Vulkan_LIBRARIES}
 )
+
+if(ANDROID)
+    target_link_libraries(${PROJECT_NAME} PRIVATE SDL2 log android)
+else()
+    target_link_libraries(${PROJECT_NAME} PRIVATE "${SDL2_LIBRARY_DIR}/SDL2.lib")
+endif()
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)

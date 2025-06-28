@@ -1,3 +1,9 @@
 build/
 motioncam-player-codex.zip
 23_codex_vertical_fix.zip
+# Android Studio artifacts
+android/.gradle/
+android/.idea/
+android/local.properties
+android/app/build/
+android/build/
