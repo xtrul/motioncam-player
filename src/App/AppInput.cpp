@@ -33,7 +33,9 @@ void App::framebuffer_size_callback_static(GLFWwindow* window, int width, int he
 
 void App::key_callback_static(GLFWwindow* window, int key, int scancode, int action, int mods) {
     ImGuiIO& io = ImGui::GetIO();
-    if (io.WantCaptureKeyboard && key != GLFW_KEY_TAB) {
+    bool ctrlCombo = (mods & GLFW_MOD_CONTROL) &&
+                     (key == GLFW_KEY_O || key == GLFW_KEY_Q);
+    if (io.WantCaptureKeyboard && key != GLFW_KEY_TAB && !ctrlCombo) {
         return;
     }
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
@@ -360,6 +362,7 @@ void App::handleDrop(int count, const char** paths) {
     if (count <= 0) return;
     std::string firstValidPathDropped;
     bool newFilesAddedToPlaylist = false;
+    fs::path firstFolder;
 
     for (int i = 0; i < count; ++i) {
         if (paths[i] == nullptr) continue;
@@ -369,6 +372,7 @@ void App::handleDrop(int count, const char** paths) {
                 std::string s = p.string();
                 if (firstValidPathDropped.empty()) {
                     firstValidPathDropped = s;
+                    firstFolder = p.parent_path();
                 }
                 if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) {
                     m_fileList.push_back(s);
@@ -382,6 +386,22 @@ void App::handleDrop(int count, const char** paths) {
         }
     }
 
+    if (!firstFolder.empty()) {
+        try {
+            for (const auto& e : fs::directory_iterator(firstFolder)) {
+                if (e.is_regular_file() && e.path().extension() == ".mcraw") {
+                    std::string s = e.path().string();
+                    if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) {
+                        m_fileList.push_back(s);
+                        newFilesAddedToPlaylist = true;
+                    }
+                }
+            }
+        } catch (const fs::filesystem_error& e) {
+            LogToFile(std::string("[App::handleDrop] Directory scan error: ") + e.what());
+        }
+    }
+
     if (newFilesAddedToPlaylist) {
         std::sort(m_fileList.begin(), m_fileList.end());
         LogToFile("[App::handleDrop] New files added to playlist and sorted.");
@@ -390,10 +410,9 @@ void App::handleDrop(int count, const char** paths) {
     if (!firstValidPathDropped.empty()) {
         auto it = std::find(m_fileList.begin(), m_fileList.end(), firstValidPathDropped);
         if (it != m_fileList.end()) {
-            bool tempFirstLoaded = m_firstFileLoaded;
             m_firstFileLoaded = false;
             loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it)));
-            m_firstFileLoaded = tempFirstLoaded;
+            m_firstFileLoaded = true;
             LogToFile(std::string("[App::handleDrop] Loaded dropped file: ") + firstValidPathDropped);
         }
     }
@@ -466,17 +485,36 @@ std::string App::openMcrawDialog() {
 void App::triggerOpenFileViaDialog() {
     std::string newPath = openMcrawDialog();
     if (!newPath.empty()) {
-        auto it_existing = std::find(m_fileList.begin(), m_fileList.end(), newPath);
-        if (it_existing == m_fileList.end()) {
-            m_fileList.push_back(newPath);
-            std::sort(m_fileList.begin(), m_fileList.end());
-            it_existing = std::find(m_fileList.begin(), m_fileList.end(), newPath);
+        fs::path target = fs::absolute(newPath);
+        fs::path folder = target.parent_path();
+        bool added = false;
+        try {
+            for (const auto& e : fs::directory_iterator(folder)) {
+                if (e.is_regular_file() && e.path().extension() == ".mcraw") {
+                    std::string s = e.path().string();
+                    if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) {
+                        m_fileList.push_back(s);
+                        added = true;
+                    }
+                }
+            }
+        } catch (const fs::filesystem_error& e) {
+            LogToFile(std::string("[App::triggerOpenFileViaDialog] Directory scan error: ") + e.what());
         }
+        if (added) {
+            std::sort(m_fileList.begin(), m_fileList.end());
+        }
+        auto it_existing = std::find(m_fileList.begin(), m_fileList.end(), target.string());
         if (it_existing != m_fileList.end()) {
-            bool tempFirstLoaded = m_firstFileLoaded;
-            m_firstFileLoaded = false;
-            loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
-            m_firstFileLoaded = tempFirstLoaded;
+            if (m_firstFileLoaded) {
+                bool tempFirstLoaded = m_firstFileLoaded;
+                m_firstFileLoaded = true;
+                loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
+                m_firstFileLoaded = tempFirstLoaded;
+            } else {
+                loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
+                m_firstFileLoaded = true;
+            }
         }
     }
 }
