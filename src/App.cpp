@@ -293,31 +293,29 @@ App::App(const std::string& filePath) : m_filePath(filePath) {
 
     LogToFile(std::string("[App::App] Constructor called for file: ") + this->m_filePath);
     std::cout << "[App::App] Constructor called for file: " << this->m_filePath << std::endl;
-    if (!m_filePath.empty()) {
-        if (!fs::exists(this->m_filePath)) {
-            LogToFile(std::string("[App::App] ERROR: File does not exist: ") + this->m_filePath);
-            throw std::runtime_error("[App::App] File does not exist: " + this->m_filePath);
-        }
-        auto target = fs::absolute(this->m_filePath);
-        auto folder = target.parent_path();
-        for (const auto& e : fs::directory_iterator(folder)) {
-            if (e.is_regular_file() && e.path().extension() == ".mcraw") {
-                m_fileList.push_back(e.path().string());
-            }
-        }
-        std::sort(m_fileList.begin(), m_fileList.end());
-        auto it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
-        if (it == m_fileList.end()) {
-            m_fileList.push_back(target.string());
-            std::sort(m_fileList.begin(), m_fileList.end());
-            it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
-            if (it == m_fileList.end()) {
-                LogToFile(std::string("[App::App] ERROR: Catastrophic: Initial file not in playlist: ") + this->m_filePath);
-                throw std::runtime_error("[App::App] Catastrophic: Initial file not in playlist: " + this->m_filePath);
-            }
-        }
-        m_currentFileIndex = static_cast<int>(std::distance(m_fileList.begin(), it));
+    if (!fs::exists(this->m_filePath)) {
+        LogToFile(std::string("[App::App] ERROR: File does not exist: ") + this->m_filePath);
+        throw std::runtime_error("[App::App] File does not exist: " + this->m_filePath);
     }
+    auto target = fs::absolute(this->m_filePath);
+    auto folder = target.parent_path();
+    for (const auto& e : fs::directory_iterator(folder)) {
+        if (e.is_regular_file() && e.path().extension() == ".mcraw") {
+            m_fileList.push_back(e.path().string());
+        }
+    }
+    std::sort(m_fileList.begin(), m_fileList.end());
+    auto it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
+    if (it == m_fileList.end()) {
+        m_fileList.push_back(target.string());
+        std::sort(m_fileList.begin(), m_fileList.end());
+        it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
+        if (it == m_fileList.end()) {
+            LogToFile(std::string("[App::App] ERROR: Catastrophic: Initial file not in playlist: ") + this->m_filePath);
+            throw std::runtime_error("[App::App] Catastrophic: Initial file not in playlist: " + this->m_filePath);
+        }
+    }
+    m_currentFileIndex = static_cast<int>(std::distance(m_fileList.begin(), it));
     LogToFile(std::string("[App::App] Constructor finished. Current file index: ") + std::to_string(m_currentFileIndex));
     std::cout << "[App::App] Constructor finished. Current file index: " << m_currentFileIndex << std::endl;
 }
@@ -352,17 +350,10 @@ void App::framebuffer_size_callback_static(GLFWwindow* window, int width, int he
     app->m_framebufferResized = true;
 }
 void App::key_callback_static(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
-    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-        if (app) {
-            if (key == GLFW_KEY_O && (mods & GLFW_MOD_CONTROL)) { app->triggerOpenFileViaDialog(); return; }
-            if (key == GLFW_KEY_Q && (mods & GLFW_MOD_CONTROL)) { glfwSetWindowShouldClose(window, GLFW_TRUE); return; }
-        }
-    }
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantCaptureKeyboard && key != GLFW_KEY_TAB) { return; }
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-        if (app) {
+        if (auto app = static_cast<App*>(glfwGetWindowUserPointer(window))) {
             app->handleKey(key, mods);
         }
     }
@@ -432,9 +423,9 @@ bool App::run() {
 
     LogToFile("[App::run] Initializing Vulkan...");
     std::cout << "[App::run] Initializing Vulkan..." << std::endl;
-    if (!initVulkan()) {
-        LogToFile("[App::run] ERROR: initVulkan() failed. Exiting App::run().");
-        std::cerr << "[App::run] initVulkan() failed. Exiting App::run()." << std::endl;
+    if (!initVulkan() || m_fileList.empty()) {
+        LogToFile("[App::run] ERROR: initVulkan() failed or file list empty. Exiting App::run().");
+        std::cerr << "[App::run] initVulkan() failed or file list empty. Exiting App::run()." << std::endl;
         return false;
     }
     LogToFile("[App::run] Vulkan initialized.");
@@ -474,20 +465,19 @@ bool App::run() {
     LogToFile("[App::run] ImGui Vulkan initialized.");
     std::cout << "[App::run] ImGui Vulkan initialized." << std::endl;
 
-    if (!m_fileList.empty()) {
-        LogToFile("[App::run] Loading initial file...");
-        std::cout << "[App::run] Loading initial file..." << std::endl;
-        loadFileAtIndex(m_currentFileIndex);
-        m_firstFileLoaded = true;
-        LogToFile("[App::run] Initial file loaded.");
-        std::cout << "[App::run] Initial file loaded." << std::endl;
-        if (!m_decoderWrapper || !m_playbackController) {
-            LogToFile("[App::run] ERROR: Critical component missing after initial load. Exiting App::run().");
-            std::cerr << "[App::run] Critical component missing after initial load. Exiting App::run()." << std::endl;
-            if(m_rendererVk) m_rendererVk->cleanup();
-            vmaDestroyAllocator(vmaAllocator);
-            return false;
-        }
+    LogToFile("[App::run] Loading initial file...");
+    std::cout << "[App::run] Loading initial file..." << std::endl;
+    loadFileAtIndex(m_currentFileIndex);
+    m_firstFileLoaded = true;
+    LogToFile("[App::run] Initial file loaded.");
+    std::cout << "[App::run] Initial file loaded." << std::endl;
+
+    if (!m_window || !m_decoderWrapper || !m_rendererVk || !m_playbackController) {
+        LogToFile("[App::run] ERROR: Critical component missing after initial load. Exiting App::run().");
+        std::cerr << "[App::run] Critical component missing after initial load. Exiting App::run()." << std::endl;
+        if(m_rendererVk) m_rendererVk->cleanup();
+        vmaDestroyAllocator(vmaAllocator);
+        return false;
     }
 
     LogToFile("[App::run] Entering main loop...");
@@ -506,27 +496,20 @@ bool App::run() {
         }
 #endif
 
-        bool paused = true;
+        bool paused = m_playbackController->isPaused();
         bool segment_looped_or_ended = false;
-        if (m_playbackController) {
-            paused = m_playbackController->isPaused();
-            if (!paused) {
-                if (m_decoderWrapper && m_decoderWrapper->getDecoder()) {
-                    const auto& frames = m_decoderWrapper->getDecoder()->getFrames();
-                    segment_looped_or_ended = m_playbackController->updatePlayhead(steady_clock::now(), frames);
-                } else {
-                    m_playbackController->updatePlayhead(steady_clock::now(), {});
-                }
-            } else {
-                if (m_decoderWrapper && m_decoderWrapper->getDecoder()) {
-                    m_playbackController->updatePlayhead(steady_clock::now(), m_decoderWrapper->getDecoder()->getFrames());
-                } else {
-                    m_playbackController->updatePlayhead(steady_clock::now(), {});
-                }
-            }
+        if (!paused) {
+            if (m_decoderWrapper && m_decoderWrapper->getDecoder()) {
+                const auto& frames = m_decoderWrapper->getDecoder()->getFrames();
+                segment_looped_or_ended = m_playbackController->updatePlayhead(steady_clock::now(), frames);
+            } else { m_playbackController->updatePlayhead(steady_clock::now(), {}); }
+        } else {
+             if (m_decoderWrapper && m_decoderWrapper->getDecoder()) {
+                m_playbackController->updatePlayhead(steady_clock::now(), m_decoderWrapper->getDecoder()->getFrames());
+            } else { m_playbackController->updatePlayhead(steady_clock::now(), {});}
         }
         m_sleepTimeMs = 0.0;
-        if ((!m_decoderWrapper || !m_decoderWrapper->getDecoder()) && !m_fileList.empty()) {
+        if (!m_decoderWrapper || !m_decoderWrapper->getDecoder()) {
             loadFileAtIndex(m_currentFileIndex);
             if (!m_decoderWrapper || !m_decoderWrapper->getDecoder()) {
                  LogToFile("[App::run] ERROR: Decoder became invalid in main loop. Breaking.");
@@ -540,12 +523,12 @@ bool App::run() {
         auto t1_render_submit = steady_clock::now();
         m_renderSubmitTimeMs = std::chrono::duration<double, std::milli>(t1_render_submit - t0_render_submit).count();
 
-        if (m_audio && m_playbackController && !paused && m_playbackController->getFirstFrameMediaTimestampOfSegment()) {
+        if (m_audio && !paused && m_playbackController->getFirstFrameMediaTimestampOfSegment()) {
             auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(steady_clock::now() - m_playbackStartTime).count();
             m_audio->updatePlayback(elapsed);
         }
 
-        if (m_playbackController && !paused && segment_looped_or_ended) {
+        if (!paused && segment_looped_or_ended) {
             if (m_fileList.size() > 1) {
                 loadFileAtIndex((m_currentFileIndex + 1) % (int)m_fileList.size());
             } else {
@@ -1322,9 +1305,6 @@ void App::drawFrame() {
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = m_swapChainExtent;
     VkClearValue clearColor = { {{0.05f, 0.05f, 0.05f, 1.0f}} };
-    if (!m_firstFileLoaded) {
-        clearColor = { {{40.0f/255.0f, 40.0f/255.0f, 40.0f/255.0f, 1.0f}} };
-    }
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &clearColor;
 
@@ -1785,27 +1765,9 @@ std::string App::openMcrawDialog() {
 void App::triggerOpenFileViaDialog() {
     std::string newPath = openMcrawDialog();
     if (!newPath.empty()) {
-        fs::path absPath = fs::absolute(newPath);
-        fs::path dir = absPath.parent_path();
-        bool modified = false;
-        try {
-            for (const auto& e : fs::directory_iterator(dir)) {
-                if (e.is_regular_file() && e.path().extension() == ".mcraw") {
-                    std::string s = e.path().string();
-                    if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) {
-                        m_fileList.push_back(s);
-                        modified = true;
-                    }
-                }
-            }
-        } catch (const fs::filesystem_error&) {}
-        if (modified) std::sort(m_fileList.begin(), m_fileList.end());
-        auto it_existing = std::find(m_fileList.begin(), m_fileList.end(), absPath.string());
-        if (it_existing != m_fileList.end()) {
-            m_firstFileLoaded = false;
-            loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
-            m_firstFileLoaded = true;
-        }
+        auto it_existing = std::find(m_fileList.begin(), m_fileList.end(), newPath);
+        if (it_existing == m_fileList.end()) { m_fileList.push_back(newPath); std::sort(m_fileList.begin(), m_fileList.end()); it_existing = std::find(m_fileList.begin(), m_fileList.end(), newPath); }
+        if (it_existing != m_fileList.end()) { m_firstFileLoaded = false; loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing))); m_firstFileLoaded = true; }
     }
 }
 void App::recordPauseTime() { m_pauseBegan = std::chrono::steady_clock::now(); }
@@ -1831,43 +1793,11 @@ void App::anchorPlaybackTimeForResume() {
     }
 }
 void App::handleDrop(int count, const char** paths) {
-    if (count <= 0) return;
-    std::string firstPath;
-    fs::path scanDir;
-    for (int i = 0; i < count; ++i) {
-        if (!paths[i]) continue;
-        try {
-            fs::path p = fs::absolute(paths[i]);
-            if (p.extension() == ".mcraw" && fs::is_regular_file(p)) {
-                if (firstPath.empty()) {
-                    firstPath = p.string();
-                    scanDir = p.parent_path();
-                }
-            }
-        } catch (const fs::filesystem_error&) {}
-    }
-    bool modified = false;
-    if (!firstPath.empty()) {
-        try {
-            for (const auto& e : fs::directory_iterator(scanDir)) {
-                if (e.is_regular_file() && e.path().extension() == ".mcraw") {
-                    std::string s = e.path().string();
-                    if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) {
-                        m_fileList.push_back(s);
-                        modified = true;
-                    }
-                }
-            }
-        } catch (const fs::filesystem_error&) {}
-        if (modified) std::sort(m_fileList.begin(), m_fileList.end());
-        auto it = std::find(m_fileList.begin(), m_fileList.end(), firstPath);
-        if (it != m_fileList.end()) {
-            m_firstFileLoaded = false;
-            loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it)));
-            m_firstFileLoaded = true;
-        }
-    }
-
+    if (count <= 0) return; std::string firstValidPathDropped; bool newFilesAddedToPlaylist = false;
+    for (int i = 0; i < count; ++i) { if (paths[i] == nullptr) continue; try { fs::path p = fs::absolute(paths[i]); if (p.extension() == ".mcraw" && fs::is_regular_file(p)) { std::string s = p.string(); if (firstValidPathDropped.empty()) { firstValidPathDropped = s; } if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) { m_fileList.push_back(s); newFilesAddedToPlaylist = true; } } } catch (const fs::filesystem_error&) {} }
+    if (newFilesAddedToPlaylist) { std::sort(m_fileList.begin(), m_fileList.end()); }
+    if (!firstValidPathDropped.empty()) { auto it = std::find(m_fileList.begin(), m_fileList.end(), firstValidPathDropped); if (it != m_fileList.end()) { m_firstFileLoaded = false; loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it))); m_firstFileLoaded = true; } }
+}
 void App::softDeleteCurrentFile() {
     if (m_fileList.empty() || m_currentFileIndex < 0 || static_cast<size_t>(m_currentFileIndex) >= m_fileList.size()) return;
     fs::path currentFilePath = m_fileList[m_currentFileIndex];

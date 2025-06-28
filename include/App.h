@@ -43,7 +43,7 @@ const int MAX_FRAMES_IN_FLIGHT = 2;
 
 class App {
 public:
-    explicit App(const std::string& filePath = "");
+    explicit App(const std::string& filePath);
     ~App();
     bool run();
 
