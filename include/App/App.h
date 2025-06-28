@@ -45,7 +45,7 @@ class Renderer_VK;
 
 class App {
 public:
-    explicit App(const std::string& filePath);
+    explicit App(const std::string& filePath = "");
     ~App();
 
     App(const App&) = delete;
