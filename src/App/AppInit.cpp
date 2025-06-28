@@ -156,35 +156,33 @@ App::App(const std::string& filePath) :
     LogToFile(std::string("App::App Available Staging Buffer Indices Queue MaxSize (actual from queue): ") + std::to_string(m_availableStagingBufferIndices.get_max_size_debug()));
 
 
-    if (!m_filePath.empty()) {
-        if (!fs::exists(this->m_filePath)) {
-            LogToFile(std::string("App::App ERROR: File does not exist: ") + this->m_filePath);
-            throw std::runtime_error("App::App File does not exist: " + this->m_filePath);
-        }
-        auto target = fs::absolute(this->m_filePath);
-        auto folder = target.parent_path();
-        for (const auto& e : fs::directory_iterator(folder)) {
-            if (e.is_regular_file() && e.path().extension() == ".mcraw") {
-                m_fileList.push_back(e.path().string());
-            }
-        }
-        if (!m_fileList.empty()) {
-            std::sort(m_fileList.begin(), m_fileList.end());
-        }
-
-        auto it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
-        if (it == m_fileList.end()) {
-            LogToFile("App::App Initial file not found in directory scan, adding it to list: " + target.string());
-            m_fileList.push_back(target.string());
-            std::sort(m_fileList.begin(), m_fileList.end());
-            it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
-            if (it == m_fileList.end()) {
-                LogToFile(std::string("App::App ERROR: Catastrophic: Initial file still not in playlist after adding: ") + this->m_filePath);
-                throw std::runtime_error("App::App Catastrophic: Initial file not in playlist: " + this->m_filePath);
-            }
-        }
-        m_currentFileIndex = static_cast<int>(std::distance(m_fileList.begin(), it));
+    if (!fs::exists(this->m_filePath)) {
+        LogToFile(std::string("App::App ERROR: File does not exist: ") + this->m_filePath);
+        throw std::runtime_error("App::App File does not exist: " + this->m_filePath);
     }
+    auto target = fs::absolute(this->m_filePath);
+    auto folder = target.parent_path();
+    for (const auto& e : fs::directory_iterator(folder)) {
+        if (e.is_regular_file() && e.path().extension() == ".mcraw") {
+            m_fileList.push_back(e.path().string());
+        }
+    }
+    if (!m_fileList.empty()) {
+        std::sort(m_fileList.begin(), m_fileList.end());
+    }
+
+    auto it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
+    if (it == m_fileList.end()) {
+        LogToFile("App::App Initial file not found in directory scan, adding it to list: " + target.string());
+        m_fileList.push_back(target.string());
+        std::sort(m_fileList.begin(), m_fileList.end());
+        it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
+        if (it == m_fileList.end()) {
+            LogToFile(std::string("App::App ERROR: Catastrophic: Initial file still not in playlist after adding: ") + this->m_filePath);
+            throw std::runtime_error("App::App Catastrophic: Initial file not in playlist: " + this->m_filePath);
+        }
+    }
+    m_currentFileIndex = static_cast<int>(std::distance(m_fileList.begin(), it));
 
     m_inFlightStagingBufferIndices.resize(MAX_FRAMES_IN_FLIGHT, std::nullopt);
 
@@ -208,7 +206,7 @@ App::App(const std::string& filePath) :
     }
     LogToFile("App::App constr Vulkan initialized by initVulkan().");
 
-    if (!m_filePath.empty() && m_fileList.empty()) {
+    if (m_fileList.empty()) {
         LogToFile("App::App constr ERROR: File list empty after init. Aborting constructor.");
         throw std::runtime_error("File list empty after App initialization.");
     }
@@ -225,16 +223,14 @@ App::App(const std::string& filePath) :
     this->initImGuiVulkan();
     LogToFile("App::App constr ImGui Vulkan initialized.");
 
-    if (!m_filePath.empty()) {
-        m_playbackController = std::make_unique<PlaybackController>();
-        m_playbackController_ptr = m_playbackController.get();
-        LogToFile("App::App constr PlaybackController created.");
+    m_playbackController = std::make_unique<PlaybackController>();
+    m_playbackController_ptr = m_playbackController.get();
+    LogToFile("App::App constr PlaybackController created.");
 
-        LogToFile("App::App constr Loading initial file...");
-        this->loadFileAtIndex(m_currentFileIndex);
-        m_firstFileLoaded = true;
-        LogToFile("App::App constr Initial file load process initiated.");
-    }
+    LogToFile("App::App constr Loading initial file...");
+    this->loadFileAtIndex(m_currentFileIndex);
+    m_firstFileLoaded = true;
+    LogToFile("App::App constr Initial file load process initiated.");
     LogToFile(std::string("App::App Constructor fully finished. Current file index: ") + std::to_string(m_currentFileIndex));
 
 #ifndef NDEBUG
