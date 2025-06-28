@@ -305,19 +305,10 @@ App::App(const std::string& filePath) : m_filePath(filePath) {
         }
     }
     std::sort(m_fileList.begin(), m_fileList.end());
-    m_fileThumbIDs.resize(m_fileList.size(), 0); // thumbnails loaded lazily
     auto it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
     if (it == m_fileList.end()) {
         m_fileList.push_back(target.string());
-        m_fileThumbIDs.push_back(0);
         std::sort(m_fileList.begin(), m_fileList.end());
-        // keep thumbnails vector aligned after sort
-        std::vector<std::pair<std::string,uint64_t>> pairs;
-        pairs.reserve(m_fileList.size());
-        for (size_t i=0;i<m_fileList.size();++i)
-            pairs.emplace_back(m_fileList[i], m_fileThumbIDs[i]);
-        std::sort(pairs.begin(), pairs.end(), [](auto&a,auto&b){return a.first<b.first;});
-        for (size_t i=0;i<pairs.size();++i){m_fileList[i]=pairs[i].first;m_fileThumbIDs[i]=pairs[i].second;}
         it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
         if (it == m_fileList.end()) {
             LogToFile(std::string("[App::App] ERROR: Catastrophic: Initial file not in playlist: ") + this->m_filePath);

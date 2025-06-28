@@ -316,34 +316,7 @@ void GuiOverlay::render(App* appInstance) {
         if (ImGui::Begin("Playlist", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings )) {
             current_playlist_window_width = ImGui::GetWindowSize().x; playlist_window_is_visible = true;
             if (appInstance->m_fileList.empty()) ImGui::TextDisabled(" (empty)");
-            else {
-                for (int i = 0; i < static_cast<int>(appInstance->m_fileList.size()); ++i) {
-                    const std::string& filePath = appInstance->m_fileList[i];
-                    std::string filename_to_display = fs::path(filePath).stem().string();
-                    bool is_selected = (appInstance->m_currentFileIndex == i);
-                    ImGui::PushID(i);
-                    uint64_t texId = (i < appInstance->m_fileThumbIDs.size()) ? appInstance->m_fileThumbIDs[i] : 0;
-                    if (texId)
-                        ImGui::Image((ImTextureID)texId, ImVec2(40,40));
-                    else
-                        ImGui::Dummy(ImVec2(40,40));
-                    ImGui::SameLine();
-                    char entry_buf[512];
-                    snprintf(entry_buf, sizeof(entry_buf), "%2d. %s ", i+1, filename_to_display.c_str());
-                    if (is_selected)
-                        ImGui::PushStyleColor(ImGuiCol_Header, style.Colors[ImGuiCol_HeaderActive]);
-                    if (ImGui::Selectable(entry_buf, is_selected, ImGuiSelectableFlags_SpanAllColumns)) {
-                        if (!is_selected) {
-                            appInstance->m_firstFileLoaded = false;
-                            appInstance->loadFileAtIndex(i);
-                            appInstance->m_firstFileLoaded = true;
-                        }
-                    }
-                    if (is_selected)
-                        ImGui::PopStyleColor();
-                    ImGui::PopID();
-                }
-            }
+            else { for (int i = 0; i < static_cast<int>(appInstance->m_fileList.size()); ++i) { const std::string& filePath = appInstance->m_fileList[i]; std::string filename_to_display = fs::path(filePath).stem().string(); bool is_selected = (appInstance->m_currentFileIndex == i); char entry_buf[512]; snprintf(entry_buf, sizeof(entry_buf), "%2d. %s ", i+1, filename_to_display.c_str()); if (is_selected) ImGui::PushStyleColor(ImGuiCol_Header, style.Colors[ImGuiCol_HeaderActive]); if (ImGui::Selectable(entry_buf, is_selected, ImGuiSelectableFlags_SpanAllColumns)) { if (!is_selected) { appInstance->m_firstFileLoaded = false; appInstance->loadFileAtIndex(i); appInstance->m_firstFileLoaded = true; } } if (is_selected) ImGui::PopStyleColor(); } }
         }
         ImGui::End(); ImGui::PopStyleColor(); ImGui::PopStyleVar(2);
     }
