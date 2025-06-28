@@ -307,6 +307,23 @@ void GuiOverlay::render(App* appInstance) {
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
 
+    if (!appInstance->m_firstFileLoaded) {
+        ImVec2 center = ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                               viewport->WorkPos.y + viewport->WorkSize.y * 0.5f);
+        ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowBgAlpha(0.0f);
+        ImGui::Begin("STARTUP_SCREEN", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 8.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(60/255.0f,60/255.0f,60/255.0f,1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(80/255.0f,80/255.0f,80/255.0f,1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(80/255.0f,80/255.0f,80/255.0f,1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f,1.0f,1.0f,1.0f));
+        if (ImGui::Button("Open or drag a MCRAW file")) { appInstance->triggerOpenFileViaDialog(); }
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar();
+        ImGui::End();
+    }
+
     if (GuiOverlay::show_playlist_aux) {
         const float initial_playlist_width = 320.0f * io.FontGlobalScale; float default_playlist_height = viewport->WorkSize.y * 0.80f;
         ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - initial_playlist_width - style.WindowPadding.x, viewport->WorkPos.y + style.WindowPadding.y), ImGuiCond_Appearing);
