@@ -189,6 +189,29 @@ namespace GuiOverlay {
         ImGuiStyle& style = ImGui::GetStyle();
         ImGuiIO& io = ImGui::GetIO();
 
+        if (!appInstance->m_firstFileLoaded) {
+            ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                                           viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
+                                   ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowBgAlpha(0.f);
+            ImGui::Begin("OPEN_PROMPT", nullptr,
+                        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(60.0f/255.0f, 60.0f/255.0f, 60.0f/255.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(80.0f/255.0f, 80.0f/255.0f, 80.0f/255.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(80.0f/255.0f, 80.0f/255.0f, 80.0f/255.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            if (ImGui::Button("Open MCRAW file", ImVec2(200, 40))) {
+                appInstance->triggerOpenFileViaDialog();
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(4);
+            ImGui::End();
+            return;
+        }
+
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && !io.WantCaptureMouse) {
             ImGui::OpenPopup("AppContextMenu");
         }
