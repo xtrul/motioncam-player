@@ -396,13 +396,11 @@ void App::drawFrame() {
             clearColorValue.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
         }
         else {
-            float bg = m_firstFileLoaded ? 0.1f : (40.0f/255.0f);
-            clearColorValue.color = { {bg, bg, bg, 1.0f} };
+            clearColorValue.color = { {0.1f, 0.1f, 0.1f, 1.0f} };
         }
     }
     else {
-        float bg = m_firstFileLoaded ? 0.1f : (40.0f/255.0f);
-        clearColorValue.color = { {bg, bg, bg, 1.0f} };
+        clearColorValue.color = { {0.1f, 0.1f, 0.1f, 1.0f} };
         if (m_inFlightStagingBufferIndices[m_currentFrame].has_value()) {
             m_availableStagingBufferIndices.push(m_inFlightStagingBufferIndices[m_currentFrame].value());
             m_inFlightStagingBufferIndices[m_currentFrame] = std::nullopt;

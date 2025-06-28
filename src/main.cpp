@@ -261,11 +261,18 @@ int main(int argc, char* argv[]) {
     if (argc >= 2 && argv[1] != nullptr) {
         inPath = argv[1];
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
-    } else {
-        LogToFile("[main] No command line argument provided. Starting without file.");
+    }
+    else {
+        LogToFile("[main] No command line argument provided or argv[1] is null, opening file dialog...");
+        inPath = OpenMcrawDialog();
+        if (inPath.empty()) {
+            LogToFile("[main] No input file selected from dialog or dialog cancelled. Exiting.");
+            return 0;
+        }
+        LogToFile(std::string("[main] Input file from dialog: ") + inPath);
     }
 
-    if (!inPath.empty() && (!fs::exists(inPath) || !fs::is_regular_file(inPath))) {
+    if (!fs::exists(inPath) || !fs::is_regular_file(inPath)) {
         std::string errorMsg = "[main] Input file not found or not a regular file: " + inPath;
         LogToFile(errorMsg);
 #ifdef _WIN32
@@ -274,7 +281,7 @@ int main(int argc, char* argv[]) {
         std::cerr << errorMsg << std::endl;
         return 1;
     }
-    if (!inPath.empty() && fs::path(inPath).extension() != ".mcraw") {
+    if (fs::path(inPath).extension() != ".mcraw") {
         std::string errorMsg = "[main] Input file must have a .mcraw extension: " + inPath;
         LogToFile(errorMsg);
 #ifdef _WIN32
