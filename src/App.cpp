@@ -1756,10 +1756,8 @@ void App::handleKey(int key, int mods) {
 
 void App::handleMouseButton(int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
-        if (m_firstFileLoaded) {
-            double cx, cy; glfwGetCursorPos(m_window, &cx, &cy);
-            GuiOverlay::requestContextMenu(static_cast<float>(cx), static_cast<float>(cy));
-        }
+        double cx, cy; glfwGetCursorPos(m_window, &cx, &cy);
+        GuiOverlay::requestContextMenu(static_cast<float>(cx), static_cast<float>(cy));
         return;
     }
     if (!m_rendererVk || !m_playbackController || !m_playbackController->isZoomNativePixels()) { if(m_isPanning){ m_isPanning=false; } return; }
@@ -1996,25 +1994,6 @@ void App::sendCurrentFileToMotionCamFuse() {
         return;
     }
     std::string cmd = std::string("/usr/bin/open -na \"MotionCam Fuse\" --args -f \"") + m_fileList[m_currentFileIndex] + "\"";
-    int ret = std::system(cmd.c_str());
-    if (ret != 0) {
-        std::cerr << "MotionCam Fuse: launch failed." << std::endl;
-    }
-#else
-    std::cerr << "MotionCam Fuse integration is only available on macOS." << std::endl;
-#endif
-}
-
-void App::sendPlaylistToMotionCamFuse() {
-#ifdef __APPLE__
-    if (m_fileList.empty()) {
-        std::cerr << "MotionCam Fuse: Playlist empty." << std::endl;
-        return;
-    }
-    std::string cmd = "/usr/bin/open -na \"MotionCam Fuse\" --args";
-    for (const auto& f : m_fileList) {
-        cmd += " -f \"" + f + "\"";
-    }
     int ret = std::system(cmd.c_str());
     if (ret != 0) {
         std::cerr << "MotionCam Fuse: launch failed." << std::endl;
