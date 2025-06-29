@@ -297,20 +297,8 @@ void GuiOverlay::render(App* appInstance) {
         g_show_context_menu = false;
     }
     if (ImGui::BeginPopup("RIGHT_CLICK_MENU")) {
-        if (ImGui::MenuItem("Save Current Frame as DNG")) {
-            appInstance->saveCurrentFrameAsDng();
-        }
-        std::string deleteLabel = std::string("Soft Delete \"") + ui.currentFileName + "\"";
-        if (ImGui::MenuItem(deleteLabel.c_str())) {
-            appInstance->softDeleteCurrentFile();
-        }
-        std::string sendCurrentLabel = std::string("Send \"") + ui.currentFileName + "\" to MotionCam Fuse";
-        if (ImGui::MenuItem(sendCurrentLabel.c_str())) {
-            appInstance->sendCurrentFileToMotionCamFuse();
-        }
-        if (ImGui::MenuItem("Send All Playlist to MotionCam Fuse")) {
-            appInstance->sendPlaylistToMotionCamFuse();
-        }
+        if (ImGui::MenuItem("Save frame as DNG")) { appInstance->saveCurrentFrameAsDng(); }
+        if (ImGui::MenuItem("Send to MotionCam Fuse")) { appInstance->sendCurrentFileToMotionCamFuse(); }
         ImGui::EndPopup();
     }
 
