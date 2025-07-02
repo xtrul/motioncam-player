@@ -254,11 +254,8 @@ void Renderer_VK::prepareAndUploadFrameData(
         frameOrientVal,
         frameMetadata.value("flipped", containerFlipped),
         defaultOrientation);
-    LogToFile(std::string("[Renderer_VK::prepareAndUploadFrameData] Raw frame orientation value: ") +
-        (frameOrientVal.is_null() ? "null" : frameOrientVal.dump()));
     ubo.orientationDegrees = orientationDegreesFromTag(tag);
     m_currentOrientationDegrees = ubo.orientationDegrees;
-    LogToFile(std::string("[Renderer_VK::prepareAndUploadFrameData] Orientation degrees: ") + std::to_string(ubo.orientationDegrees));
 
     updateUniformBuffer(uboBindingIndex, ubo);
 }
