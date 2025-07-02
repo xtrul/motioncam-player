@@ -7,13 +7,36 @@
 #include <iomanip>
 #include <sstream>
 #include <cstring>  // For strlen, not strictly needed for this version but often included
+#include <filesystem>
+#if defined(__APPLE__)
+#include <pwd.h>
+#include <unistd.h>
+#endif
 
+
+namespace {
+std::string getLogFilePath() {
+#if defined(__APPLE__)
+    const char* home = getenv("HOME");
+    if (!home) {
+        struct passwd* pw = getpwuid(getuid());
+        if (pw) home = pw->pw_dir;
+    }
+    if (home) {
+        std::string logDir = std::string(home) + "/Library/Logs/MotionCam Tools";
+        std::filesystem::create_directories(logDir);
+        return logDir + "/motioncam_player_debug_log.txt";
+    }
+#endif
+    return "motioncam_player_debug_log.txt";
+}
+} // namespace
 
 // Definition of the logger
 void LogToFile(const std::string& message) {
     // Static to ensure it's initialized once and persists.
     // `std::ios_base::app` ensures appending to the file.
-    static std::ofstream log_file("motioncam_player_debug_log.txt", std::ios_base::app | std::ios_base::out);
+    static std::ofstream log_file(getLogFilePath(), std::ios_base::app | std::ios_base::out);
 
     if (log_file.is_open()) {
         auto now = std::chrono::system_clock::now();
