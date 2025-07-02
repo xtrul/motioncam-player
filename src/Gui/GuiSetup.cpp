@@ -13,8 +13,9 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
-#include <GLFW/glfw3.h> 
-#include <vulkan/vulkan.h>  
+#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
+#include <filesystem>
 #include <cstdio> // For fprintf, abort
 
 // For App::QueueFamilyIndices, if not fully defined in App.h
@@ -22,11 +23,21 @@
 
 namespace GuiOverlay {
 
+    // Hold persistent path for ImGui ini file
+    static std::string g_ImGuiIniPath;
+
+    // Access application's base path from main.cpp
+    extern std::string g_AppBasePath;
+
     void setup(GLFWwindow* window, App* appInstance) {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+
+        // Explicitly set ini file location so it stays in the application folder
+        g_ImGuiIniPath = (std::filesystem::path(g_AppBasePath) / "imgui.ini").string();
+        io.IniFilename = g_ImGuiIniPath.c_str();
 
         // Load fonts and apply custom style
         GuiStyles::LoadFonts(io); // This will populate GuiStyles::G_TextFont etc.

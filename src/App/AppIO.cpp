@@ -1021,18 +1021,18 @@ void App::sendCurrentFileToMotionCamFS()
     GetModuleFileNameA(nullptr, modulePathChars, MAX_PATH);
     fs::path currentExePath(modulePathChars);
     motionCamFsExePath =
-        (currentExePath.parent_path() / "MotionCam Fuse.exe").string();
+        (currentExePath.parent_path() / ".." / "Fuse" / "MotionCamFuse.exe").string();
 #else
     char result[PATH_MAX];
     ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
     fs::path currentExePath = (count > 0) ? fs::path(std::string(result, count)) : fs::path("");
 
-    fs::path nearby_exe = currentExePath.parent_path() / "MotionCam Fuse";
+    fs::path nearby_exe = currentExePath.parent_path() / ".." / "Fuse" / "MotionCamFuse";
     if (fs::exists(nearby_exe)) {
         motionCamFsExePath = nearby_exe.string();
     }
     else {
-        motionCamFsExePath = "MotionCam Fuse"; // Try PATH
+        motionCamFsExePath = "MotionCamFuse"; // Try PATH
     }
 #endif
 
@@ -1092,18 +1092,18 @@ void App::sendAllPlaylistFilesToMotionCamFS()
     GetModuleFileNameA(nullptr, modulePathChars, MAX_PATH);
     fs::path exeDir(modulePathChars);
     motionCamFsExePath =
-        (exeDir.parent_path() / "MotionCam Fuse.exe").string();
+        (exeDir.parent_path() / ".." / "Fuse" / "MotionCamFuse.exe").string();
 #else
     char result[PATH_MAX];
     ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
     fs::path currentExePath = (count > 0) ? fs::path(std::string(result, count)) : fs::path("");
 
-    fs::path nearby_exe = currentExePath.parent_path() / "MotionCam Fuse";
+    fs::path nearby_exe = currentExePath.parent_path() / ".." / "Fuse" / "MotionCamFuse";
     if (fs::exists(nearby_exe)) {
         motionCamFsExePath = nearby_exe.string();
     }
     else {
-        motionCamFsExePath = "MotionCam Fuse"; // Try PATH
+        motionCamFsExePath = "MotionCamFuse"; // Try PATH
     }
 #endif
 
