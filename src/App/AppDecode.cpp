@@ -111,6 +111,9 @@ void App::decodeWorkerLoop() {
                         decodeSuccess = false;
                     }
                 }
+
+                // Flush writes to the staging buffer in case the memory is not HOST_COHERENT
+                vmaFlushAllocation(m_vmaAllocator, m_persistentStagingBuffers[stagingIdx].allocation, 0, VK_WHOLE_SIZE);
             }
         }
         catch (const std::exception& e) {
