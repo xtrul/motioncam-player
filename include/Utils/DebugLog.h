@@ -1,9 +1,10 @@
-#ifndef DEBUG_LOG_H
-#define DEBUG_LOG_H
+// FILE: include/Utils/DebugLog.h
+#pragma once
 
 #include <string>
 
 // Simple file logger declaration
 void LogToFile(const std::string& message);
 
-#endif // DEBUG_LOG_H
+// Separate logger for detailed ProRes export messages
+void LogToProResFile(const std::string& message);
