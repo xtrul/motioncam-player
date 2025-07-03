@@ -239,11 +239,33 @@ namespace GuiOverlay {
             }
             ImGui::Separator();
 #ifdef ENABLE_PRORES_EXPORT
-            if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->exportCurrentClipToProRes();
+            {
+                bool exportEnabled = canOperateOnCurrentFile;
+                if (ImGui::MenuItem("Export to ProRes", nullptr, false, exportEnabled)) {
+                    if (appInstance) appInstance->exportCurrentClipToProRes();
+                }
+                static bool loggedDisabled = false;
+                if (!exportEnabled) {
+                    if (!loggedDisabled) {
+                        LogToFile("[GUI] Export to ProRes disabled: no clip loaded");
+                        loggedDisabled = true;
+                    }
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                        ImGui::SetTooltip("Load a clip first");
+                    }
+                } else {
+                    loggedDisabled = false;
+                }
             }
 #else
-            ImGui::MenuItem("Export to ProRes", nullptr, false, false);
+            {
+                ImGui::MenuItem("Export to ProRes", nullptr, false, false);
+                static bool loggedNoSupport = false;
+                if (!loggedNoSupport) {
+                    LogToFile("[GUI] Export to ProRes unavailable: built without FFmpeg support");
+                    loggedNoSupport = true;
+                }
+            }
 #endif
             ImGui::EndPopup();
         }
