@@ -1,6 +1,7 @@
 #include "Playback/PlaybackController.h"
 #include "Utils/DebugLog.h" // For LogToFile
 
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #include <string>
 #include <stdexcept>
