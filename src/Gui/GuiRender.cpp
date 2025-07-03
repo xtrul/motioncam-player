@@ -226,7 +226,7 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Save Current Frame as DNG", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->saveCurrentFrameAsDng();
             }
-            if (ImGui::MenuItem("Convert Current File to ProRes", nullptr, false, canOperateOnCurrentFile)) {
+            if (ImGui::MenuItem("Export Decoded Frames to ProRes", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->convertCurrentFileToProRes();
             }
             ImGui::Separator();

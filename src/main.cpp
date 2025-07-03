@@ -299,18 +299,15 @@ int main(int argc, char* argv[]) {
     }
     if (convertProRes && !inPath.empty()) {
         LogProRes(std::string("CLI conversion requested for ") + inPath);
-        OrientationTag tag = OrientationTag::kNormal;
         try {
             DecoderWrapper decoder(inPath);
-            const nlohmann::json& meta = decoder.getContainerMetadata();
-            nlohmann::json val = findOrientationValue(meta);
-            bool flipped = meta.value("flipped", false);
-            tag = computeOrientationTag(val, flipped, OrientationTag::kNormal);
+            fs::path outPath = fs::path(inPath).replace_extension(".mov");
+            bool ok = ProResConverter::exportDecodedFramesToProRes(&decoder, outPath.string());
+            return ok ? 0 : 1;
         } catch (const std::exception& e) {
-            LogProRes(std::string("Failed to load orientation metadata: ") + e.what());
+            LogProRes(std::string("Failed to convert: ") + e.what());
+            return 1;
         }
-        bool ok = ProResConverter::convertMcrawToProRes(inPath, tag);
-        return ok ? 0 : 1;
     }
 
     LogToFile(std::string("[main] Initializing App with file: ") + inPath);
