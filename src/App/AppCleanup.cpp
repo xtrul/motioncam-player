@@ -52,11 +52,6 @@ App::~App() {
         m_decodeThread.join();
         LogToFile("[App::~App] Decode thread joined.");
     }
-    if (m_proResThread.joinable()) {
-        LogToFile("[App::~App] Joining ProRes export thread...");
-        m_proResThread.join();
-        LogToFile("[App::~App] ProRes export thread joined.");
-    }
 
     destroyPersistentStagingBuffers();
 
