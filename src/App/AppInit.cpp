@@ -139,7 +139,13 @@ App::App(const std::string& filePath) :
     _ipcWnd(nullptr),
 #endif
     m_threadsShouldStop(false),
-    m_ioThreadFileChanged(false)
+    m_ioThreadFileChanged(false),
+    m_lastInteractionTime(std::chrono::steady_clock::now()),
+    m_lastUiFadeUpdate(std::chrono::steady_clock::now()),
+    m_uiAutoHidden(false),
+    m_uiOpacity(1.0f),
+    m_uiAutoHideDelaySec(3.0),
+    m_uiFadeSpeed(3.0f)
 {
     LogToFile(std::string("App::App Constructor called for file: ") + this->m_filePath);
 #ifndef NDEBUG
