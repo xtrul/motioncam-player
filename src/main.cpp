@@ -35,6 +35,7 @@
 
 #include "App/App.h"
 #include "Utils/DebugLog.h"
+#include "Utils/ProResConverter.h"
 #ifdef _WIN32
 #include "Utils/SingleInstanceGuard.h"
 #ifdef _WIN32
@@ -258,8 +259,19 @@ int main(int argc, char* argv[]) {
 
 
     std::string inPath;
-    if (argc >= 2 && argv[1] != nullptr) {
-        inPath = argv[1];
+    bool convertProRes = false;
+    for (int i = 1; i < argc; ++i) {
+        if (!argv[i]) continue;
+        std::string arg = argv[i];
+        if (arg == "--convert-prores") {
+            convertProRes = true;
+        } else if (arg.rfind("-", 0) == 0) {
+            // unknown flag - ignored
+        } else if (inPath.empty()) {
+            inPath = arg;
+        }
+    }
+    if (!inPath.empty()) {
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
     } else {
         LogToFile("[main] No command line argument provided. Starting without file.");
@@ -282,6 +294,11 @@ int main(int argc, char* argv[]) {
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
+    }
+    if (convertProRes && !inPath.empty()) {
+        LogProRes(std::string("CLI conversion requested for ") + inPath);
+        bool ok = ProResConverter::convertMcrawToProRes(inPath);
+        return ok ? 0 : 1;
     }
 
     LogToFile(std::string("[main] Initializing App with file: ") + inPath);
