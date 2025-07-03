@@ -32,6 +32,8 @@ if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
 find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswscale libswresample)
 message(STATUS "Found Vulkan SDK:")
 message(STATUS "  Libraries:    ${Vulkan_LIBRARIES}")
 message(STATUS "  Include Dirs: ${Vulkan_INCLUDE_DIRS}")
@@ -217,6 +219,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     "${GLFW_LIB_PATH_VC_SPECIFIC}"
     "${SDL2_LIBRARY_DIR}/SDL2.lib"
     ${Vulkan_LIBRARIES}
+    PkgConfig::FFMPEG
 )
 
 if(WIN32)
