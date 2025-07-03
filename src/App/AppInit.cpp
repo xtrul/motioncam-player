@@ -145,7 +145,9 @@ App::App(const std::string& filePath) :
     m_uiAutoHidden(false),
     m_uiOpacity(1.0f),
     m_uiAutoHideDelaySec(3.0),
-    m_uiFadeSpeed(3.0f)
+    m_uiFadeSpeed(3.0f),
+    m_showExportProgressPopup(false),
+    m_proResStatus()
 {
     LogToFile(std::string("App::App Constructor called for file: ") + this->m_filePath);
 #ifndef NDEBUG
