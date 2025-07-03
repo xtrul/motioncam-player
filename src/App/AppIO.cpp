@@ -17,7 +17,6 @@
 #endif
 #include <tinydng/tiny_dng_writer.h>
 
-#include "Utils/ProResConverter.h"
 
 #include <filesystem>
 #include <iostream>
@@ -1187,23 +1186,4 @@ void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
 
     LogToFile(std::string("[App::setPlaybackMode] Changed from ") + std::to_string(static_cast<int>(oldMode)) +
         " to " + std::to_string(static_cast<int>(mode)));
-}
-
-void App::convertCurrentFileToProRes() {
-    if (m_fileList.empty() || m_currentFileIndex < 0 || static_cast<size_t>(m_currentFileIndex) >= m_fileList.size()) {
-        LogToFile("[App::convertCurrentFileToProRes] No valid file to convert.");
-        LogProRes("No valid file to convert");
-        return;
-    }
-
-    std::string currentMcrawPathStr = m_fileList[m_currentFileIndex];
-    fs::path outPath = fs::path(currentMcrawPathStr).replace_extension(".mov");
-    LogProRes(std::string("Starting export of ") + currentMcrawPathStr);
-    bool result = ProResConverter::exportDecodedFramesToProRes(m_decoderWrapper_ptr, outPath.string());
-    if (!result) {
-        LogToFile("[App::convertCurrentFileToProRes] Conversion failed.");
-        LogProRes("Conversion failed");
-    } else {
-        LogProRes("Conversion command finished");
-    }
 }
