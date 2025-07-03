@@ -1197,8 +1197,9 @@ void App::convertCurrentFileToProRes() {
     }
 
     std::string currentMcrawPathStr = m_fileList[m_currentFileIndex];
-    LogProRes(std::string("Starting conversion of ") + currentMcrawPathStr);
-    bool result = ProResConverter::convertMcrawToProRes(currentMcrawPathStr, m_containerOrientationTag);
+    fs::path outPath = fs::path(currentMcrawPathStr).replace_extension(".mov");
+    LogProRes(std::string("Starting export of ") + currentMcrawPathStr);
+    bool result = ProResConverter::exportDecodedFramesToProRes(m_decoderWrapper_ptr, outPath.string());
     if (!result) {
         LogToFile("[App::convertCurrentFileToProRes] Conversion failed.");
         LogProRes("Conversion failed");
