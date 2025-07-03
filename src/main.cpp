@@ -35,6 +35,9 @@
 
 #include "App/App.h"
 #include "Utils/DebugLog.h"
+#include "Utils/ProResConverter.h"
+#include "Decoder/DecoderWrapper.h"
+#include "Utils/OrientationUtils.h"
 #ifdef _WIN32
 #include "Utils/SingleInstanceGuard.h"
 #ifdef _WIN32
@@ -258,8 +261,19 @@ int main(int argc, char* argv[]) {
 
 
     std::string inPath;
-    if (argc >= 2 && argv[1] != nullptr) {
-        inPath = argv[1];
+    bool convertProRes = false;
+    for (int i = 1; i < argc; ++i) {
+        if (!argv[i]) continue;
+        std::string arg = argv[i];
+        if (arg == "--convert-prores") {
+            convertProRes = true;
+        } else if (arg.rfind("-", 0) == 0) {
+            // unknown flag - ignored
+        } else if (inPath.empty()) {
+            inPath = arg;
+        }
+    }
+    if (!inPath.empty()) {
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
     } else {
         LogToFile("[main] No command line argument provided. Starting without file.");
@@ -282,6 +296,21 @@ int main(int argc, char* argv[]) {
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
+    }
+    if (convertProRes && !inPath.empty()) {
+        LogProRes(std::string("CLI conversion requested for ") + inPath);
+        OrientationTag tag = OrientationTag::kNormal;
+        try {
+            DecoderWrapper decoder(inPath);
+            const nlohmann::json& meta = decoder.getContainerMetadata();
+            nlohmann::json val = findOrientationValue(meta);
+            bool flipped = meta.value("flipped", false);
+            tag = computeOrientationTag(val, flipped, OrientationTag::kNormal);
+        } catch (const std::exception& e) {
+            LogProRes(std::string("Failed to load orientation metadata: ") + e.what());
+        }
+        bool ok = ProResConverter::convertMcrawToProRes(inPath, tag);
+        return ok ? 0 : 1;
     }
 
     LogToFile(std::string("[main] Initializing App with file: ") + inPath);
