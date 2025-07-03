@@ -239,8 +239,14 @@ namespace GuiOverlay {
             }
             ImGui::Separator();
 #ifdef ENABLE_PRORES_EXPORT
-            if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->exportCurrentClipToProRes();
+            {
+                bool exportEnabled = canOperateOnCurrentFile;
+                if (ImGui::MenuItem("Export to ProRes", nullptr, false, exportEnabled)) {
+                    if (appInstance) appInstance->exportCurrentClipToProRes();
+                }
+                if (!exportEnabled && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                    ImGui::SetTooltip("Load a clip first");
+                }
             }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
