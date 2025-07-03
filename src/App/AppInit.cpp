@@ -152,11 +152,6 @@ App::App(const std::string& filePath) :
 #endif
 {
     LogToFile(std::string("App::App Constructor called for file: ") + this->m_filePath);
-#ifdef ENABLE_PRORES_EXPORT
-    LogToFile("[App] ProRes export feature ENABLED (FFmpeg detected at build time)");
-#else
-    LogToFile("[App] ProRes export feature DISABLED (no FFmpeg support)");
-#endif
 #ifndef NDEBUG
     std::cout << "App::App Constructor called for file: " << this->m_filePath << std::endl;
 #endif
