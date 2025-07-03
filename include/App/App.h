@@ -210,6 +210,14 @@ private:
     std::chrono::steady_clock::time_point m_actionMessageTime;
     double m_actionMessageDurationSec = 1.0;
 
+    // --- UI auto-hide and fade parameters ---
+    std::chrono::steady_clock::time_point m_lastInteractionTime;
+    std::chrono::steady_clock::time_point m_lastUiFadeUpdate;
+    bool m_uiAutoHidden = false;
+    float m_uiOpacity = 1.0f;
+    double m_uiAutoHideDelaySec = 3.0;
+    float m_uiFadeSpeed = 3.0f;
+
 
 #ifdef _WIN32
     HWND _ipcWnd = nullptr;
