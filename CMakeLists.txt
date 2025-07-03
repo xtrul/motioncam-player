@@ -32,6 +32,8 @@ if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
 find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavformat libavutil libswscale libswresample)
 message(STATUS "Found Vulkan SDK:")
 message(STATUS "  Libraries:    ${Vulkan_LIBRARIES}")
 message(STATUS "  Include Dirs: ${Vulkan_INCLUDE_DIRS}")
@@ -149,6 +151,7 @@ set(APP_SOURCES
 
   src/Utils/DebugLog.cpp
   src/Utils/OrientationUtils.cpp
+  src/Utils/ColorPipelineCPU.cpp
 
   src/main.cpp
 )
@@ -169,6 +172,7 @@ endif()
 add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
+target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
@@ -217,6 +221,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     "${GLFW_LIB_PATH_VC_SPECIFIC}"
     "${SDL2_LIBRARY_DIR}/SDL2.lib"
     ${Vulkan_LIBRARIES}
+    PkgConfig::FFMPEG
 )
 
 if(WIN32)
