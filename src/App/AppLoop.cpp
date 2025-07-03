@@ -15,6 +15,7 @@
 #include <sstream>
 #include <iomanip>
 #include <numeric>
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
@@ -162,6 +163,23 @@ bool App::run() {
         loopEndTime = steady_clock::now();
         m_totalLoopTimeMs = std::chrono::duration<double, std::milli>(loopEndTime - loopStartTime).count();
 
+        // Update UI auto-hide and fade
+        {
+            steady_clock::time_point now = steady_clock::now();
+            double idleSec = std::chrono::duration<double>(now - m_lastInteractionTime).count();
+            if (m_showUI && !m_uiAutoHidden && idleSec >= m_uiAutoHideDelaySec) {
+                m_uiAutoHidden = true;
+            }
+
+            float dt = std::chrono::duration<float>(now - m_lastUiFadeUpdate).count();
+            m_lastUiFadeUpdate = now;
+            float targetAlpha = (m_showUI && !m_uiAutoHidden) ? 1.0f : 0.0f;
+            if (m_uiOpacity < targetAlpha) {
+                m_uiOpacity = std::min(targetAlpha, m_uiOpacity + dt * m_uiFadeSpeed);
+            } else if (m_uiOpacity > targetAlpha) {
+                m_uiOpacity = std::max(targetAlpha, m_uiOpacity - dt * m_uiFadeSpeed);
+            }
+        }
 
         {
             steady_clock::time_point now = steady_clock::now();
@@ -418,7 +436,7 @@ void App::drawFrame() {
         m_rendererVk->recordDrawCommands(cmd, m_currentFrame, m_windowWidth, m_windowHeight);
     }
 
-    if (m_showUI) {
+    if (m_uiOpacity > 0.0f) {
         GuiOverlay::beginFrame();
         GuiOverlay::render(this);
         GuiOverlay::endFrame(cmd);

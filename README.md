@@ -16,7 +16,7 @@ cmake --build .
 
 ### FFmpeg
 
-`convertCurrentFileToProRes()` spawns the `ffmpeg` executable to encode ProRes videos. Ensure a recent FFmpeg is available in your `PATH`. On Windows the tool writes video and audio to named pipes which FFmpeg reads from. The command invoked is roughly:
+
 
 ```
 ffmpeg -y -f rawvideo -pix_fmt rgba -s WxH -r <fps> -i - \
@@ -26,9 +26,4 @@ ffmpeg -y -f rawvideo -pix_fmt rgba -s WxH -r <fps> -i - \
 
 FFmpeg 4.0 or newer is recommended.
 
-### Debugging
-
-Logs are written to `Logs/motioncam_player_log.txt` next to the application.
-If ProRes export fails, check this log for messages such as Windows error codes
-when creating named pipes.
 
