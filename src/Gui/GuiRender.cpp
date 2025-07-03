@@ -55,7 +55,7 @@ namespace GuiOverlay {
         ImGui::NewFrame();
     }
 
-    UIData gatherData(App* appInstance) {
+    GuiOverlay::UIData GuiOverlay::gatherData(App* appInstance) {
         UIData data = {};
         if (!appInstance) return data;
 
@@ -237,14 +237,6 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Send All in Playlist to MotionCam Fuse", nullptr, false, playlistNotEmpty)) {
                 if (appInstance) appInstance->sendAllPlaylistFilesToMotionCamFS();
             }
-            ImGui::Separator();
-#ifdef ENABLE_PRORES_EXPORT
-            if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->exportCurrentClipToProRes();
-            }
-#else
-            ImGui::MenuItem("Export to ProRes", nullptr, false, false);
-#endif
             ImGui::EndPopup();
         }
 
@@ -665,29 +657,6 @@ namespace GuiOverlay {
                 appInstance->m_actionMessage.clear();
             }
         }
-
-#ifdef ENABLE_PRORES_EXPORT
-        if (appInstance->m_showExportProgressPopup.load()) {
-            ImGui::OpenPopup("EXPORT_PROGRESS");
-        }
-        if (ImGui::BeginPopupModal("EXPORT_PROGRESS", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            int cur = appInstance->m_proResStatus.currentFrame.load();
-            int total = appInstance->m_proResStatus.totalFrames;
-            float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
-            ImGui::Text("Exporting to ProRes %d / %d", cur, total);
-            ImGui::ProgressBar(progress, ImVec2(200, 0));
-            if (!appInstance->m_proResStatus.errorMsg.empty()) {
-                ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_proResStatus.errorMsg.c_str());
-            }
-            if (!appInstance->m_proResStatus.active.load()) {
-                if (ImGui::Button("Close")) {
-                    ImGui::CloseCurrentPopup();
-                    appInstance->m_showExportProgressPopup.store(false);
-                }
-            }
-            ImGui::EndPopup();
-        }
-#endif
         ImGui::PopStyleVar();
     }
 
