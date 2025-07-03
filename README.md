@@ -16,7 +16,6 @@ cmake --build .
 
 ### FFmpeg
 
-`convertCurrentFileToProRes()` spawns the `ffmpeg` executable to encode ProRes videos. Ensure a recent FFmpeg is available in your `PATH`. The command invoked is roughly:
 
 ```
 ffmpeg -y -f rawvideo -pix_fmt rgba -s WxH -r <fps> -i - \
