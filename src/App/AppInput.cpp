@@ -78,6 +78,8 @@ void App::framebufferSizeCallback(int width, int height) {
 
 
 void App::handleKey(int key, int mods) {
+    m_lastInteractionTime = std::chrono::steady_clock::now();
+    if (m_uiAutoHidden) m_uiAutoHidden = false;
     if (!m_window || !m_playbackController) return;
 
     if (key == GLFW_KEY_TAB && mods == 0) {
@@ -420,6 +422,8 @@ void App::handleDrop(int count, const char** paths) {
 
 
 void App::handleMouseButton(int button, int action, int mods) {
+    m_lastInteractionTime = std::chrono::steady_clock::now();
+    if (m_uiAutoHidden) m_uiAutoHidden = false;
     if (!m_rendererVk || !m_playbackController || !m_playbackController->isZoomNativePixels()) {
         if (m_isPanning) { m_isPanning = false; }
         return;
@@ -436,6 +440,8 @@ void App::handleMouseButton(int button, int action, int mods) {
 }
 
 void App::handleCursorPos(double xpos, double ypos) {
+    m_lastInteractionTime = std::chrono::steady_clock::now();
+    if (m_uiAutoHidden) m_uiAutoHidden = false;
     if (m_isPanning && m_rendererVk && m_playbackController && m_playbackController->isZoomNativePixels()) {
         double dx = xpos - m_lastMouseX;
         double dy = ypos - m_lastMouseY;

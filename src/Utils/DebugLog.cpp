@@ -8,18 +8,41 @@
 #include <mutex>   // For thread-safe logging
 #include <string>
 #include <filesystem>
+#ifdef _WIN32
+#   include <windows.h>
+#   include <shlobj.h>
+#endif
 
 static std::mutex g_log_mutex; // Mutex to protect file access
 
 // Application base path defined in main.cpp
 extern std::string g_AppBasePath;
 
+std::string getLogDirectory() {
+#ifdef _WIN32
+    std::string logDir;
+    wchar_t* appDataPath = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &appDataPath))) {
+        int size = WideCharToMultiByte(CP_UTF8, 0, appDataPath, -1, nullptr, 0, nullptr, nullptr);
+        std::string appData(size - 1, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, appDataPath, -1, &appData[0], size, nullptr, nullptr);
+        CoTaskMemFree(appDataPath);
+        logDir = appData + "\\MotionCam Tools\\Player\\logs";
+    } else {
+        logDir = std::filesystem::temp_directory_path().string() + "\\MotionCam Tools\\Player\\logs";
+    }
+    return logDir;
+#else
+    return (std::filesystem::path(g_AppBasePath) / "Logs").string();
+#endif
+}
+
 // Helper function to lazily open the log file in a Logs directory
 static std::ofstream& get_log_file() {
     static std::ofstream log_file;
     static bool initialized = false;
     if (!initialized) {
-        std::filesystem::path logDir = std::filesystem::path(g_AppBasePath) / "Logs";
+        std::filesystem::path logDir = getLogDirectory();
         std::error_code ec;
         std::filesystem::create_directories(logDir, ec); // Ignore errors, file open will fail if directory can't be created
         std::filesystem::path logPath = logDir / "motioncam_player_log.txt";
