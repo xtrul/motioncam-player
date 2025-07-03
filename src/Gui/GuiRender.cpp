@@ -226,9 +226,6 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Save Current Frame as DNG", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->saveCurrentFrameAsDng();
             }
-            if (ImGui::MenuItem("Convert Current File to ProRes", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->convertCurrentFileToProRes();
-            }
             ImGui::Separator();
             if (ImGui::MenuItem("Soft Delete MCRAW", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->softDeleteCurrentFile();
