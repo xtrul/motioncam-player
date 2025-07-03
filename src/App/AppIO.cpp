@@ -25,11 +25,6 @@
 #include <cmath>
 #include <cstdio>
 #include <sstream>
-#ifndef _WIN32
-#include <unistd.h>
-#include <sys/wait.h>
-#endif
-#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -1002,101 +997,6 @@ void App::convertCurrentFileToDngs() {
         m_playbackController_ptr->togglePause();
         if (m_audio) m_audio->setPaused(false);
         anchorPlaybackTimeForResume();
-    }
-}
-
-void App::convertCurrentFileToProRes() {
-    if (!m_fileList.empty() && m_currentFileIndex >= 0 && static_cast<size_t>(m_currentFileIndex) < m_fileList.size()) {
-        std::string currentMcrawPathStr = m_fileList[m_currentFileIndex];
-        fs::path currentMcrawPath = currentMcrawPathStr;
-        fs::path outputMovPath = currentMcrawPath.parent_path() / (currentMcrawPath.stem().string() + ".mov");
-
-        motioncam::Decoder decoder(currentMcrawPathStr);
-        const auto& frameTimestamps = decoder.getFrames();
-        if (frameTimestamps.empty()) {
-            LogToFile("[App::convertCurrentFileToProRes] No frames to convert.");
-            return;
-        }
-
-        RawBytes tempFrame;
-        nlohmann::json firstMeta;
-        decoder.loadFrame(frameTimestamps[0], tempFrame, firstMeta);
-        int width = firstMeta.value("width", 0);
-        int height = firstMeta.value("height", 0);
-        double fps = 30.0;
-        if (frameTimestamps.size() >= 2) {
-            int64_t diff = frameTimestamps[1] - frameTimestamps[0];
-            if (diff > 0) fps = 1e9 / static_cast<double>(diff);
-        }
-
-        int sampleRate = decoder.audioSampleRateHz();
-        int channels = decoder.numAudioChannels();
-
-#ifndef _WIN32
-        int videoPipe[2];
-        int audioPipe[2];
-        if (pipe(videoPipe) != 0 || pipe(audioPipe) != 0) {
-            LogToFile("[App::convertCurrentFileToProRes] Failed to create pipes.");
-            return;
-        }
-
-        pid_t pid = fork();
-        if (pid == 0) {
-            dup2(videoPipe[0], 0);
-            dup2(audioPipe[0], 3);
-            close(videoPipe[0]); close(videoPipe[1]);
-            close(audioPipe[0]); close(audioPipe[1]);
-
-            char wh[64]; snprintf(wh, sizeof(wh), "%dx%d", width, height);
-            char fpsStr[32]; snprintf(fpsStr, sizeof(fpsStr), "%f", fps);
-            char srStr[32]; snprintf(srStr, sizeof(srStr), "%d", sampleRate);
-            char chStr[32]; snprintf(chStr, sizeof(chStr), "%d", channels);
-
-            execlp("ffmpeg", "ffmpeg", "-y",
-                   "-f", "rawvideo", "-pix_fmt", "rgba", "-s", wh, "-r", fpsStr, "-i", "pipe:0",
-                   "-f", "s16le", "-ar", srStr, "-ac", chStr, "-i", "pipe:3",
-                   "-c:v", "prores_ks", outputMovPath.string().c_str(), (char*)nullptr);
-            _exit(1);
-        }
-
-        close(videoPipe[0]);
-        close(audioPipe[0]);
-        FILE* videoFp = fdopen(videoPipe[1], "wb");
-        FILE* audioFp = fdopen(audioPipe[1], "wb");
-
-        auto audioWriter = std::thread([&]() {
-            motioncam::AudioChunkLoader& loader = decoder.loadAudio();
-            motioncam::AudioChunk chunk;
-            while (loader.next(chunk)) {
-                if (!chunk.second.empty()) {
-                    fwrite(chunk.second.data(), sizeof(int16_t), chunk.second.size(), audioFp);
-                }
-            }
-            fclose(audioFp);
-        });
-
-        std::vector<uint8_t> rgba;
-        for (size_t i = 0; i < frameTimestamps.size(); ++i) {
-            RawBytes raw;
-            nlohmann::json meta;
-            decoder.loadFrame(frameTimestamps[i], raw, meta);
-            const uint16_t* src = asU16(raw);
-            rgba.resize(width * height * 4);
-            for (size_t p = 0; p < static_cast<size_t>(width) * height; ++p) {
-                uint8_t v = static_cast<uint8_t>(src[p] >> 8);
-                rgba[p * 4 + 0] = v;
-                rgba[p * 4 + 1] = v;
-                rgba[p * 4 + 2] = v;
-                rgba[p * 4 + 3] = 255;
-            }
-            fwrite(rgba.data(), 1, rgba.size(), videoFp);
-        }
-        fclose(videoFp);
-        audioWriter.join();
-        int status = 0; waitpid(pid, &status, 0);
-#else
-        LogToFile("[App::convertCurrentFileToProRes] Not implemented on Windows.");
-#endif
     }
 }
 
