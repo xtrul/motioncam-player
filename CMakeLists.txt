@@ -43,17 +43,6 @@ if(FFmpeg_FOUND OR FFMPEG_FOUND OR PC_FFMPEG_FOUND)
     message(STATUS "FFmpeg found; enabling ProRes export")
     set(HAVE_FFMPEG TRUE)
 
-    # Collect possible include directories and libraries from different find modules
-    set(_ffmpeg_inc_dirs "${FFmpeg_INCLUDE_DIRS};${FFmpeg_INCLUDE_DIR};${FFMPEG_INCLUDE_DIRS};${FFMPEG_INCLUDE_DIR};${PC_FFMPEG_INCLUDE_DIRS};${PC_FFMPEG_INCLUDE_DIR}")
-    set(_ffmpeg_libs "${FFmpeg_LIBRARIES};${FFMPEG_LIBRARIES};${PC_FFMPEG_LIBRARIES}")
-    string(REPLACE ";;" ";" _ffmpeg_inc_dirs "${_ffmpeg_inc_dirs}")
-    string(REPLACE ";;" ";" _ffmpeg_libs "${_ffmpeg_libs}")
-    separate_arguments(_ffmpeg_inc_dirs)
-    separate_arguments(_ffmpeg_libs)
-    list(REMOVE_DUPLICATES _ffmpeg_inc_dirs)
-    list(REMOVE_DUPLICATES _ffmpeg_libs)
-    set(FFMPEG_INCLUDE_DIRS_COMBINED ${_ffmpeg_inc_dirs})
-    set(FFMPEG_LIBRARIES_COMBINED ${_ffmpeg_libs})
 else()
     message(STATUS "FFmpeg not found; ProRes export disabled")
     set(HAVE_FFMPEG FALSE)
@@ -262,14 +251,7 @@ if(HAVE_FFMPEG)
             ${FFMPEG_NS}::swscale
             ${FFMPEG_NS}::swresample
         )
-        target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS_COMBINED})
-    elseif(PC_FFMPEG_FOUND)
-        target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::PC_FFMPEG)
-        target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS_COMBINED})
-    elseif(FFMPEG_LIBRARIES_COMBINED)
-        # Fallback for find modules that only expose variables
-        target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS_COMBINED})
-        target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES_COMBINED})
+
     else()
         message(WARNING "FFmpeg libraries not found; ProRes export disabled")
         set(HAVE_FFMPEG FALSE)
