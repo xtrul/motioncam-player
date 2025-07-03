@@ -1165,6 +1165,46 @@ void App::sendAllPlaylistFilesToMotionCamFS()
         + std::to_string(ok) + ", Fail: " + std::to_string(fail));
 }
 
+void App::exportCurrentClipToProRes() {
+    if (m_proResStatus.active.load()) {
+        showActionMessage("Export already running");
+        return;
+    }
+
+    std::string outputPath = openSaveMovDialog();
+    if (outputPath.empty()) return;
+    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
+        outputPath += ".mov";
+    }
+
+    if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder()) {
+        showActionMessage("No clip loaded");
+        return;
+    }
+
+    m_proResStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
+    m_proResStatus.currentFrame.store(0);
+    m_proResStatus.active.store(true);
+    m_proResStatus.errorMsg.clear();
+    m_showExportProgressPopup.store(true);
+    showActionMessage("Export Started");
+
+    if (m_proResThread.joinable()) {
+        m_proResThread.join();
+    }
+
+    m_proResThread = std::thread([this, outputPath]() {
+        LogToFile(std::string("[ProResExport] Starting dummy export to ") + outputPath);
+        for (int i = 0; i < m_proResStatus.totalFrames; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            m_proResStatus.currentFrame.store(i + 1);
+        }
+        LogToFile("[ProResExport] Dummy export finished");
+        m_proResStatus.active.store(false);
+        showActionMessage("Export Finished");
+    });
+}
+
 void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
     if (!m_playbackController_ptr) return;
     PlaybackController::PlaybackMode oldMode = m_playbackController_ptr->getPlaybackMode();
