@@ -32,6 +32,19 @@ if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
 find_package(Threads REQUIRED)
+find_package(PkgConfig QUIET)
+find_package(FFmpeg QUIET COMPONENTS avcodec avformat avutil swscale swresample)
+if(NOT FFmpeg_FOUND AND PkgConfig_FOUND)
+    pkg_check_modules(PC_FFMPEG QUIET libavcodec libavformat libavutil libswscale libswresample)
+endif()
+message(STATUS "FFmpeg_FOUND=${FFmpeg_FOUND} FFMPEG_FOUND=${FFMPEG_FOUND} PC_FFMPEG_FOUND=${PC_FFMPEG_FOUND}")
+if(FFmpeg_FOUND OR FFMPEG_FOUND OR PC_FFMPEG_FOUND)
+    message(STATUS "FFmpeg found; enabling ProRes export")
+    set(HAVE_FFMPEG TRUE)
+else()
+    message(STATUS "FFmpeg not found; ProRes export disabled")
+    set(HAVE_FFMPEG FALSE)
+endif()
 message(STATUS "Found Vulkan SDK:")
 message(STATUS "  Libraries:    ${Vulkan_LIBRARIES}")
 message(STATUS "  Include Dirs: ${Vulkan_INCLUDE_DIRS}")
@@ -149,6 +162,7 @@ set(APP_SOURCES
 
   src/Utils/DebugLog.cpp
   src/Utils/OrientationUtils.cpp
+  src/Utils/ColorPipelineCPU.cpp
 
   src/main.cpp
 )
@@ -169,7 +183,7 @@ endif()
 add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
-
+target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
     message(STATUS "MSVC: Setting LINK_FLAGS /ENTRY:mainCRTStartup for ${PROJECT_NAME}")
@@ -219,8 +233,58 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${Vulkan_LIBRARIES}
 )
 
+if(HAVE_FFMPEG)
+    # Prefer modern imported targets if provided
+    if(TARGET FFmpeg::avcodec)
+        set(FFMPEG_NS "FFmpeg")
+    elseif(TARGET FFMPEG::avcodec)
+        set(FFMPEG_NS "FFMPEG")
+    endif()
+
+    if(DEFINED FFMPEG_NS)
+        target_link_libraries(${PROJECT_NAME} PRIVATE
+            ${FFMPEG_NS}::avcodec
+            ${FFMPEG_NS}::avformat
+            ${FFMPEG_NS}::avutil
+            ${FFMPEG_NS}::swscale
+            ${FFMPEG_NS}::swresample
+        )
+    elseif(PC_FFMPEG_FOUND)
+        target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::PC_FFMPEG)
+    elseif(FFMPEG_LIBRARIES)
+        # Fallback for find modules that only expose variables
+        target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
+    else()
+        message(WARNING "FFmpeg libraries not found; ProRes export disabled")
+        set(HAVE_FFMPEG FALSE)
+    endif()
+
+    if(HAVE_FFMPEG)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
+    endif()
+endif()
+
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
+    if(HAVE_FFMPEG)
+        # Copy required FFmpeg runtime DLLs next to the executable
+        set(FFMPEG_RUNTIME_DIR "C:/dev/vcpkg/installed/x64-windows/bin")
+        foreach(dll IN ITEMS avcodec-61.dll avformat-61.dll avutil-59.dll swscale-8.dll swresample-5.dll avfilter-10.dll)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${FFMPEG_RUNTIME_DIR}/${dll}"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${dll}"
+                COMMENT "Copying ${dll}"
+            )
+        endforeach()
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FFMPEG_RUNTIME_DIR}/avfilter-10.pdb"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/avfilter-10.pdb"
+            COMMENT "Copying avfilter-10.pdb"
+        )
+    endif()
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
