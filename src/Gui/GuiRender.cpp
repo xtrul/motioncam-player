@@ -185,6 +185,7 @@ namespace GuiOverlay {
 
     void render(App* appInstance) {
         if (!appInstance) return;
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appInstance->m_uiOpacity);
         UIData ui = GuiOverlay::gatherData(appInstance);
         ImGuiStyle& style = ImGui::GetStyle();
         ImGuiIO& io = ImGui::GetIO();
@@ -209,6 +210,7 @@ namespace GuiOverlay {
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(4);
             ImGui::End();
+            ImGui::PopStyleVar();
             return;
         }
 
@@ -658,6 +660,7 @@ namespace GuiOverlay {
                 appInstance->m_actionMessage.clear();
             }
         }
+        ImGui::PopStyleVar();
     }
 
     void endFrame(VkCommandBuffer commandBuffer) {
