@@ -32,19 +32,6 @@ if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
 find_package(Threads REQUIRED)
-option(ENABLE_PRORES_EXPORT "Enable ProRes export via FFmpeg" OFF)
-if(ENABLE_PRORES_EXPORT)
-    find_package(PkgConfig)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(FFMPEG IMPORTED_TARGET libavcodec libavformat libavutil libswscale libswresample)
-    endif()
-    if(FFMPEG_FOUND)
-        message(STATUS "FFmpeg found, enabling ProRes export")
-        set(HAVE_FFMPEG TRUE)
-    else()
-        message(FATAL_ERROR "FFmpeg not found. Disable ENABLE_PRORES_EXPORT or install FFmpeg.")
-    endif()
-endif()
 message(STATUS "Found Vulkan SDK:")
 message(STATUS "  Libraries:    ${Vulkan_LIBRARIES}")
 message(STATUS "  Include Dirs: ${Vulkan_INCLUDE_DIRS}")
@@ -162,7 +149,6 @@ set(APP_SOURCES
 
   src/Utils/DebugLog.cpp
   src/Utils/OrientationUtils.cpp
-  src/Utils/ColorPipelineCPU.cpp
 
   src/main.cpp
 )
@@ -183,7 +169,6 @@ endif()
 add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
-target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
@@ -233,11 +218,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     "${SDL2_LIBRARY_DIR}/SDL2.lib"
     ${Vulkan_LIBRARIES}
 )
-
-if(HAVE_FFMPEG)
-    target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::FFMPEG)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
-endif()
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
