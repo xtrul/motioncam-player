@@ -1205,7 +1205,6 @@ void App::exportCurrentClipToProRes() {
     m_proResThread = std::thread([this, outputPath]() {
         av_log_set_level(AV_LOG_ERROR);
         LogProRes("[ProResExport] Thread started");
-        auto exportStartTime = std::chrono::high_resolution_clock::now();
 
         auto* dec = m_decoderWrapper_ptr->getDecoder();
         const auto& frames = dec->getFrames();
@@ -1418,17 +1417,11 @@ void App::exportCurrentClipToProRes() {
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
             nlohmann::json metaTmp;
-
-            auto t0 = std::chrono::high_resolution_clock::now();
             try { dec->loadFrame(frames[idx], raw, metaTmp); }
             catch (...) { m_proResStatus.errorMsg = "Frame read error"; break; }
-            auto t1 = std::chrono::high_resolution_clock::now();
 
-            auto t2 = std::chrono::high_resolution_clock::now();
             convertRawToRGB24(asU16(raw), cpParams, rgbBuf);
-            auto t3 = std::chrono::high_resolution_clock::now();
 
-            auto t4 = std::chrono::high_resolution_clock::now();
             if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
             const uint8_t* srcSlices[1] = { rgbBuf.data() };
             int srcStride[1] = { width*3 };
@@ -1447,21 +1440,7 @@ void App::exportCurrentClipToProRes() {
                 av_packet_unref(&pkt);
                 ++framesEncoded;
             }
-            auto t5 = std::chrono::high_resolution_clock::now();
-
             m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
-
-            double loadMs    = std::chrono::duration<double, std::milli>(t1 - t0).count();
-            double convertMs = std::chrono::duration<double, std::milli>(t3 - t2).count();
-            double encodeMs  = std::chrono::duration<double, std::milli>(t5 - t4).count();
-
-            std::ostringstream stageLog;
-            stageLog << "[ProResExport] Frame " << (idx + 1)
-                     << " loadFrame=" << loadMs << "ms"
-                     << " convert=" << convertMs << "ms"
-                     << " encode=" << encodeMs << "ms";
-            LogProRes(stageLog.str());
-
             if ((idx + 1) % 50 == 0) {
                 LogProRes(std::string("[ProResExport] Encoded frame ") + std::to_string(idx + 1) + "/" + std::to_string(frames.size()));
             }
@@ -1523,15 +1502,6 @@ void App::exportCurrentClipToProRes() {
 
         if (framesEncoded == 0 && m_proResStatus.errorMsg.empty()) {
             m_proResStatus.errorMsg = "No video frames encoded";
-        }
-
-        auto exportEndTime = std::chrono::high_resolution_clock::now();
-        double totalMs = std::chrono::duration<double, std::milli>(exportEndTime - exportStartTime).count();
-        double avgMs = framesEncoded > 0 ? totalMs / framesEncoded : 0.0;
-        {
-            std::ostringstream oss;
-            oss << "[ProResExport] Export duration " << totalMs << " ms (avg " << avgMs << " ms/frame)";
-            LogProRes(oss.str());
         }
 
         av_write_trailer(fmt);
