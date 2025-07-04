@@ -13,8 +13,7 @@
 #   include <shlobj.h>
 #endif
 #ifdef ENABLE_PRORES_EXPORT
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
+#include "ffmpeg_headers.hpp"
 #endif
 
 static std::mutex g_log_mutex; // Mutex to protect file access
