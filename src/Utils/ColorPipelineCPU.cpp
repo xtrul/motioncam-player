@@ -1,9 +1,6 @@
 #include "Utils/ColorPipelineCPU.h"
 #include <algorithm>
 #include <cmath>
-#ifdef USE_OPENMP
-#include <omp.h>
-#endif
 
 static inline float srgb_eotf(float v) {
     v = std::clamp(v, 0.0f, 1.0f);
@@ -38,9 +35,6 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p, std::vector
 
     const float* ccm = p.ccm.data();
 
-    #ifdef USE_OPENMP
-    #pragma omp parallel for schedule(static)
-    #endif
     for(int y=0;y<p.height;++y){
         for(int x=0;x<p.width;++x){
             bool ye = (y%2)==0;
