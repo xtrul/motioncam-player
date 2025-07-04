@@ -12,7 +12,7 @@
 #   include <windows.h>
 #   include <shlobj.h>
 #endif
-#ifdef ENABLE_PRORES_EXPORT
+#if defined(ENABLE_PRORES_EXPORT) || defined(ENABLE_HEVC_EXPORT)
 #include "ffmpeg_headers.hpp"
 #endif
 
@@ -88,6 +88,21 @@ static std::ofstream& get_prores_log_file() {
     return log_file;
 }
 
+// Separate log file for HEVC export diagnostics
+static std::ofstream& get_hevc_log_file() {
+    static std::ofstream log_file;
+    static bool initialized = false;
+    if (!initialized) {
+        std::filesystem::path logDir = getLogDirectory();
+        std::error_code ec;
+        std::filesystem::create_directories(logDir, ec);
+        std::filesystem::path logPath = logDir / "hevc_export_log.txt";
+        log_file.open(logPath, std::ios_base::app | std::ios_base::out);
+        initialized = true;
+    }
+    return log_file;
+}
+
 void LogToFile(const std::string& message) {
     std::lock_guard<std::mutex> lock(g_log_mutex); // Lock for thread safety
 
@@ -123,10 +138,24 @@ void LogProRes(const std::string& message) {
     }
 }
 
+void LogHevc(const std::string& message) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+
+    std::ofstream& log_file = get_hevc_log_file();
+    if (log_file.is_open()) {
+        log_file << "[" << make_timestamp() << "] " << message << std::endl;
+    }
+}
+
 void LogFFmpegStatus() {
+#if defined(ENABLE_PRORES_EXPORT) || defined(ENABLE_HEVC_EXPORT)
 #ifdef ENABLE_PRORES_EXPORT
     LogToFile("[FFmpeg] ProRes export support compiled in.");
     LogProRes("[FFmpeg] ProRes export support compiled in.");
+#endif
+#ifdef ENABLE_HEVC_EXPORT
+    LogToFile("[FFmpeg] HEVC export support compiled in.");
+    LogHevc("[FFmpeg] HEVC export support compiled in.");
 #   ifdef _WIN32
     const char* dlls[] = {
         "avcodec-61.dll", "avformat-61.dll", "avutil-59.dll",

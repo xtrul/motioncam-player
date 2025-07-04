@@ -32,6 +32,7 @@ if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
 find_package(Threads REQUIRED)
+find_package(OpenMP)
 find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample)
 message(STATUS "FFmpeg_FOUND=${FFmpeg_FOUND} FFMPEG_FOUND=${FFMPEG_FOUND}")
 if(FFMPEG_FOUND OR FFmpeg_FOUND)
@@ -182,6 +183,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 if(HAVE_FFMPEG)
     target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_HEVC_EXPORT)
 endif()
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
@@ -231,6 +233,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     "${SDL2_LIBRARY_DIR}/SDL2.lib"
     ${Vulkan_LIBRARIES}
 )
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_CXX)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_OPENMP)
+    message(STATUS "OpenMP enabled for ${PROJECT_NAME}")
+endif()
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
 target_include_directories(${PROJECT_NAME}
