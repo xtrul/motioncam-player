@@ -237,7 +237,7 @@ if (FFmpeg_FOUND)
     target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
 
     # The FindFFmpeg.cmake shipped with vcpkg creates IMPORTED targets
-    # named  FFMPEG::avcodec  FFMPEG::avformat  …  — they already know how
+    # named  FFmpeg::avcodec  FFmpeg::avformat  …  — they already know how
     # to switch between Release/Debug .lib files in multi-config generators.
     target_link_libraries(${PROJECT_NAME} PRIVATE
         FFmpeg::avcodec
