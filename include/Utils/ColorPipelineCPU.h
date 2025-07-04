@@ -16,4 +16,5 @@ struct CPUColorParams {
     float saturation{1.0f};
 };
 
-void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& params, std::vector<uint8_t>& outRGB);
+void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& params,
+                       std::vector<uint8_t>& outRGB, unsigned threads = 1);
