@@ -46,3 +46,18 @@ runtime DLLs will be copied automatically.
 - Choose **Export to ProRes** and select a `.mov` file path.
 - Encoding uses FFmpeg linked via vcpkg. Make sure the libraries are installed in your vcpkg instance.
 - Progress is shown in a modal popup while the encoding thread runs.
+- The export uses the `prores_ks` encoder to create a 10-bit 4:2:2 file.
+- Frame rate is derived from the clip's timestamps so the output is constant frame rate.
+- If the clip contains audio, 16‑bit PCM is muxed into the `.mov` container.
+- A `prores_export_log.txt` file is written inside the `Logs` folder for troubleshooting.
+- The export pipeline relies on the `blackLevel`, `whiteLevel`, `asShotNeutral`, and
+  `ColorMatrix*` metadata found in the `.mcraw` file. Incorrect values can result
+  in an image that appears completely black. The log file lists the parsed
+  numbers so you can verify them.
+- Encoder parameters, metadata values, and the detected CFA pattern are written
+  to `prores_export_log.txt` so you can verify exactly how the clip was processed.
+- If the resulting `.mov` only contains audio, check the log for
+  **"No video frames encoded"**. This means the frame conversion failed and no
+  video packets were written.
+- You can override the detected CFA pattern at runtime by pressing the number
+  keys `1`‑`4` which map to **BGGR**, **RGGB**, **GBRG**, and **GRBG** respectively.

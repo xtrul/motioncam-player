@@ -1262,6 +1262,12 @@ void App::exportCurrentClipToProRes() {
         LogProRes("[ProResExport] ProRes encoder found");
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
+        if (!vstream) {
+            m_proResStatus.errorMsg = "avformat_new_stream failed";
+            m_proResStatus.active.store(false);
+            avformat_free_context(fmt);
+            return;
+        }
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
@@ -1278,6 +1284,14 @@ void App::exportCurrentClipToProRes() {
             avcodec_free_context(&vctx);
             avformat_free_context(fmt);
             return;
+        }
+        {
+            std::ostringstream vinfo;
+            vinfo << "[ProResExport] Video encoder settings: "
+                  << avcodec_get_name(vctx->codec_id) << " "
+                  << vctx->width << "x" << vctx->height
+                  << " pix_fmt=YUV422P10LE";
+            LogProRes(vinfo.str());
         }
         avcodec_parameters_from_context(vstream->codecpar, vctx);
         vstream->time_base = timeBase;
@@ -1299,7 +1313,13 @@ void App::exportCurrentClipToProRes() {
             if (avcodec_open2(actx, acodec, nullptr) >= 0) {
                 avcodec_parameters_from_context(astream->codecpar, actx);
                 astream->time_base = actx->time_base;
-                LogProRes("[ProResExport] Audio encoder initialized");
+                {
+                    std::ostringstream ainfo;
+                    ainfo << "[ProResExport] Audio encoder: PCM S16LE, channels="
+                          << actx->ch_layout.nb_channels
+                          << " sample_rate=" << actx->sample_rate;
+                    LogProRes(ainfo.str());
+                }
             } else {
                 avcodec_free_context(&actx);
                 actx = nullptr;
@@ -1334,11 +1354,22 @@ void App::exportCurrentClipToProRes() {
         frame->format = vctx->pix_fmt;
         frame->width = width;
         frame->height = height;
-        av_frame_get_buffer(frame, 32);
+        if (av_frame_get_buffer(frame, 32) < 0) {
+            m_proResStatus.errorMsg = "av_frame_get_buffer failed";
+            av_frame_free(&frame);
+            if (actx) avcodec_free_context(&actx);
+            if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
+            avcodec_free_context(&vctx);
+            avformat_free_context(fmt);
+            m_proResStatus.active.store(false);
+            return;
+        }
 
         SwsContext* sws = sws_getContext(width, height, AV_PIX_FMT_RGB24,
                                          width, height, AV_PIX_FMT_YUV422P10LE,
                                          SWS_BILINEAR, nullptr,nullptr,nullptr);
+
+        int framesEncoded = 0;
 
         CPUColorParams cpParams{};
         cpParams.width = width;
@@ -1356,6 +1387,28 @@ void App::exportCurrentClipToProRes() {
             for(int i=0;i<9;++i) cpParams.ccm[i] = ccm_json[i];
         }
         cpParams.saturation = 1.0f;
+
+        {
+            std::ostringstream oss;
+            oss << "[ProResExport] Metadata: black=" << cpParams.blackLevel
+                << " white=" << cpParams.whiteLevel
+                << " cfaType=" << cpParams.cfaType;
+            LogProRes(oss.str());
+
+            std::ostringstream asn;
+            asn << "[ProResExport] asShotNeutral:";
+            for (size_t i = 0; i < asn_json.size(); ++i) {
+                asn << (i ? "," : " ") << asn_json[i];
+            }
+            LogProRes(asn.str());
+
+            std::ostringstream ccmss;
+            ccmss << "[ProResExport] ColorMatrix:";
+            for (int i = 0; i < 9; ++i) {
+                ccmss << (i ? "," : " ") << cpParams.ccm[i];
+            }
+            LogProRes(ccmss.str());
+        }
 
         AVPacket pkt{};
 
@@ -1385,6 +1438,7 @@ void App::exportCurrentClipToProRes() {
                 pkt.dts = pkt.pts;
                 if (av_interleaved_write_frame(fmt, &pkt) < 0) { m_proResStatus.errorMsg = "write_frame failed"; av_packet_unref(&pkt); break; }
                 av_packet_unref(&pkt);
+                ++framesEncoded;
             }
             m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
             if ((idx + 1) % 50 == 0) {
@@ -1443,6 +1497,11 @@ void App::exportCurrentClipToProRes() {
             pkt.dts = pkt.pts;
             av_interleaved_write_frame(fmt, &pkt);
             av_packet_unref(&pkt);
+            ++framesEncoded;
+        }
+
+        if (framesEncoded == 0 && m_proResStatus.errorMsg.empty()) {
+            m_proResStatus.errorMsg = "No video frames encoded";
         }
 
         av_write_trailer(fmt);
@@ -1454,7 +1513,7 @@ void App::exportCurrentClipToProRes() {
 
         if (m_proResStatus.errorMsg.empty()) {
             showActionMessage("Export Finished");
-            LogProRes("[ProResExport] Export finished successfully");
+            LogProRes(std::string("[ProResExport] Export finished successfully, frames encoded: ") + std::to_string(framesEncoded));
         }
         else {
             LogToFile(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
