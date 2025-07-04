@@ -230,25 +230,21 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-find_package(FFMPEG REQUIRED COMPONENTS
-             avcodec avformat avutil swscale swresample)
+find_package(FFMPEG REQUIRED
+  COMPONENTS avcodec avformat avutil swscale swresample
+)
 
-if (FFMPEG_FOUND OR FFmpeg_FOUND)
-    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+# headers
+target_include_directories(${PROJECT_NAME}
+  PRIVATE
+    ${FFMPEG_INCLUDE_DIRS}
+)
 
-    # The FindFFmpeg.cmake shipped with vcpkg creates IMPORTED targets
-    # named  FFMPEG::avcodec  FFMPEG::avformat  …  — they already know how
-    # to switch between Release/Debug .lib files in multi-config generators.
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        FFMPEG::avcodec
-        FFMPEG::avformat
-        FFMPEG::avutil
-        FFMPEG::swscale
-        FFMPEG::swresample
-    )
-
-    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
-endif()
+# all the libs in one go
+target_link_libraries(${PROJECT_NAME}
+  PRIVATE
+    ${FFMPEG_LIBRARIES}
+)
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
