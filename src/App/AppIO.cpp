@@ -1687,6 +1687,41 @@ void App::exportCurrentClipToHevc() {
         int openErr = avcodec_open2(vctx, vcodec, &encOpts);
         av_dict_free(&encOpts);
         av_buffer_unref(&hwRef);
+        if (openErr < 0 && usingAmf) {
+            char errbuf[128];
+            av_strerror(openErr, errbuf, sizeof(errbuf));
+            LogHevc(std::string("[HevcExport] avcodec_open2 failed for hevc_amf: ") + errbuf + ", falling back to software.");
+            usingAmf = false;
+
+            const AVCodec* swCodec = avcodec_find_encoder(AV_CODEC_ID_HEVC);
+            if (!swCodec) {
+                m_hevcStatus.errorMsg = "HEVC software encoder not found";
+                m_hevcStatus.active.store(false);
+                avcodec_free_context(&vctx);
+                avformat_free_context(fmt);
+                return;
+            }
+
+            avcodec_free_context(&vctx);
+            vctx = avcodec_alloc_context3(swCodec);
+            vctx->codec_id = swCodec->id;
+            vctx->codec_type = AVMEDIA_TYPE_VIDEO;
+            vctx->width = width;
+            vctx->height = height;
+            vctx->time_base = timeBase;
+            vctx->framerate = av_inv_q(timeBase);
+            vctx->thread_count = 0;
+            vctx->thread_type = FF_THREAD_SLICE;
+            vctx->pix_fmt = AV_PIX_FMT_YUV420P10LE;
+            if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
+                vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+            encOpts = nullptr;
+            av_dict_set(&encOpts, "preset", "quality", 0);
+            openErr = avcodec_open2(vctx, swCodec, &encOpts);
+            av_dict_free(&encOpts);
+        }
+
         if (openErr < 0) {
             char errbuf[128];
             av_strerror(openErr, errbuf, sizeof(errbuf));
