@@ -180,6 +180,9 @@ add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
+if(HAVE_FFMPEG)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
+endif()
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
     message(STATUS "MSVC: Setting LINK_FLAGS /ENTRY:mainCRTStartup for ${PROJECT_NAME}")
@@ -230,21 +233,28 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-find_package(FFMPEG REQUIRED
-  COMPONENTS avcodec avformat avutil swscale swresample
-)
-
-# headers
 target_include_directories(${PROJECT_NAME}
   PRIVATE
     ${FFMPEG_INCLUDE_DIRS}
 )
 
-# all the libs in one go
-target_link_libraries(${PROJECT_NAME}
-  PRIVATE
-    ${FFMPEG_LIBRARIES}
-)
+# Prefer the imported targets provided by FindFFmpeg (vcpkg), but
+# fall back to the library list variables if the targets are not available.
+if(TARGET FFMPEG::avcodec)
+    target_link_libraries(${PROJECT_NAME}
+      PRIVATE
+        FFMPEG::avcodec
+        FFMPEG::avformat
+        FFMPEG::avutil
+        FFMPEG::swscale
+        FFMPEG::swresample
+    )
+else()
+    target_link_libraries(${PROJECT_NAME}
+      PRIVATE
+        ${FFMPEG_LIBRARIES}
+    )
+endif()
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
