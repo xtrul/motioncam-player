@@ -19,7 +19,6 @@
 
 
 #include <filesystem>
-#include <thread>
 #include <iostream>
 #include <fstream>
 #include <numeric>
@@ -1260,7 +1259,7 @@ void App::exportCurrentClipToProRes() {
             avformat_free_context(fmt);
             return;
         }
-        LogProRes(std::string("[ProResExport] ProRes encoder: ") + avcodec_get_name(vcodec->id));
+        LogProRes("[ProResExport] ProRes encoder found");
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
         if (!vstream) {
@@ -1277,11 +1276,6 @@ void App::exportCurrentClipToProRes() {
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
-        unsigned threads = std::thread::hardware_concurrency();
-        vctx->thread_count = threads ? threads : 1; // use all CPU cores
-        vctx->thread_type = FF_THREAD_FRAME;
-        LogProRes(std::string("[ProResExport] Encoding threads: ") +
-                  std::to_string(vctx->thread_count));
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         if (avcodec_open2(vctx, vcodec, nullptr) < 0) {
