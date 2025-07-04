@@ -37,12 +37,10 @@ find_package(FFmpeg QUIET COMPONENTS avcodec avformat avutil swscale swresample)
 if(NOT FFmpeg_FOUND AND PkgConfig_FOUND)
     pkg_check_modules(PC_FFMPEG QUIET libavcodec libavformat libavutil libswscale libswresample)
 endif()
-
 message(STATUS "FFmpeg_FOUND=${FFmpeg_FOUND} FFMPEG_FOUND=${FFMPEG_FOUND} PC_FFMPEG_FOUND=${PC_FFMPEG_FOUND}")
 if(FFmpeg_FOUND OR FFMPEG_FOUND OR PC_FFMPEG_FOUND)
     message(STATUS "FFmpeg found; enabling ProRes export")
     set(HAVE_FFMPEG TRUE)
-
 else()
     message(STATUS "FFmpeg not found; ProRes export disabled")
     set(HAVE_FFMPEG FALSE)
@@ -251,7 +249,12 @@ if(HAVE_FFMPEG)
             ${FFMPEG_NS}::swscale
             ${FFMPEG_NS}::swresample
         )
-
+    elseif(PC_FFMPEG_FOUND)
+        target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::PC_FFMPEG)
+    elseif(FFMPEG_LIBRARIES)
+        # Fallback for find modules that only expose variables
+        target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
     else()
         message(WARNING "FFmpeg libraries not found; ProRes export disabled")
         set(HAVE_FFMPEG FALSE)
