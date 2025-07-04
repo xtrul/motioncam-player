@@ -32,9 +32,9 @@ if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
 find_package(Threads REQUIRED)
-find_package(FFmpeg REQUIRED COMPONENTS avcodec avformat avutil swscale swresample)
-message(STATUS "FFmpeg_FOUND=${FFmpeg_FOUND} FFMPEG_FOUND=${FFMPEG_FOUND}")
-if(FFmpeg_FOUND OR FFMPEG_FOUND)
+find_package(FFMPEG QUIET COMPONENTS avcodec avformat avutil swscale swresample)
+message(STATUS "FFMPEG_FOUND=${FFMPEG_FOUND}")
+if(FFMPEG_FOUND)
     message(STATUS "FFmpeg found via vcpkg, enabling ProRes export")
     set(HAVE_FFMPEG TRUE)
 else()
@@ -230,21 +230,21 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-find_package(FFmpeg REQUIRED COMPONENTS
+find_package(FFMPEG REQUIRED COMPONENTS
              avcodec avformat avutil swscale swresample)
 
-if (FFmpeg_FOUND)
+if (FFMPEG_FOUND)
     target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
 
     # The FindFFmpeg.cmake shipped with vcpkg creates IMPORTED targets
-    # named  FFmpeg::avcodec  FFmpeg::avformat  …  — they already know how
+    # named  FFMPEG::avcodec  FFMPEG::avformat  …  — they already know how
     # to switch between Release/Debug .lib files in multi-config generators.
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        FFmpeg::avcodec
-        FFmpeg::avformat
-        FFmpeg::avutil
-        FFmpeg::swscale
-        FFmpeg::swresample
+        FFMPEG::avcodec
+        FFMPEG::avformat
+        FFMPEG::avutil
+        FFMPEG::swscale
+        FFMPEG::swresample
     )
 
     target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
