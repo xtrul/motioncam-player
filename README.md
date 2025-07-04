@@ -67,3 +67,10 @@ runtime DLLs will be copied automatically.
   video packets were written.
 - You can override the detected CFA pattern at runtime by pressing the number
   keys `1`‑`4` which map to **BGGR**, **RGGB**, **GBRG**, and **GRBG** respectively.
+
+## HEVC Export (AMD)
+
+- Right-click in the player window and choose **Export to HEVC (AMD)**.
+- Uses the `hevc_amf` hardware encoder with 10‑bit 4:2:0 output (`p010le`).
+- Progress is shown in a modal popup similar to the ProRes export and writes
+  details to `hevc_export_log.txt` in the `Logs` folder.

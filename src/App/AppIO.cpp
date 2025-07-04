@@ -1609,8 +1609,444 @@ void App::exportCurrentClipToProRes() {
         m_proResStatus.active.store(false);
     });
 }
+
+void App::exportCurrentClipToHevcAmf() {
+    if (m_hevcStatus.active.load()) {
+        showActionMessage("Export already running");
+        return;
+    }
+
+    std::string outputPath = openSaveMovDialog();
+    if (outputPath.empty()) return;
+    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
+        outputPath += ".mov";
+    }
+
+    if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder()) {
+        showActionMessage("No clip loaded");
+        return;
+    }
+
+    LogHevc(std::string("[HevcExport] Starting export to ") + outputPath);
+
+    m_hevcStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
+    LogHevc(std::string("[HevcExport] Total frames: ") + std::to_string(m_hevcStatus.totalFrames));
+    m_hevcStatus.currentFrame.store(0);
+    m_hevcStatus.active.store(true);
+    m_hevcStatus.errorMsg.clear();
+    m_showHevcExportProgressPopup.store(true);
+    showActionMessage("Export Started");
+
+    if (m_hevcThread.joinable()) {
+        m_hevcThread.join();
+    }
+
+    m_hevcThread = std::thread([this, outputPath]() {
+        av_log_set_level(AV_LOG_ERROR);
+        LogHevc("[HevcExport] Thread started");
+
+        auto* dec = m_decoderWrapper_ptr->getDecoder();
+        const auto& frames = dec->getFrames();
+        LogHevc(std::string("[HevcExport] Frames to export: ") + std::to_string(frames.size()));
+        if (frames.empty()) {
+            m_hevcStatus.errorMsg = "No frames to export";
+            m_hevcStatus.active.store(false);
+            return;
+        }
+
+        RawBytes rawBuf;
+        nlohmann::json meta;
+        try {
+            dec->loadFrame(frames[0], rawBuf, meta);
+        } catch (const std::exception& e) {
+            LogToFile(std::string("[HevcExport] Failed to load first frame: ") + e.what());
+            m_hevcStatus.errorMsg = "Failed to load first frame";
+            m_hevcStatus.active.store(false);
+            return;
+        }
+        int width = meta.value("width", 0);
+        int height = meta.value("height", 0);
+        LogHevc(std::string("[HevcExport] Frame dimensions: ") + std::to_string(width) + "x" + std::to_string(height));
+        if (width <= 0 || height <= 0) {
+            m_hevcStatus.errorMsg = "Invalid frame dimensions";
+            m_hevcStatus.active.store(false);
+            return;
+        }
+
+        int64_t frameDurationNs = 0;
+        if (frames.size() >= 2) {
+            frameDurationNs = frames[1] - frames[0];
+        } else {
+            frameDurationNs = 41708333; // ~24fps fallback
+        }
+        AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
+        LogHevc(std::string("[HevcExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
+
+        LogHevc("[HevcExport] Allocating output context");
+        AVFormatContext* fmt = nullptr;
+        if (avformat_alloc_output_context2(&fmt, nullptr, nullptr, outputPath.c_str()) < 0 || !fmt) {
+            m_hevcStatus.errorMsg = "avformat_alloc_output_context2 failed";
+            m_hevcStatus.active.store(false);
+            return;
+        }
+        LogHevc("[HevcExport] Output context created");
+
+        const AVCodec* vcodec = avcodec_find_encoder_by_name("hevc_amf");
+        if (!vcodec) {
+            m_hevcStatus.errorMsg = "HEVC encoder not found";
+            m_hevcStatus.active.store(false);
+            avformat_free_context(fmt);
+            return;
+        }
+        LogHevc(std::string("[HevcExport] HEVC encoder: ") + avcodec_get_name(vcodec->id));
+
+        AVStream* vstream = avformat_new_stream(fmt, nullptr);
+        if (!vstream) {
+            m_hevcStatus.errorMsg = "avformat_new_stream failed";
+            m_hevcStatus.active.store(false);
+            avformat_free_context(fmt);
+            return;
+        }
+        AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
+        vctx->codec_id = vcodec->id;
+        vctx->codec_type = AVMEDIA_TYPE_VIDEO;
+        vctx->pix_fmt = AV_PIX_FMT_P010LE;
+        vctx->width = width;
+        vctx->height = height;
+        vctx->time_base = timeBase;
+        vctx->framerate = av_inv_q(timeBase);
+        unsigned threads = std::thread::hardware_concurrency();
+        if (threads == 0) threads = 1;
+        vctx->thread_count = 0;
+        vctx->thread_type = FF_THREAD_FRAME;
+        LogHevc(std::string("[HevcExport] Detected CPU threads: ") + std::to_string(threads));
+        LogHevc(std::string("[HevcExport] Thread type: FRAME"));
+        if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
+            vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+        AVDictionary* encOpts = nullptr;
+        av_dict_set(&encOpts, "profile", "2", 0);
+        av_dict_set(&encOpts, "usage", "4", 0);
+        if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
+            m_hevcStatus.errorMsg = "avcodec_open2 failed";
+            m_hevcStatus.active.store(false);
+            avcodec_free_context(&vctx);
+            avformat_free_context(fmt);
+            av_dict_free(&encOpts);
+            return;
+        }
+        av_dict_free(&encOpts);
+        LogHevc(std::string("[HevcExport] Actual thread count: ") + std::to_string(vctx->thread_count));
+        {
+            std::ostringstream vinfo;
+            vinfo << "[HevcExport] Video encoder settings: "
+                  << avcodec_get_name(vctx->codec_id) << " "
+                  << vctx->width << "x" << vctx->height
+                  << " pix_fmt=P010LE";
+            LogHevc(vinfo.str());
+        }
+        avcodec_parameters_from_context(vstream->codecpar, vctx);
+        vstream->time_base = timeBase;
+
+        const AVCodec* acodec = avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE);
+        AVStream* astream = nullptr;
+        AVCodecContext* actx = nullptr;
+        if (acodec) {
+            astream = avformat_new_stream(fmt, nullptr);
+            actx = avcodec_alloc_context3(acodec);
+            actx->codec_id = AV_CODEC_ID_PCM_S16LE;
+            actx->sample_rate = 48000;
+            av_channel_layout_default(&actx->ch_layout, 2);
+            actx->sample_fmt = AV_SAMPLE_FMT_S16;
+            actx->time_base = {1, actx->sample_rate};
+            if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
+                actx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+            if (avcodec_open2(actx, acodec, nullptr) >= 0) {
+                avcodec_parameters_from_context(astream->codecpar, actx);
+                astream->time_base = actx->time_base;
+                {
+                    std::ostringstream ainfo;
+                    ainfo << "[HevcExport] Audio encoder: PCM S16LE, channels="
+                          << actx->ch_layout.nb_channels
+                          << " sample_rate=" << actx->sample_rate;
+                    LogHevc(ainfo.str());
+                }
+            } else {
+                avcodec_free_context(&actx);
+                actx = nullptr;
+                LogHevc("[HevcExport] Failed to initialize audio encoder");
+            }
+        }
+
+        if (!(fmt->oformat->flags & AVFMT_NOFILE)) {
+            LogHevc("[HevcExport] Opening output file");
+            if (avio_open(&fmt->pb, outputPath.c_str(), AVIO_FLAG_WRITE) < 0) {
+                m_hevcStatus.errorMsg = "avio_open failed";
+                m_hevcStatus.active.store(false);
+                avcodec_free_context(&vctx);
+                avformat_free_context(fmt);
+                return;
+            }
+            LogHevc("[HevcExport] Output file opened");
+        }
+
+        LogHevc("[HevcExport] Writing header");
+        if (avformat_write_header(fmt, nullptr) < 0) {
+            m_hevcStatus.errorMsg = "avformat_write_header failed";
+            m_hevcStatus.active.store(false);
+            if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
+            avcodec_free_context(&vctx);
+            avformat_free_context(fmt);
+            return;
+        }
+        LogHevc("[HevcExport] Header written");
+
+        auto encodeStart = std::chrono::steady_clock::now();
+        LogHevc("[HevcExport] Encode loop starting");
+        long long readUS = 0;
+        long long rgbUS = 0;
+        long long scaleUS = 0;
+        long long encodeUS = 0;
+
+        AVFrame* frame = av_frame_alloc();
+        frame->format = vctx->pix_fmt;
+        frame->width = width;
+        frame->height = height;
+        if (av_frame_get_buffer(frame, 32) < 0) {
+            m_hevcStatus.errorMsg = "av_frame_get_buffer failed";
+            av_frame_free(&frame);
+            if (actx) avcodec_free_context(&actx);
+            if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
+            avcodec_free_context(&vctx);
+            avformat_free_context(fmt);
+            m_hevcStatus.active.store(false);
+            return;
+        }
+
+        SwsContext* sws = sws_getContext(width, height, AV_PIX_FMT_RGB24,
+                                         width, height, AV_PIX_FMT_P010LE,
+                                         SWS_BILINEAR, nullptr,nullptr,nullptr);
+        av_opt_set_int(sws, "threads", threads, 0);
+        LogHevc(std::string("[HevcExport] swscale threads: ") + std::to_string(threads));
+
+        int framesEncoded = 0;
+
+        CPUColorParams cpParams{};
+        cpParams.width = width;
+        cpParams.height = height;
+        cpParams.cfaType = m_cfaTypeFromMetadata;
+        cpParams.blackLevel = m_staticBlack;
+        cpParams.whiteLevel = m_staticWhite;
+        auto asn_json = meta.value("asShotNeutral", std::vector<double>{1.0,1.0,1.0});
+        if (asn_json.size() >= 3) {
+            cpParams.gainR = (asn_json[1] > 1e-6 && asn_json[0] > 1e-6) ? (float)(asn_json[1]/asn_json[0]) : 1.0f;
+            cpParams.gainB = (asn_json[1] > 1e-6 && asn_json[2] > 1e-6) ? (float)(asn_json[1]/asn_json[2]) : 1.0f;
+        }
+        auto ccm_json = meta.value("ColorMatrix2", meta.value("ColorMatrix", std::vector<float>{1,0,0,0,1,0,0,0,1}));
+        if (ccm_json.size() == 9) {
+            for(int i=0;i<9;++i) cpParams.ccm[i] = ccm_json[i];
+        }
+        cpParams.saturation = 1.0f;
+
+        {
+            std::ostringstream oss;
+            oss << "[HevcExport] Metadata: black=" << cpParams.blackLevel
+                << " white=" << cpParams.whiteLevel
+                << " cfaType=" << cpParams.cfaType;
+            LogHevc(oss.str());
+
+            std::ostringstream asn;
+            asn << "[HevcExport] asShotNeutral:";
+            for (size_t i = 0; i < asn_json.size(); ++i) {
+                asn << (i ? "," : " ") << asn_json[i];
+            }
+            LogHevc(asn.str());
+
+            std::ostringstream ccmss;
+            ccmss << "[HevcExport] ColorMatrix:";
+            for (int i = 0; i < 9; ++i) {
+                ccmss << (i ? "," : " ") << cpParams.ccm[i];
+            }
+            LogHevc(ccmss.str());
+        }
+
+        AVPacket pkt{};
+
+        std::vector<uint8_t> rgbBuf;
+        int64_t pts = 0;
+        for (size_t idx = 0; idx < frames.size(); ++idx) {
+            RawBytes raw;
+            nlohmann::json metaTmp;
+            auto t0 = std::chrono::steady_clock::now();
+            try { dec->loadFrame(frames[idx], raw, metaTmp); }
+            catch (...) { m_hevcStatus.errorMsg = "Frame read error"; break; }
+            auto t1 = std::chrono::steady_clock::now();
+            readUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+
+            t0 = t1;
+            convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
+            t1 = std::chrono::steady_clock::now();
+            rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+
+            if (av_frame_make_writable(frame) < 0) { m_hevcStatus.errorMsg = "frame not writable"; break; }
+            const uint8_t* srcSlices[1] = { rgbBuf.data() };
+            int srcStride[1] = { width*3 };
+            t0 = std::chrono::steady_clock::now();
+            sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
+            t1 = std::chrono::steady_clock::now();
+            scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+
+            frame->pts = pts;
+            pts++;
+
+            t0 = std::chrono::steady_clock::now();
+            if (avcodec_send_frame(vctx, frame) < 0) { m_hevcStatus.errorMsg = "send_frame failed"; break; }
+            while (avcodec_receive_packet(vctx, &pkt) == 0) {
+                pkt.stream_index = vstream->index;
+                pkt.duration = 1;
+                pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
+                pkt.dts = pkt.pts;
+                if (av_interleaved_write_frame(fmt, &pkt) < 0) { m_hevcStatus.errorMsg = "write_frame failed"; av_packet_unref(&pkt); break; }
+                av_packet_unref(&pkt);
+                ++framesEncoded;
+            }
+            t1 = std::chrono::steady_clock::now();
+            encodeUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            m_hevcStatus.currentFrame.store(static_cast<int>(idx + 1));
+            if ((idx + 1) % 50 == 0) {
+                auto now = std::chrono::steady_clock::now();
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - encodeStart).count();
+                std::ostringstream prog;
+                prog << "[HevcExport] Encoded frame " << (idx + 1) << "/" << frames.size()
+                     << " elapsed=" << ms << "ms";
+                LogHevc(prog.str());
+            }
+        }
+
+        if (actx && astream) {
+            LogHevc("[HevcExport] Starting audio encode");
+            motioncam::AudioChunkLoader* loader = m_decoderWrapper_ptr->makeFreshAudioLoader();
+            motioncam::AudioChunk chunk;
+            int64_t audioPts = 0;
+            while (loader && loader->next(chunk)) {
+                if (chunk.second.empty()) break;
+                AVFrame* af = av_frame_alloc();
+                af->format = actx->sample_fmt;
+                av_channel_layout_copy(&af->ch_layout, &actx->ch_layout);
+                af->sample_rate = actx->sample_rate;
+                int nb = chunk.second.size() / actx->ch_layout.nb_channels;
+                af->nb_samples = nb;
+                av_frame_get_buffer(af, 0);
+                memcpy(af->data[0], chunk.second.data(), chunk.second.size()*sizeof(int16_t));
+                af->pts = audioPts;
+                audioPts += nb;
+                if (avcodec_send_frame(actx, af) >= 0) {
+                    AVPacket apkt{};
+                    while (avcodec_receive_packet(actx, &apkt) == 0) {
+                        apkt.stream_index = astream->index;
+                        apkt.pts = av_rescale_q(apkt.pts, actx->time_base, astream->time_base);
+                        apkt.dts = apkt.pts;
+                        apkt.duration = apkt.size ? nb : 0;
+                        av_interleaved_write_frame(fmt, &apkt);
+                        av_packet_unref(&apkt);
+                    }
+                }
+                av_frame_free(&af);
+            }
+            avcodec_send_frame(actx, nullptr);
+            AVPacket apkt{};
+            while (avcodec_receive_packet(actx, &apkt) == 0) {
+                apkt.stream_index = astream->index;
+                apkt.pts = av_rescale_q(apkt.pts, actx->time_base, astream->time_base);
+                apkt.dts = apkt.pts;
+                av_interleaved_write_frame(fmt, &apkt);
+                av_packet_unref(&apkt);
+            }
+            LogHevc("[HevcExport] Audio encode finished");
+        }
+
+        auto flushStart = std::chrono::steady_clock::now();
+        avcodec_send_frame(vctx, nullptr);
+        while (avcodec_receive_packet(vctx, &pkt) == 0) {
+            pkt.stream_index = vstream->index;
+            pkt.duration = 1;
+            pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
+            pkt.dts = pkt.pts;
+            av_interleaved_write_frame(fmt, &pkt);
+            av_packet_unref(&pkt);
+            ++framesEncoded;
+        }
+        encodeUS += std::chrono::duration_cast<std::chrono::microseconds>(
+                       std::chrono::steady_clock::now() - flushStart)
+                       .count();
+
+        if (framesEncoded == 0 && m_hevcStatus.errorMsg.empty()) {
+            m_hevcStatus.errorMsg = "No video frames encoded";
+        }
+
+        auto encodeEnd = std::chrono::steady_clock::now();
+        auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(encodeEnd - encodeStart).count();
+        double fps = totalMs > 0 ? (framesEncoded * 1000.0) / totalMs : 0.0;
+        {
+            std::ostringstream finfo;
+            finfo << "[HevcExport] Encode duration=" << totalMs << "ms fps="
+                  << std::fixed << std::setprecision(2) << fps;
+            LogHevc(finfo.str());
+        }
+        {
+            std::ostringstream summary;
+            summary << "[HevcExport] Timing breakdown ms: read="
+                    << (readUS / 1000) << " rgb=" << (rgbUS / 1000)
+                    << " scale=" << (scaleUS / 1000)
+                    << " encode=" << (encodeUS / 1000);
+            LogHevc(summary.str());
+        }
+        long long totalUS = readUS + rgbUS + scaleUS + encodeUS;
+        if (framesEncoded > 0 && totalUS > 0) {
+            double readAvg = readUS / 1000.0 / framesEncoded;
+            double rgbAvg = rgbUS / 1000.0 / framesEncoded;
+            double scaleAvg = scaleUS / 1000.0 / framesEncoded;
+            double encAvg = encodeUS / 1000.0 / framesEncoded;
+            std::ostringstream avg;
+            avg << "[HevcExport] Avg per-frame ms: read=" << std::fixed
+                << std::setprecision(2) << readAvg << " rgb=" << rgbAvg
+                << " scale=" << scaleAvg << " encode=" << encAvg;
+            LogHevc(avg.str());
+
+            double readPct = readUS * 100.0 / totalUS;
+            double rgbPct = rgbUS * 100.0 / totalUS;
+            double scalePct = scaleUS * 100.0 / totalUS;
+            double encPct = encodeUS * 100.0 / totalUS;
+            std::ostringstream pct;
+            pct << "[HevcExport] Time share %: read=" << readPct
+                << " rgb=" << rgbPct << " scale=" << scalePct
+                << " encode=" << encPct;
+            LogHevc(pct.str());
+        }
+
+        av_write_trailer(fmt);
+        sws_freeContext(sws);
+        if (actx) avcodec_free_context(&actx);
+        if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
+        avcodec_free_context(&vctx);
+        avformat_free_context(fmt);
+
+        if (m_hevcStatus.errorMsg.empty()) {
+            showActionMessage("Export Finished");
+            LogHevc(std::string("[HevcExport] Export finished successfully, frames encoded: ") + std::to_string(framesEncoded));
+        }
+        else {
+            LogToFile(std::string("[HevcExport] Error: ") + m_hevcStatus.errorMsg);
+            LogHevc(std::string("[HevcExport] Error: ") + m_hevcStatus.errorMsg);
+        }
+        m_hevcStatus.active.store(false);
+    });
+}
 #else
 void App::exportCurrentClipToProRes() {
+    showActionMessage("FFmpeg support not built");
+}
+
+void App::exportCurrentClipToHevcAmf() {
     showActionMessage("FFmpeg support not built");
 }
 #endif
