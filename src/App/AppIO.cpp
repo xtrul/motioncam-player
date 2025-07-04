@@ -1259,7 +1259,7 @@ void App::exportCurrentClipToProRes() {
             avformat_free_context(fmt);
             return;
         }
-        LogProRes("[ProResExport] ProRes encoder found");
+        LogProRes(std::string("[ProResExport] ProRes encoder: ") + avcodec_get_name(vcodec->id));
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
         if (!vstream) {
@@ -1276,6 +1276,7 @@ void App::exportCurrentClipToProRes() {
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
+        vctx->thread_count = 0; // let FFmpeg decide optimal threading
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         if (avcodec_open2(vctx, vcodec, nullptr) < 0) {
