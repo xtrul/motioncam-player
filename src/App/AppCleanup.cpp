@@ -59,6 +59,13 @@ App::~App() {
         LogToFile("[App::~App] ProRes export thread joined.");
     }
 #endif
+#ifdef ENABLE_HEVC_EXPORT
+    if (m_hevcThread.joinable()) {
+        LogToFile("[App::~App] Joining HEVC export thread...");
+        m_hevcThread.join();
+        LogToFile("[App::~App] HEVC export thread joined.");
+    }
+#endif
 
     destroyPersistentStagingBuffers();
 
