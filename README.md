@@ -22,23 +22,14 @@ This project builds a desktop player for MotionCam `.mcraw` files.
     cmake --build build --config Release
     ```
 
-FFmpeg is required for the "Export to ProRes" feature. When detected, the build
-system defines the `ENABLE_PRORES_EXPORT` flag. It will link using the
-`FFMPEG::` imported targets provided by vcpkg when they are available, falling
-back to the `${FFMPEG_LIBRARIES}` list otherwise. The CMake configuration will
-fail if the libraries cannot be found via vcpkg. When running the application on
-Windows, ensure the FFmpeg runtime DLLs are available. A simple
+FFmpeg is required for the "Export to ProRes" feature. The CMake configuration
+will fail if the libraries cannot be found via vcpkg. When running the
+application on Windows, ensure the FFmpeg runtime DLLs are available. A simple
 approach is to copy them from
 `C:/dev/vcpkg/installed/x64-windows/bin` (e.g. `avcodec-61.dll`,
 `avformat-61.dll`, `avutil-59.dll`, `swscale-8.dll`, `swresample-5.dll`,
 `avfilter-10.dll`) to the output directory next to the executable. The
 `avfilter-10.pdb` file may also be copied for debugging symbols.
-
-If the **Export to ProRes** option is grayed out in the application, it means
-the binary was built without FFmpeg support. Re-run CMake and check that the
-configure step prints "FFmpeg found via vcpkg, enabling ProRes export". When
-this message appears, the `ENABLE_PRORES_EXPORT` definition is added and the
-runtime DLLs will be copied automatically.
 
 ## ProRes Export
 
