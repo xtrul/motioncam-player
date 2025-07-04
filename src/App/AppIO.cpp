@@ -1193,7 +1193,10 @@ void App::exportCurrentClipToProRes() {
         return;
     }
 
+    LogProRes(std::string("[ProResExport] Starting export to ") + outputPath);
+
     m_proResStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
+    LogProRes(std::string("[ProResExport] Total frames: ") + std::to_string(m_proResStatus.totalFrames));
     m_proResStatus.currentFrame.store(0);
     m_proResStatus.active.store(true);
     m_proResStatus.errorMsg.clear();
@@ -1206,9 +1209,11 @@ void App::exportCurrentClipToProRes() {
 
     m_proResThread = std::thread([this, outputPath]() {
         av_log_set_level(AV_LOG_ERROR);
+        LogProRes("[ProResExport] Thread started");
 
         auto* dec = m_decoderWrapper_ptr->getDecoder();
         const auto& frames = dec->getFrames();
+        LogProRes(std::string("[ProResExport] Frames to export: ") + std::to_string(frames.size()));
         if (frames.empty()) {
             m_proResStatus.errorMsg = "No frames to export";
             m_proResStatus.active.store(false);
@@ -1227,6 +1232,7 @@ void App::exportCurrentClipToProRes() {
         }
         int width = meta.value("width", 0);
         int height = meta.value("height", 0);
+        LogProRes(std::string("[ProResExport] Frame dimensions: ") + std::to_string(width) + "x" + std::to_string(height));
         if (width <= 0 || height <= 0) {
             m_proResStatus.errorMsg = "Invalid frame dimensions";
             m_proResStatus.active.store(false);
@@ -1240,13 +1246,16 @@ void App::exportCurrentClipToProRes() {
             frameDurationNs = 41708333; // ~24fps fallback
         }
         AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
+        LogProRes(std::string("[ProResExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
 
+        LogProRes("[ProResExport] Allocating output context");
         AVFormatContext* fmt = nullptr;
         if (avformat_alloc_output_context2(&fmt, nullptr, nullptr, outputPath.c_str()) < 0 || !fmt) {
             m_proResStatus.errorMsg = "avformat_alloc_output_context2 failed";
             m_proResStatus.active.store(false);
             return;
         }
+        LogProRes("[ProResExport] Output context created");
 
         const AVCodec* vcodec = avcodec_find_encoder_by_name("prores_ks");
         if (!vcodec) {
@@ -1255,6 +1264,7 @@ void App::exportCurrentClipToProRes() {
             avformat_free_context(fmt);
             return;
         }
+        LogProRes("[ProResExport] ProRes encoder found");
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
@@ -1294,13 +1304,16 @@ void App::exportCurrentClipToProRes() {
             if (avcodec_open2(actx, acodec, nullptr) >= 0) {
                 avcodec_parameters_from_context(astream->codecpar, actx);
                 astream->time_base = actx->time_base;
+                LogProRes("[ProResExport] Audio encoder initialized");
             } else {
                 avcodec_free_context(&actx);
                 actx = nullptr;
+                LogProRes("[ProResExport] Failed to initialize audio encoder");
             }
         }
 
         if (!(fmt->oformat->flags & AVFMT_NOFILE)) {
+            LogProRes("[ProResExport] Opening output file");
             if (avio_open(&fmt->pb, outputPath.c_str(), AVIO_FLAG_WRITE) < 0) {
                 m_proResStatus.errorMsg = "avio_open failed";
                 m_proResStatus.active.store(false);
@@ -1308,8 +1321,10 @@ void App::exportCurrentClipToProRes() {
                 avformat_free_context(fmt);
                 return;
             }
+            LogProRes("[ProResExport] Output file opened");
         }
 
+        LogProRes("[ProResExport] Writing header");
         if (avformat_write_header(fmt, nullptr) < 0) {
             m_proResStatus.errorMsg = "avformat_write_header failed";
             m_proResStatus.active.store(false);
@@ -1318,6 +1333,7 @@ void App::exportCurrentClipToProRes() {
             avformat_free_context(fmt);
             return;
         }
+        LogProRes("[ProResExport] Header written");
 
         AVFrame* frame = av_frame_alloc();
         frame->format = vctx->pix_fmt;
@@ -1377,10 +1393,14 @@ void App::exportCurrentClipToProRes() {
                 av_packet_unref(&pkt);
             }
             m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
+            if ((idx + 1) % 50 == 0) {
+                LogProRes(std::string("[ProResExport] Encoded frame ") + std::to_string(idx + 1) + "/" + std::to_string(frames.size()));
+            }
         }
 
         // Encode audio
         if (actx && astream) {
+            LogProRes("[ProResExport] Starting audio encode");
             motioncam::AudioChunkLoader* loader = m_decoderWrapper_ptr->makeFreshAudioLoader();
             motioncam::AudioChunk chunk;
             int64_t audioPts = 0;
@@ -1418,6 +1438,7 @@ void App::exportCurrentClipToProRes() {
                 av_interleaved_write_frame(fmt, &apkt);
                 av_packet_unref(&apkt);
             }
+            LogProRes("[ProResExport] Audio encode finished");
         }
 
         avcodec_send_frame(vctx, nullptr);
@@ -1437,8 +1458,14 @@ void App::exportCurrentClipToProRes() {
         avcodec_free_context(&vctx);
         avformat_free_context(fmt);
 
-        if (m_proResStatus.errorMsg.empty()) showActionMessage("Export Finished");
-        else LogToFile(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
+        if (m_proResStatus.errorMsg.empty()) {
+            showActionMessage("Export Finished");
+            LogProRes("[ProResExport] Export finished successfully");
+        }
+        else {
+            LogToFile(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
+            LogProRes(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
+        }
         m_proResStatus.active.store(false);
     });
 }
