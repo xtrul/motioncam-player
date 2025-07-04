@@ -150,10 +150,6 @@ App::App(const std::string& filePath) :
     , m_showExportProgressPopup(false)
     , m_proResStatus()
 #endif
-#ifdef ENABLE_HEVC_EXPORT
-    , m_showHevcProgressPopup(false)
-    , m_hevcStatus()
-#endif
 {
     LogToFile(std::string("App::App Constructor called for file: ") + this->m_filePath);
 #ifndef NDEBUG
