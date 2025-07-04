@@ -19,8 +19,7 @@ static inline float linFromRaw(uint16_t v, double black, double invRange) {
     return static_cast<float>(t);
 }
 
-void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
-                       std::vector<uint8_t>& outRGB, unsigned threads)
+void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p, std::vector<uint8_t>& outRGB)
 {
     outRGB.resize(p.width * p.height * 3);
     double range = p.whiteLevel - p.blackLevel;
@@ -36,7 +35,7 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
 
     const float* ccm = p.ccm.data();
 
-    auto processRow = [&](int y){
+    for(int y=0;y<p.height;++y){
         for(int x=0;x<p.width;++x){
             bool ye = (y%2)==0;
             bool xe = (x%2)==0;
@@ -98,20 +97,5 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
             dst[1] = (uint8_t)std::clamp(int(srgb_eotf(g_cc)*255.0f + 0.5f),0,255);
             dst[2] = (uint8_t)std::clamp(int(srgb_eotf(b_cc)*255.0f + 0.5f),0,255);
         }
-    };
-
-    if(threads <= 1) {
-        for(int y=0;y<p.height;++y)
-            processRow(y);
-    } else {
-        std::vector<std::thread> workers;
-        workers.reserve(threads);
-        for(unsigned t=0;t<threads;++t){
-            workers.emplace_back([&,t]{
-                for(int y=t;y<p.height;y+=threads)
-                    processRow(y);
-            });
-        }
-        for(auto& th : workers) th.join();
     }
 }
