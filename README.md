@@ -45,8 +45,12 @@ runtime DLLs will be copied automatically.
 - Right-click anywhere in the player window to open the context menu.
 - Choose **Export to ProRes** and select a `.mov` file path.
 - Encoding uses FFmpeg linked via vcpkg. Make sure the libraries are installed in your vcpkg instance.
-- Progress is shown in a modal popup while the encoding thread runs.
-- The export uses the `prores_ks` encoder to create a 10-bit 4:2:2 file.
+ - Progress is shown in a modal popup while the encoding thread runs.
+ - The export uses the `prores_ks` encoder with slice threading so every CPU
+   core can participate in encoding. The log records the detected thread count
+   and thread type and prints progress every 50 frames with elapsed time.
+   A timing summary of decode, color conversion, scaling and encode steps is
+   written at the end so you can locate bottlenecks.
 - Frame rate is derived from the clip's timestamps so the output is constant frame rate.
 - If the clip contains audio, 16‑bit PCM is muxed into the `.mov` container.
 - A `prores_export_log.txt` file is written inside the `Logs` folder for troubleshooting.
