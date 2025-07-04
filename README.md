@@ -60,14 +60,4 @@ runtime DLLs will be copied automatically.
   **"No video frames encoded"**. This means the frame conversion failed and no
   video packets were written.
 - You can override the detected CFA pattern at runtime by pressing the number
-    keys `1`‑`4` which map to **BGGR**, **RGGB**, **GBRG**, and **GRBG** respectively.
-
-## HEVC Export (AMF)
-
-- When FFmpeg is found during configuration, the build also enables
-  `ENABLE_HEVC_EXPORT`.
-- On Windows with a compatible AMD GPU and drivers, the player can
-  export to HEVC using the `hevc_amf` hardware encoder.
-- Right-click and choose **Export to HEVC** to save an `.mp4` file.
-- A `hevc_export_log.txt` file is written in the `Logs` folder containing
-  per-frame timing information and encoder diagnostics.
+  keys `1`‑`4` which map to **BGGR**, **RGGB**, **GBRG**, and **GRBG** respectively.
