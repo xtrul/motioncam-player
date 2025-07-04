@@ -37,7 +37,6 @@ message(STATUS "FFmpeg_FOUND=${FFmpeg_FOUND} FFMPEG_FOUND=${FFMPEG_FOUND}")
 if(FFMPEG_FOUND OR FFmpeg_FOUND)
     message(STATUS "FFmpeg found via vcpkg, enabling ProRes export")
     set(HAVE_FFMPEG TRUE)
-    set(PRORES_COMPILE_DEFS ENABLE_PRORES_EXPORT)
 else()
     message(STATUS "FFmpeg not found; ProRes export disabled")
     set(HAVE_FFMPEG FALSE)
@@ -181,9 +180,6 @@ add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
-if(PRORES_COMPILE_DEFS)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE ${PRORES_COMPILE_DEFS})
-endif()
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
     message(STATUS "MSVC: Setting LINK_FLAGS /ENTRY:mainCRTStartup for ${PROJECT_NAME}")
@@ -234,28 +230,21 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
+find_package(FFMPEG REQUIRED
+  COMPONENTS avcodec avformat avutil swscale swresample
+)
+
+# headers
 target_include_directories(${PROJECT_NAME}
   PRIVATE
     ${FFMPEG_INCLUDE_DIRS}
 )
 
-# Prefer the imported targets provided by FindFFmpeg (vcpkg), but
-# fall back to the library list variables if the targets are not available.
-if(TARGET FFMPEG::avcodec)
-    target_link_libraries(${PROJECT_NAME}
-      PRIVATE
-        FFMPEG::avcodec
-        FFMPEG::avformat
-        FFMPEG::avutil
-        FFMPEG::swscale
-        FFMPEG::swresample
-    )
-else()
-    target_link_libraries(${PROJECT_NAME}
-      PRIVATE
-        ${FFMPEG_LIBRARIES}
-    )
-endif()
+# all the libs in one go
+target_link_libraries(${PROJECT_NAME}
+  PRIVATE
+    ${FFMPEG_LIBRARIES}
+)
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
