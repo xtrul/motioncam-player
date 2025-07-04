@@ -245,6 +245,13 @@ namespace GuiOverlay {
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
+#ifdef ENABLE_HEVC_EXPORT
+            if (ImGui::MenuItem("Export to HEVC", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->exportCurrentClipToHevc();
+            }
+#else
+            ImGui::MenuItem("Export to HEVC", nullptr, false, false);
+#endif
             ImGui::EndPopup();
         }
 
@@ -683,6 +690,28 @@ namespace GuiOverlay {
                 if (ImGui::Button("Close")) {
                     ImGui::CloseCurrentPopup();
                     appInstance->m_showExportProgressPopup.store(false);
+                }
+            }
+            ImGui::EndPopup();
+        }
+#endif
+#ifdef ENABLE_HEVC_EXPORT
+        if (appInstance->m_showHevcProgressPopup.load()) {
+            ImGui::OpenPopup("HEVC_EXPORT_PROGRESS");
+        }
+        if (ImGui::BeginPopupModal("HEVC_EXPORT_PROGRESS", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            int cur = appInstance->m_hevcStatus.currentFrame.load();
+            int total = appInstance->m_hevcStatus.totalFrames;
+            float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
+            ImGui::Text("Exporting to HEVC %d / %d", cur, total);
+            ImGui::ProgressBar(progress, ImVec2(200, 0));
+            if (!appInstance->m_hevcStatus.errorMsg.empty()) {
+                ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_hevcStatus.errorMsg.c_str());
+            }
+            if (!appInstance->m_hevcStatus.active.load()) {
+                if (ImGui::Button("Close")) {
+                    ImGui::CloseCurrentPopup();
+                    appInstance->m_showHevcProgressPopup.store(false);
                 }
             }
             ImGui::EndPopup();
