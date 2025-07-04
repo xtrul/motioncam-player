@@ -19,9 +19,6 @@
 
 
 #include <filesystem>
-#include <thread>
-#include <chrono>
-#include <iomanip>
 #include <iostream>
 #include <fstream>
 #include <numeric>
@@ -1262,7 +1259,7 @@ void App::exportCurrentClipToProRes() {
             avformat_free_context(fmt);
             return;
         }
-        LogProRes(std::string("[ProResExport] ProRes encoder: ") + avcodec_get_name(vcodec->id));
+        LogProRes("[ProResExport] ProRes encoder found");
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
         if (!vstream) {
@@ -1279,13 +1276,6 @@ void App::exportCurrentClipToProRes() {
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
-        unsigned threads = std::thread::hardware_concurrency();
-        vctx->thread_count = threads ? threads : 1; // use all CPU cores
-        vctx->thread_type = FF_THREAD_FRAME;
-        LogProRes(std::string("[ProResExport] Encoding threads: ") +
-                  std::to_string(vctx->thread_count));
-        LogProRes(std::string("[ProResExport] Thread type: ") +
-                  (vctx->thread_type == FF_THREAD_FRAME ? "FRAME" : "SLICE"));
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         if (avcodec_open2(vctx, vcodec, nullptr) < 0) {
@@ -1359,9 +1349,6 @@ void App::exportCurrentClipToProRes() {
             return;
         }
         LogProRes("[ProResExport] Header written");
-
-        auto encodeStart = std::chrono::steady_clock::now();
-        LogProRes("[ProResExport] Encode loop starting");
 
         AVFrame* frame = av_frame_alloc();
         frame->format = vctx->pix_fmt;
@@ -1455,12 +1442,7 @@ void App::exportCurrentClipToProRes() {
             }
             m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
             if ((idx + 1) % 50 == 0) {
-                auto now = std::chrono::steady_clock::now();
-                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - encodeStart).count();
-                std::ostringstream prog;
-                prog << "[ProResExport] Encoded frame " << (idx + 1) << "/" << frames.size()
-                     << " elapsed=" << ms << "ms";
-                LogProRes(prog.str());
+                LogProRes(std::string("[ProResExport] Encoded frame ") + std::to_string(idx + 1) + "/" + std::to_string(frames.size()));
             }
         }
 
@@ -1520,15 +1502,6 @@ void App::exportCurrentClipToProRes() {
 
         if (framesEncoded == 0 && m_proResStatus.errorMsg.empty()) {
             m_proResStatus.errorMsg = "No video frames encoded";
-        }
-
-        auto encodeEnd = std::chrono::steady_clock::now();
-        auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(encodeEnd - encodeStart).count();
-        double fps = totalMs > 0 ? (framesEncoded * 1000.0) / totalMs : 0.0;
-        {
-            std::ostringstream finfo;
-            finfo << "[ProResExport] Encode duration=" << totalMs << "ms fps=" << std::fixed << std::setprecision(2) << fps;
-            LogProRes(finfo.str());
         }
 
         av_write_trailer(fmt);
