@@ -19,6 +19,9 @@
 
 
 #include <filesystem>
+#include <thread>
+#include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <fstream>
 #include <numeric>
@@ -1259,7 +1262,7 @@ void App::exportCurrentClipToProRes() {
             avformat_free_context(fmt);
             return;
         }
-        LogProRes("[ProResExport] ProRes encoder found");
+        LogProRes(std::string("[ProResExport] ProRes encoder: ") + avcodec_get_name(vcodec->id));
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
         if (!vstream) {
@@ -1276,15 +1279,29 @@ void App::exportCurrentClipToProRes() {
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
+        unsigned threads = std::thread::hardware_concurrency();
+        if (threads == 0) threads = 1;
+        vctx->thread_count = 0; // let FFmpeg decide based on HW
+        vctx->thread_type = FF_THREAD_FRAME;
+        LogProRes(std::string("[ProResExport] Detected CPU threads: ") +
+                  std::to_string(threads));
+        LogProRes(std::string("[ProResExport] Thread type: FRAME"));
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-        if (avcodec_open2(vctx, vcodec, nullptr) < 0) {
+        AVDictionary* encOpts = nullptr;
+        av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
+        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
+        if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_proResStatus.errorMsg = "avcodec_open2 failed";
             m_proResStatus.active.store(false);
             avcodec_free_context(&vctx);
             avformat_free_context(fmt);
+            av_dict_free(&encOpts);
             return;
         }
+        av_dict_free(&encOpts);
+        LogProRes(std::string("[ProResExport] Actual thread count: ") +
+                  std::to_string(vctx->thread_count));
         {
             std::ostringstream vinfo;
             vinfo << "[ProResExport] Video encoder settings: "
@@ -1350,6 +1367,13 @@ void App::exportCurrentClipToProRes() {
         }
         LogProRes("[ProResExport] Header written");
 
+        auto encodeStart = std::chrono::steady_clock::now();
+        LogProRes("[ProResExport] Encode loop starting");
+        long long readUS = 0;
+        long long rgbUS = 0;
+        long long scaleUS = 0;
+        long long encodeUS = 0;
+
         AVFrame* frame = av_frame_alloc();
         frame->format = vctx->pix_fmt;
         frame->width = width;
@@ -1368,6 +1392,8 @@ void App::exportCurrentClipToProRes() {
         SwsContext* sws = sws_getContext(width, height, AV_PIX_FMT_RGB24,
                                          width, height, AV_PIX_FMT_YUV422P10LE,
                                          SWS_BILINEAR, nullptr,nullptr,nullptr);
+        av_opt_set_int(sws, "threads", threads, 0);
+        LogProRes(std::string("[ProResExport] swscale threads: ") + std::to_string(threads));
 
         int framesEncoded = 0;
 
@@ -1417,19 +1443,29 @@ void App::exportCurrentClipToProRes() {
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
             nlohmann::json metaTmp;
+            auto t0 = std::chrono::steady_clock::now();
             try { dec->loadFrame(frames[idx], raw, metaTmp); }
             catch (...) { m_proResStatus.errorMsg = "Frame read error"; break; }
+            auto t1 = std::chrono::steady_clock::now();
+            readUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
-            convertRawToRGB24(asU16(raw), cpParams, rgbBuf);
+            t0 = t1;
+            convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
+            t1 = std::chrono::steady_clock::now();
+            rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
             if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
             const uint8_t* srcSlices[1] = { rgbBuf.data() };
             int srcStride[1] = { width*3 };
+            t0 = std::chrono::steady_clock::now();
             sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
+            t1 = std::chrono::steady_clock::now();
+            scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
             frame->pts = pts;
             pts++;
 
+            t0 = std::chrono::steady_clock::now();
             if (avcodec_send_frame(vctx, frame) < 0) { m_proResStatus.errorMsg = "send_frame failed"; break; }
             while (avcodec_receive_packet(vctx, &pkt) == 0) {
                 pkt.stream_index = vstream->index;
@@ -1440,9 +1476,16 @@ void App::exportCurrentClipToProRes() {
                 av_packet_unref(&pkt);
                 ++framesEncoded;
             }
+            t1 = std::chrono::steady_clock::now();
+            encodeUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
             if ((idx + 1) % 50 == 0) {
-                LogProRes(std::string("[ProResExport] Encoded frame ") + std::to_string(idx + 1) + "/" + std::to_string(frames.size()));
+                auto now = std::chrono::steady_clock::now();
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - encodeStart).count();
+                std::ostringstream prog;
+                prog << "[ProResExport] Encoded frame " << (idx + 1) << "/" << frames.size()
+                     << " elapsed=" << ms << "ms";
+                LogProRes(prog.str());
             }
         }
 
@@ -1489,6 +1532,7 @@ void App::exportCurrentClipToProRes() {
             LogProRes("[ProResExport] Audio encode finished");
         }
 
+        auto flushStart = std::chrono::steady_clock::now();
         avcodec_send_frame(vctx, nullptr);
         while (avcodec_receive_packet(vctx, &pkt) == 0) {
             pkt.stream_index = vstream->index;
@@ -1499,9 +1543,52 @@ void App::exportCurrentClipToProRes() {
             av_packet_unref(&pkt);
             ++framesEncoded;
         }
+        encodeUS += std::chrono::duration_cast<std::chrono::microseconds>(
+                       std::chrono::steady_clock::now() - flushStart)
+                       .count();
 
         if (framesEncoded == 0 && m_proResStatus.errorMsg.empty()) {
             m_proResStatus.errorMsg = "No video frames encoded";
+        }
+
+        auto encodeEnd = std::chrono::steady_clock::now();
+        auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(encodeEnd - encodeStart).count();
+        double fps = totalMs > 0 ? (framesEncoded * 1000.0) / totalMs : 0.0;
+        {
+            std::ostringstream finfo;
+            finfo << "[ProResExport] Encode duration=" << totalMs << "ms fps="
+                  << std::fixed << std::setprecision(2) << fps;
+            LogProRes(finfo.str());
+        }
+        {
+            std::ostringstream summary;
+            summary << "[ProResExport] Timing breakdown ms: read="
+                    << (readUS / 1000) << " rgb=" << (rgbUS / 1000)
+                    << " scale=" << (scaleUS / 1000)
+                    << " encode=" << (encodeUS / 1000);
+            LogProRes(summary.str());
+        }
+        long long totalUS = readUS + rgbUS + scaleUS + encodeUS;
+        if (framesEncoded > 0 && totalUS > 0) {
+            double readAvg = readUS / 1000.0 / framesEncoded;
+            double rgbAvg = rgbUS / 1000.0 / framesEncoded;
+            double scaleAvg = scaleUS / 1000.0 / framesEncoded;
+            double encAvg = encodeUS / 1000.0 / framesEncoded;
+            std::ostringstream avg;
+            avg << "[ProResExport] Avg per-frame ms: read=" << std::fixed
+                << std::setprecision(2) << readAvg << " rgb=" << rgbAvg
+                << " scale=" << scaleAvg << " encode=" << encAvg;
+            LogProRes(avg.str());
+
+            double readPct = readUS * 100.0 / totalUS;
+            double rgbPct = rgbUS * 100.0 / totalUS;
+            double scalePct = scaleUS * 100.0 / totalUS;
+            double encPct = encodeUS * 100.0 / totalUS;
+            std::ostringstream pct;
+            pct << "[ProResExport] Time share %: read=" << readPct
+                << " rgb=" << rgbPct << " scale=" << scalePct
+                << " encode=" << encPct;
+            LogProRes(pct.str());
         }
 
         av_write_trailer(fmt);

@@ -1,6 +1,8 @@
 #include "Utils/ColorPipelineCPU.h"
 #include <algorithm>
 #include <cmath>
+#include <vector>
+#include <thread>
 
 static inline float srgb_eotf(float v) {
     v = std::clamp(v, 0.0f, 1.0f);
@@ -19,7 +21,8 @@ static inline float linFromRaw(uint16_t v, double black, double invRange) {
     return static_cast<float>(t);
 }
 
-void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p, std::vector<uint8_t>& outRGB)
+void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
+                       std::vector<uint8_t>& outRGB, unsigned threads)
 {
     outRGB.resize(p.width * p.height * 3);
     double range = p.whiteLevel - p.blackLevel;
@@ -35,7 +38,7 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p, std::vector
 
     const float* ccm = p.ccm.data();
 
-    for(int y=0;y<p.height;++y){
+    auto processRow = [&](int y){
         for(int x=0;x<p.width;++x){
             bool ye = (y%2)==0;
             bool xe = (x%2)==0;
@@ -97,5 +100,20 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p, std::vector
             dst[1] = (uint8_t)std::clamp(int(srgb_eotf(g_cc)*255.0f + 0.5f),0,255);
             dst[2] = (uint8_t)std::clamp(int(srgb_eotf(b_cc)*255.0f + 0.5f),0,255);
         }
+    };
+
+    if(threads <= 1) {
+        for(int y=0;y<p.height;++y)
+            processRow(y);
+    } else {
+        std::vector<std::thread> workers;
+        workers.reserve(threads);
+        for(unsigned t=0;t<threads;++t){
+            workers.emplace_back([&,t]{
+                for(int y=t;y<p.height;y+=threads)
+                    processRow(y);
+            });
+        }
+        for(auto& th : workers) th.join();
     }
 }
