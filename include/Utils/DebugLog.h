@@ -5,6 +5,7 @@
 
 // Simple file logger declaration
 void LogToFile(const std::string& message);
+void LogProRes(const std::string& message);
 
 // Returns path to directory where log files should be stored.
 // On Windows this uses the user's roaming AppData directory.
