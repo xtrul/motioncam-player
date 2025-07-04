@@ -27,12 +27,7 @@
 #include <cstdio>
 #include <sstream>
 #ifdef ENABLE_PRORES_EXPORT
-#include <libavformat/avformat.h>
-#include <libavcodec/avcodec.h>
-#include <libavutil/opt.h>
-#include <libavutil/imgutils.h>
-#include <libavutil/channel_layout.h>
-#include <libswscale/swscale.h>
+#include "ffmpeg_headers.hpp"
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
@@ -1362,8 +1357,7 @@ void App::exportCurrentClipToProRes() {
         }
         cpParams.saturation = 1.0f;
 
-        AVPacket pkt;
-        av_init_packet(&pkt);
+        AVPacket pkt{};
 
         std::vector<uint8_t> rgbBuf;
         int64_t pts = 0;
@@ -1417,7 +1411,7 @@ void App::exportCurrentClipToProRes() {
                 af->pts = audioPts;
                 audioPts += nb;
                 if (avcodec_send_frame(actx, af) >= 0) {
-                    AVPacket apkt; av_init_packet(&apkt);
+                    AVPacket apkt{};
                     while (avcodec_receive_packet(actx, &apkt) == 0) {
                         apkt.stream_index = astream->index;
                         apkt.pts = av_rescale_q(apkt.pts, actx->time_base, astream->time_base);
@@ -1430,7 +1424,7 @@ void App::exportCurrentClipToProRes() {
                 av_frame_free(&af);
             }
             avcodec_send_frame(actx, nullptr);
-            AVPacket apkt; av_init_packet(&apkt);
+            AVPacket apkt{};
             while (avcodec_receive_packet(actx, &apkt) == 0) {
                 apkt.stream_index = astream->index;
                 apkt.pts = av_rescale_q(apkt.pts, actx->time_base, astream->time_base);
