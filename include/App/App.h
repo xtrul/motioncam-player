@@ -112,7 +112,6 @@ public:
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void exportCurrentClipToProRes();
-    void exportCurrentClipToHevc();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -230,17 +229,6 @@ private:
     std::thread m_proResThread;
 #endif
 
-#ifdef ENABLE_HEVC_EXPORT
-    struct HevcExportStatus {
-        std::atomic<bool> active{ false };
-        std::atomic<int> currentFrame{ 0 };
-        int totalFrames{ 0 };
-        std::string errorMsg;
-    } m_hevcStatus;
-    std::atomic<bool> m_showHevcProgressPopup{ false };
-    std::thread m_hevcThread;
-#endif
-
 
 #ifdef _WIN32
     HWND _ipcWnd = nullptr;
@@ -282,7 +270,6 @@ private:
     void framebufferSizeCallback(int width, int height);
     std::string openMcrawDialog();
     std::string openSaveMovDialog();
-    std::string openSaveMp4Dialog();
 
     struct SwapChainSupportDetails {
         VkSurfaceCapabilitiesKHR capabilities;
