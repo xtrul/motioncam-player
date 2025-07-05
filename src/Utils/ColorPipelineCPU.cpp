@@ -9,16 +9,6 @@ static inline float srgb_eotf(float v) {
     return (v <= 0.0031308f) ? v * 12.92f : 1.055f * std::pow(v, 1.0f/2.4f) - 0.055f;
 }
 
-static inline float cineon_eotf(float v) {
-    v = std::clamp(v, 0.0f, 1.0f);
-    return std::pow(v, 1.0f/0.6f); // placeholder approximation
-}
-
-static inline float slog3_eotf(float v) {
-    v = std::clamp(v, 0.0f, 1.0f);
-    return std::pow(v, 1.0f/0.45f); // placeholder approximation
-}
-
 static inline uint16_t readU16(const uint16_t* src, int x, int y, int w, int h) {
     x = std::clamp(x,0,w-1);
     y = std::clamp(y,0,h-1);
@@ -106,16 +96,9 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
             g_cc = lum*(1-sat) + g_cc*sat;
             b_cc = lum*(1-sat) + b_cc*sat;
             uint8_t* dst = &outRGB[(y*p.width + x)*3];
-            auto tone = [&](float v){
-                switch(p.gamma){
-                    case GammaCurve::CineonLog: return cineon_eotf(v);
-                    case GammaCurve::SLog3:     return slog3_eotf(v);
-                    default:                    return srgb_eotf(v);
-                }
-            };
-            dst[0] = (uint8_t)std::clamp(int(tone(r_cc)*255.0f + 0.5f),0,255);
-            dst[1] = (uint8_t)std::clamp(int(tone(g_cc)*255.0f + 0.5f),0,255);
-            dst[2] = (uint8_t)std::clamp(int(tone(b_cc)*255.0f + 0.5f),0,255);
+            dst[0] = (uint8_t)std::clamp(int(srgb_eotf(r_cc)*255.0f + 0.5f),0,255);
+            dst[1] = (uint8_t)std::clamp(int(srgb_eotf(g_cc)*255.0f + 0.5f),0,255);
+            dst[2] = (uint8_t)std::clamp(int(srgb_eotf(b_cc)*255.0f + 0.5f),0,255);
         }
     };
 
