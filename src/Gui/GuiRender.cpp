@@ -242,6 +242,20 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->exportCurrentClipToProRes();
             }
+            if (ImGui::MenuItem("Add Current to ProRes Batch", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) {
+                    appInstance->m_showBatchWindow.store(true);
+                    ProResExportOptions opts{};
+                    if (appInstance->m_currentFileIndex >= 0 &&
+                        static_cast<size_t>(appInstance->m_currentFileIndex) < appInstance->m_fileList.size()) {
+                        opts.playlistIndex = appInstance->m_currentFileIndex;
+                        opts.inputPath = appInstance->m_fileList[appInstance->m_currentFileIndex];
+                        opts.outputPath = appInstance->openSaveMovDialog();
+                        if (!opts.outputPath.empty())
+                            appInstance->m_batchOptions.push_back(opts);
+                    }
+                }
+            }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
@@ -333,6 +347,47 @@ namespace GuiOverlay {
                 appInstance->toggleHelpPage();
             }
         }
+
+#ifdef ENABLE_PRORES_EXPORT
+        if (appInstance->m_showBatchWindow.load()) {
+            ImGui::SetNextWindowSize(ImVec2(400,300), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("ProRes Batch", nullptr, ImGuiWindowFlags_NoCollapse)) {
+                for (size_t i = 0; i < appInstance->m_batchOptions.size(); ++i) {
+                    ProResExportOptions &opts = appInstance->m_batchOptions[i];
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::Text("%s", fs::path(opts.inputPath).filename().string().c_str());
+                    const char* qItems[] = {"Proxy","LT","Standard","HQ"};
+                    int q = static_cast<int>(opts.quality);
+                    ImGui::Combo("Quality", &q, qItems, IM_ARRAYSIZE(qItems));
+                    opts.quality = static_cast<ProResQuality>(q);
+                    const char* gItems[] = {"sRGB","Cineon","SLog3"};
+                    int g = static_cast<int>(opts.gamma);
+                    ImGui::Combo("Gamma", &g, gItems, IM_ARRAYSIZE(gItems));
+                    opts.gamma = static_cast<GammaCurve>(g);
+                    const char* cItems[] = {"Rec709","BT2020","Cinema"};
+                    int c = static_cast<int>(opts.color);
+                    ImGui::Combo("Color", &c, cItems, IM_ARRAYSIZE(cItems));
+                    opts.color = static_cast<ColorSpace>(c);
+                    ImGui::Text("Output: %s", opts.outputPath.c_str());
+                    if (ImGui::Button("Remove")) {
+                        appInstance->m_batchOptions.erase(appInstance->m_batchOptions.begin()+i);
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::Separator();
+                    ImGui::PopID();
+                }
+                if (ImGui::Button("Start Batch")) {
+                    appInstance->startProResBatch();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Close")) {
+                    appInstance->m_showBatchWindow.store(false);
+                }
+            }
+            ImGui::End();
+        }
+#endif
 
         ImVec2 sizeLargeButton, sizeSmallButton, sizeAuxOverlayButton, sizePlayPauseButton;
         float largeButtonFrameHeight, smallButtonFrameHeight, auxOverlayButtonFrameHeight, playPauseButtonFrameHeight;
