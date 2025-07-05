@@ -58,11 +58,6 @@ App::~App() {
         m_proResThread.join();
         LogToFile("[App::~App] ProRes export thread joined.");
     }
-    if (m_hevcThread.joinable()) {
-        LogToFile("[App::~App] Joining HEVC export thread...");
-        m_hevcThread.join();
-        LogToFile("[App::~App] HEVC export thread joined.");
-    }
 #endif
 
     destroyPersistentStagingBuffers();

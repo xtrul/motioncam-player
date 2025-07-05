@@ -112,7 +112,6 @@ public:
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void exportCurrentClipToProRes();
-    void exportCurrentClipToHevcAmf();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -228,15 +227,6 @@ private:
     } m_proResStatus;
     std::atomic<bool> m_showExportProgressPopup{ false };
     std::thread m_proResThread;
-
-    struct HevcExportStatus {
-        std::atomic<bool> active{ false };
-        std::atomic<int> currentFrame{ 0 };
-        int totalFrames{ 0 };
-        std::string errorMsg;
-    } m_hevcStatus;
-    std::atomic<bool> m_showHevcExportProgressPopup{ false };
-    std::thread m_hevcThread;
 #endif
 
 
