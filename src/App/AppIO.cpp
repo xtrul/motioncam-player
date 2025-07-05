@@ -26,6 +26,7 @@
 #include <fstream>
 #include <numeric>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <sstream>
@@ -1174,13 +1175,13 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToProRes() {
+void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
     if (m_proResStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = openSaveMovDialog();
+    std::string outputPath = options.outputPath.empty() ? openSaveMovDialog() : options.outputPath;
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
         outputPath += ".mov";
@@ -1205,7 +1206,8 @@ void App::exportCurrentClipToProRes() {
         m_proResThread.join();
     }
 
-    m_proResThread = std::thread([this, outputPath]() {
+    ProResExportOptions optsCopy = options;
+    m_proResThread = std::thread([this, outputPath, optsCopy]() {
         av_log_set_level(AV_LOG_ERROR);
         LogProRes("[ProResExport] Thread started");
 
@@ -1290,6 +1292,14 @@ void App::exportCurrentClipToProRes() {
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
         av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
+        const char* profStr = "3";
+        switch(optsCopy.quality){
+            case ProResQuality::Proxy: profStr = "0"; break;
+            case ProResQuality::LT: profStr = "1"; break;
+            case ProResQuality::Standard: profStr = "2"; break;
+            case ProResQuality::HQ: default: profStr = "3"; break;
+        }
+        av_dict_set(&encOpts, "profile", profStr, 0);
         LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_proResStatus.errorMsg = "avcodec_open2 failed";
@@ -1403,6 +1413,8 @@ void App::exportCurrentClipToProRes() {
         cpParams.cfaType = m_cfaTypeFromMetadata;
         cpParams.blackLevel = m_staticBlack;
         cpParams.whiteLevel = m_staticWhite;
+        cpParams.gamma = optsCopy.gamma;
+        cpParams.color = optsCopy.color;
         auto asn_json = meta.value("asShotNeutral", std::vector<double>{1.0,1.0,1.0});
         if (asn_json.size() >= 3) {
             cpParams.gainR = (asn_json[1] > 1e-6 && asn_json[0] > 1e-6) ? (float)(asn_json[1]/asn_json[0]) : 1.0f;
@@ -1412,7 +1424,24 @@ void App::exportCurrentClipToProRes() {
         if (ccm_json.size() == 9) {
             for(int i=0;i<9;++i) cpParams.ccm[i] = ccm_json[i];
         }
+        if (optsCopy.color != ColorSpace::Rec709) {
+            static const std::array<float,9> bt2020 = {1.168f, -0.188f, 0.020f,
+                                                      -0.045f, 1.045f, 0.000f,
+                                                      0.000f, -0.044f, 1.044f};
+            static const std::array<float,9> cinema = {1.224f, -0.224f, 0.000f,
+                                                     -0.042f, 1.042f, 0.000f,
+                                                      0.000f, -0.055f, 1.055f};
+            const std::array<float,9>* mat = &bt2020;
+            if (optsCopy.color == ColorSpace::Cinema) mat = &cinema;
+            for(int i=0;i<9;++i) cpParams.ccm[i] = (*mat)[i];
+        }
         cpParams.saturation = 1.0f;
+        LogProRes(std::string("[ProResExport] Gamma: ") +
+                   (optsCopy.gamma==GammaCurve::SRGB?"sRGB":
+                    optsCopy.gamma==GammaCurve::CineonLog?"Cineon":"SLog3"));
+        LogProRes(std::string("[ProResExport] ColorSpace: ") +
+                   (optsCopy.color==ColorSpace::Rec709?"Rec709":
+                    optsCopy.color==ColorSpace::BT2020?"BT2020":"Cinema"));
 
         {
             std::ostringstream oss;
@@ -1610,9 +1639,37 @@ void App::exportCurrentClipToProRes() {
     });
 }
 #else
-void App::exportCurrentClipToProRes() {
+void App::exportCurrentClipToProRes(const ProResExportOptions&) {
     showActionMessage("FFmpeg support not built");
 }
+#endif
+
+#ifdef ENABLE_PRORES_EXPORT
+void App::startProResBatch() {
+    if (m_batchOptions.empty()) return;
+    if (m_proResStatus.active.load()) {
+        showActionMessage("Export already running");
+        return;
+    }
+    if (m_proResThread.joinable()) m_proResThread.join();
+    m_proResStatus.active.store(true);
+    m_proResStatus.currentFrame.store(0);
+    m_proResStatus.errorMsg.clear();
+    m_showExportProgressPopup.store(true);
+    m_proResThread = std::thread([this]() {
+        for (auto& opts : m_batchOptions) {
+            if (opts.playlistIndex >= 0 && static_cast<size_t>(opts.playlistIndex) < m_fileList.size()) {
+                loadFileAtIndex(opts.playlistIndex);
+            }
+            exportCurrentClipToProRes(opts);
+            if (m_proResThread.joinable()) m_proResThread.join();
+        }
+        m_batchOptions.clear();
+        m_proResStatus.active.store(false);
+    });
+}
+#else
+void App::startProResBatch() { showActionMessage("FFmpeg support not built"); }
 #endif
 
 void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
