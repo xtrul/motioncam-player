@@ -33,7 +33,6 @@
 #include "App/AppState.h"
 #include "Playback/PlaybackController.h" // Included for PlaybackController::PlaybackMode
 #include "Utils/OrientationUtils.h"
-#include "Utils/ColorPipelineCPU.h"
 
 class AudioController;
 class DecoderWrapper;
@@ -112,8 +111,7 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
-    void exportCurrentClipToProRes(const ProResExportOptions& options = {});
-    void startProResBatch();
+    void exportCurrentClipToProRes();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -221,15 +219,6 @@ private:
     float m_uiFadeSpeed = 3.0f;
 
 #ifdef ENABLE_PRORES_EXPORT
-    enum class ProResQuality { Proxy=0, LT=1, Standard=2, HQ=3 };
-    struct ProResExportOptions {
-        ProResQuality quality{ProResQuality::HQ};
-        GammaCurve gamma{GammaCurve::SRGB};
-        ColorSpace color{ColorSpace::Rec709};
-        int playlistIndex{-1};
-        std::string inputPath;
-        std::string outputPath;
-    };
     struct ProResExportStatus {
         std::atomic<bool> active{ false };
         std::atomic<int> currentFrame{ 0 };
@@ -238,8 +227,6 @@ private:
     } m_proResStatus;
     std::atomic<bool> m_showExportProgressPopup{ false };
     std::thread m_proResThread;
-    std::vector<ProResExportOptions> m_batchOptions;
-    std::atomic<bool> m_showBatchWindow{false};
 #endif
 
 
