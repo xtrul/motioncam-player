@@ -19,6 +19,7 @@
 
 
 #include <imgui.h>
+#include <imgui_stdlib.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
@@ -242,11 +243,19 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->exportCurrentClipToProRes();
             }
+            if (ImGui::MenuItem("Add to Batch Export", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->addCurrentToBatch();
+            }
+            if (ImGui::MenuItem("Open Batch Window")) {
+                if (appInstance) appInstance->m_showBatchWindow = true;
+            }
             if (ImGui::MenuItem("Export to HEVC (AMD)", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->exportCurrentClipToHevcAmf();
             }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
+            ImGui::MenuItem("Add to Batch Export", nullptr, false, false);
+            ImGui::MenuItem("Open Batch Window", nullptr, false, false);
 #endif
 #ifndef ENABLE_PRORES_EXPORT
             ImGui::MenuItem("Export to HEVC (AMD)", nullptr, false, false);
@@ -303,6 +312,33 @@ namespace GuiOverlay {
         (void)current_playlist_window_width; // Mark as used to suppress warnings if NDEBUG
         (void)playlist_window_is_visible; // Mark as used
 
+        if (appInstance && appInstance->m_showBatchWindow) {
+            ImGui::SetNextWindowSize(ImVec2(420, 300), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Batch Export", &appInstance->m_showBatchWindow, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+                for (size_t i = 0; i < appInstance->m_batchJobs.size(); ++i) {
+                    auto& job = appInstance->m_batchJobs[i];
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::Text("%s", fs::path(job.inputPath).filename().string().c_str());
+                    ImGui::InputText("Output", &job.outputPath);
+                    const char* qopts[] = {"Proxy","LT","Standard","HQ"};
+                    int q = static_cast<int>(job.settings.quality);
+                    if (ImGui::Combo("Quality", &q, qopts, 4)) job.settings.quality = static_cast<ProResQuality>(q);
+                    const char* gopts[] = {"sRGB","Cineon","Slog3"};
+                    int g = static_cast<int>(job.settings.gamma);
+                    if (ImGui::Combo("Gamma", &g, gopts, 3)) job.settings.gamma = static_cast<GammaCurve>(g);
+                    const char* copts[] = {"Rec709","BT2020","SLogCinema"};
+                    int c = static_cast<int>(job.settings.color);
+                    if (ImGui::Combo("Color", &c, copts, 3)) job.settings.color = static_cast<ColorSpace>(c);
+                    if (ImGui::Button("Remove")) { appInstance->m_batchJobs.erase(appInstance->m_batchJobs.begin()+i); ImGui::PopID(); break; }
+                    ImGui::Separator();
+                    ImGui::PopID();
+                }
+                if (ImGui::Button("Start Batch")) {
+                    appInstance->startBatchExport();
+                }
+            }
+            ImGui::End();
+        }
 
         if (ui.showHelpPage) {
             ImGui::SetNextWindowSize(ImVec2(450, 420), ImGuiCond_FirstUseEver);

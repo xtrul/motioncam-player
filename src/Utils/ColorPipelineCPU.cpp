@@ -1,4 +1,5 @@
 #include "Utils/ColorPipelineCPU.h"
+#include "Utils/ColorEnums.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -7,6 +8,35 @@
 static inline float srgb_eotf(float v) {
     v = std::clamp(v, 0.0f, 1.0f);
     return (v <= 0.0031308f) ? v * 12.92f : 1.055f * std::pow(v, 1.0f/2.4f) - 0.055f;
+}
+
+static inline float cineon_log(float v) {
+    v = std::clamp(v, 1e-6f, 1.0f);
+    return std::log10(v * 9.0f + 1.0f) / std::log10(10.0f);
+}
+
+static inline float slog3(float v) {
+    v = std::clamp(v, 0.0f, 1.0f);
+    if (v >= 0.011f)
+        return 0.432699f * std::log10(v + 0.037584f) + 0.616596f + 0.03f;
+    return (v * 171.2103f / 0.011f) + 0.01f;
+}
+
+static inline float applyGamma(float v, GammaCurve g) {
+    switch (g) {
+        case GammaCurve::CineonLog: return cineon_log(v);
+        case GammaCurve::Slog3:     return slog3(v);
+        default:                    return srgb_eotf(v);
+    }
+}
+
+static inline void applyColorSpace(float& r, float& g, float& b, ColorSpace cs) {
+    if (cs == ColorSpace::BT2020) {
+        float r2 = 1.6605f*r - 0.5876f*g - 0.0728f*b;
+        float g2 = -0.1246f*r + 1.1329f*g - 0.0083f*b;
+        float b2 = -0.0182f*r - 0.1006f*g + 1.1189f*b;
+        r = r2; g = g2; b = b2;
+    }
 }
 
 static inline uint16_t readU16(const uint16_t* src, int x, int y, int w, int h) {
@@ -95,10 +125,11 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
             r_cc = lum*(1-sat) + r_cc*sat;
             g_cc = lum*(1-sat) + g_cc*sat;
             b_cc = lum*(1-sat) + b_cc*sat;
+            applyColorSpace(r_cc, g_cc, b_cc, p.color);
             uint8_t* dst = &outRGB[(y*p.width + x)*3];
-            dst[0] = (uint8_t)std::clamp(int(srgb_eotf(r_cc)*255.0f + 0.5f),0,255);
-            dst[1] = (uint8_t)std::clamp(int(srgb_eotf(g_cc)*255.0f + 0.5f),0,255);
-            dst[2] = (uint8_t)std::clamp(int(srgb_eotf(b_cc)*255.0f + 0.5f),0,255);
+            dst[0] = (uint8_t)std::clamp(int(applyGamma(r_cc, p.gamma)*255.0f + 0.5f),0,255);
+            dst[1] = (uint8_t)std::clamp(int(applyGamma(g_cc, p.gamma)*255.0f + 0.5f),0,255);
+            dst[2] = (uint8_t)std::clamp(int(applyGamma(b_cc, p.gamma)*255.0f + 0.5f),0,255);
         }
     };
 

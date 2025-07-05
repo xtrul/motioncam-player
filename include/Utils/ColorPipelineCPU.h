@@ -2,6 +2,7 @@
 #include <vector>
 #include <cstdint>
 #include <array>
+#include "Utils/ColorEnums.h"
 
 struct CPUColorParams {
     int width{0};
@@ -14,6 +15,8 @@ struct CPUColorParams {
     float gainB{1.0f};
     std::array<float,9> ccm{1,0,0,0,1,0,0,0,1};
     float saturation{1.0f};
+    GammaCurve gamma{GammaCurve::SRGB};
+    ColorSpace color{ColorSpace::Rec709};
 };
 
 void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& params,
