@@ -1610,6 +1610,21 @@ void App::exportCurrentClipToProRes() {
     });
 }
 
+void App::addCurrentToBatch() {
+    if (m_currentFileIndex < 0 || m_currentFileIndex >= static_cast<int>(m_fileList.size())) return;
+    BatchJob job;
+    job.inputPath = m_fileList[m_currentFileIndex];
+    std::filesystem::path p(job.inputPath);
+    job.outputPath = (p.parent_path() / (p.stem().string() + ".mov")).string();
+    m_batchJobs.push_back(job);
+    m_showBatchWindow = true;
+    showActionMessage("Added to batch");
+}
+
+void App::startBatchExport() {
+    showActionMessage("Batch export not implemented yet");
+}
+
 void App::exportCurrentClipToHevcAmf() {
     if (m_hevcStatus.active.load()) {
         showActionMessage("Export already running");
@@ -2043,6 +2058,14 @@ void App::exportCurrentClipToHevcAmf() {
 }
 #else
 void App::exportCurrentClipToProRes() {
+    showActionMessage("FFmpeg support not built");
+}
+
+void App::addCurrentToBatch() {
+    showActionMessage("FFmpeg support not built");
+}
+
+void App::startBatchExport() {
     showActionMessage("FFmpeg support not built");
 }
 

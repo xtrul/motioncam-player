@@ -39,6 +39,8 @@ class DecoderWrapper;
 // class PlaybackController; // Already included above
 class Renderer_VK;
 
+#include "Utils/ColorEnums.h"
+
 #include "Gui/GuiOverlay.h"
 #include "Utils/ThreadSafeQueue.h"
 #include "Decoder/DecoderTypes.h"
@@ -112,6 +114,8 @@ public:
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void exportCurrentClipToProRes();
+    void addCurrentToBatch();
+    void startBatchExport();
     void exportCurrentClipToHevcAmf();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
@@ -220,6 +224,18 @@ private:
     float m_uiFadeSpeed = 3.0f;
 
 #ifdef ENABLE_PRORES_EXPORT
+    struct ExportSettings {
+        ProResQuality quality{ ProResQuality::HQ };
+        GammaCurve    gamma{ GammaCurve::SRGB };
+        ColorSpace    color{ ColorSpace::Rec709 };
+    };
+
+    struct BatchJob {
+        std::string inputPath;
+        std::string outputPath;
+        ExportSettings settings;
+    };
+
     struct ProResExportStatus {
         std::atomic<bool> active{ false };
         std::atomic<int> currentFrame{ 0 };
@@ -228,6 +244,9 @@ private:
     } m_proResStatus;
     std::atomic<bool> m_showExportProgressPopup{ false };
     std::thread m_proResThread;
+
+    std::vector<BatchJob> m_batchJobs;
+    bool m_showBatchWindow = false;
 
     struct HevcExportStatus {
         std::atomic<bool> active{ false };

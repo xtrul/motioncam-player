@@ -74,3 +74,9 @@ runtime DLLs will be copied automatically.
 - Uses the `hevc_amf` hardware encoder with 10‑bit 4:2:0 output (`p010le`).
 - Progress is shown in a modal popup similar to the ProRes export and writes
   details to `hevc_export_log.txt` in the `Logs` folder.
+
+## Batch Export
+
+- Select **Add to Batch Export** from the context menu to queue the current clip.
+- Open the **Batch Export** window to adjust ProRes quality, gamma, and color space per job.
+- Click **Start Batch** to encode all queued clips sequentially using the configured settings.
