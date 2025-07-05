@@ -242,6 +242,20 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->exportCurrentClipToProRes();
             }
+            if (ImGui::MenuItem("Add Current to ProRes Batch", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) {
+                    appInstance->m_showBatchWindow.store(true);
+                    ProResExportOptions opts{};
+                    if (appInstance->m_currentFileIndex >= 0 &&
+                        static_cast<size_t>(appInstance->m_currentFileIndex) < appInstance->m_fileList.size()) {
+                        opts.playlistIndex = appInstance->m_currentFileIndex;
+                        opts.inputPath = appInstance->m_fileList[appInstance->m_currentFileIndex];
+                        opts.outputPath = appInstance->openSaveMovDialog();
+                        if (!opts.outputPath.empty())
+                            appInstance->m_batchOptions.push_back(opts);
+                    }
+                }
+            }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
@@ -285,6 +299,25 @@ namespace GuiOverlay {
                                 appInstance->loadFileAtIndex(i);
                                 appInstance->m_firstFileLoaded = originalFirstFileLoadedState;
                             }
+                        }
+                        if (ImGui::BeginDragDropSource()) {
+                            int payloadIndex = i;
+                            ImGui::SetDragDropPayload("PRORES_INDEX", &payloadIndex, sizeof(int));
+                            ImGui::Text("%s", filename_to_display.c_str());
+                            ImGui::EndDragDropSource();
+                        }
+                        if (ImGui::BeginPopupContextItem()) {
+                            if (ImGui::MenuItem("Add to ProRes Batch")) {
+                                ProResExportOptions opts{};
+                                opts.playlistIndex = i;
+                                opts.inputPath = filePath;
+                                opts.outputPath = appInstance->openSaveMovDialog();
+                                if (!opts.outputPath.empty()) {
+                                    appInstance->m_batchOptions.push_back(opts);
+                                    appInstance->m_showBatchWindow.store(true);
+                                }
+                            }
+                            ImGui::EndPopup();
                         }
                         if (is_selected) ImGui::PopStyleColor();
                     }
@@ -333,6 +366,67 @@ namespace GuiOverlay {
                 appInstance->toggleHelpPage();
             }
         }
+
+#ifdef ENABLE_PRORES_EXPORT
+        if (appInstance->m_showBatchWindow.load()) {
+            ImGui::SetNextWindowSize(ImVec2(420,320), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("ProRes Batch", nullptr, ImGuiWindowFlags_NoCollapse)) {
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PRORES_INDEX")) {
+                        int pindex = *(const int*)payload->Data;
+                        if (pindex >= 0 && static_cast<size_t>(pindex) < appInstance->m_fileList.size()) {
+                            ProResExportOptions opts{};
+                            opts.playlistIndex = pindex;
+                            opts.inputPath = appInstance->m_fileList[pindex];
+                            opts.outputPath = "";
+                            appInstance->m_batchOptions.push_back(opts);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::Text("Drag files here or use context menu to add.");
+                ImGui::Separator();
+                for (size_t i = 0; i < appInstance->m_batchOptions.size(); ++i) {
+                    ProResExportOptions &opts = appInstance->m_batchOptions[i];
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::Text("%s", fs::path(opts.inputPath).filename().string().c_str());
+                    const char* qItems[] = {"Proxy","LT","Standard","HQ"};
+                    int q = static_cast<int>(opts.quality);
+                    ImGui::Combo("Quality", &q, qItems, IM_ARRAYSIZE(qItems));
+                    opts.quality = static_cast<ProResQuality>(q);
+                    const char* gItems[] = {"sRGB","Cineon","SLog3"};
+                    int g = static_cast<int>(opts.gamma);
+                    ImGui::Combo("Gamma", &g, gItems, IM_ARRAYSIZE(gItems));
+                    opts.gamma = static_cast<GammaCurve>(g);
+                    const char* cItems[] = {"Rec709","BT2020","Cinema"};
+                    int c = static_cast<int>(opts.color);
+                    ImGui::Combo("Color", &c, cItems, IM_ARRAYSIZE(cItems));
+                    opts.color = static_cast<ColorSpace>(c);
+                    ImGui::Text("Output: %s", opts.outputPath.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::Button("Browse")) {
+                        std::string newPath = appInstance->openSaveMovDialog();
+                        if (!newPath.empty()) opts.outputPath = newPath;
+                    }
+                    if (ImGui::Button("Remove")) {
+                        appInstance->m_batchOptions.erase(appInstance->m_batchOptions.begin()+i);
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::Separator();
+                    ImGui::PopID();
+                }
+                if (ImGui::Button("Start Batch")) {
+                    appInstance->startProResBatch();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Close")) {
+                    appInstance->m_showBatchWindow.store(false);
+                }
+            }
+            ImGui::End();
+        }
+#endif
 
         ImVec2 sizeLargeButton, sizeSmallButton, sizeAuxOverlayButton, sizePlayPauseButton;
         float largeButtonFrameHeight, smallButtonFrameHeight, auxOverlayButtonFrameHeight, playPauseButtonFrameHeight;
