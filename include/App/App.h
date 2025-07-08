@@ -43,6 +43,12 @@
 
 enum class ProResQuality { Proxy=0, LT=1, Standard=2, HQ=3 };
 
+struct HevcExportOptions {
+    int         playlistIndex{-1};
+    std::string inputPath;
+    std::string outputPath;
+};
+
 struct ProResExportOptions {
     ProResQuality quality{ProResQuality::HQ};
     GammaCurve    gamma{GammaCurve::SRGB};
@@ -130,8 +136,9 @@ public:
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void exportCurrentClipToProRes(const ProResExportOptions& options = {});
-    void exportCurrentClipToHevc();
+    void exportCurrentClipToHevc(const HevcExportOptions& options = {});
     void startProResBatch();
+    void startHevcBatch();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -256,6 +263,8 @@ private:
         int totalFrames{ 0 };
         std::string errorMsg;
     } m_hevcStatus;
+    std::vector<HevcExportOptions> m_hevcBatchOptions;
+    std::atomic<bool> m_showHevcBatchWindow{false};
     std::atomic<bool> m_showHevcProgressPopup{ false };
     std::thread m_hevcThread;
 #endif
