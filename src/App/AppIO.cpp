@@ -1639,13 +1639,13 @@ void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
     });
 }
 
-void App::exportCurrentClipToHevc(const HevcExportOptions& options) {
+void App::exportCurrentClipToHevc() {
     if (m_hevcStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = options.outputPath.empty() ? openSaveMovDialog() : options.outputPath;
+    std::string outputPath = openSaveMovDialog();
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mp4") {
         outputPath += ".mp4";
@@ -1748,10 +1748,6 @@ void App::exportCurrentClipToHevc(const HevcExportOptions& options) {
 
         AVDictionary* encOpts = nullptr;
         av_dict_set(&encOpts, "profile", "main10", 0);
-        av_dict_set(&encOpts, "usage", "high_quality", 0);
-        av_dict_set(&encOpts, "quality", "quality", 0);
-        av_dict_set(&encOpts, "rc", "hqvbr", 0);
-        av_dict_set(&encOpts, "qvbr_quality_level", "15", 0);
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_hevcStatus.errorMsg = "avcodec_open2 failed";
             m_hevcStatus.active.store(false);
@@ -1908,7 +1904,7 @@ void App::exportCurrentClipToHevc(const HevcExportOptions& options) {
 void App::exportCurrentClipToProRes(const ProResExportOptions&) {
     showActionMessage("FFmpeg support not built");
 }
-void App::exportCurrentClipToHevc(const HevcExportOptions&) {
+void App::exportCurrentClipToHevc() {
     showActionMessage("FFmpeg support not built");
 }
 #endif
@@ -1931,26 +1927,6 @@ void App::startProResBatch() {
 }
 #else
 void App::startProResBatch() { showActionMessage("FFmpeg support not built"); }
-#endif
-
-#ifdef ENABLE_PRORES_EXPORT
-void App::startHevcBatch() {
-    if (m_hevcBatchOptions.empty()) return;
-    if (m_hevcStatus.active.load()) {
-        showActionMessage("Export already running");
-        return;
-    }
-    for (auto& opts : m_hevcBatchOptions) {
-        if (opts.playlistIndex >= 0 && static_cast<size_t>(opts.playlistIndex) < m_fileList.size()) {
-            loadFileAtIndex(opts.playlistIndex);
-        }
-        exportCurrentClipToHevc(opts);
-        if (m_hevcThread.joinable()) m_hevcThread.join();
-    }
-    m_hevcBatchOptions.clear();
-}
-#else
-void App::startHevcBatch() { showActionMessage("FFmpeg support not built"); }
 #endif
 
 void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
