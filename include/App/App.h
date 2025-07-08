@@ -130,6 +130,7 @@ public:
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void exportCurrentClipToProRes(const ProResExportOptions& options = {});
+    void exportCurrentClipToHevc();
     void startProResBatch();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
@@ -248,6 +249,15 @@ private:
     std::thread m_proResThread;
     std::vector<ProResExportOptions> m_batchOptions;
     std::atomic<bool> m_showBatchWindow{false};
+
+    struct HevcExportStatus {
+        std::atomic<bool> active{ false };
+        std::atomic<int> currentFrame{ 0 };
+        int totalFrames{ 0 };
+        std::string errorMsg;
+    } m_hevcStatus;
+    std::atomic<bool> m_showHevcProgressPopup{ false };
+    std::thread m_hevcThread;
 #endif
 
 
