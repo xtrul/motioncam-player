@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <sstream>
 
 extern std::string g_AppBasePath;
 
@@ -36,6 +37,12 @@ bool GpuYuvConverter::init(int width, int height) {
     ci.queueFamilyIndex = graphicsFamily;
     ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     VK_CHECK_RENDERER(vkCreateCommandPool(m_renderer->m_device_p, &ci, nullptr, &m_cmdPool));
+    {
+        std::ostringstream info;
+        info << "[GpuYuvConverter] queueFamily=" << graphicsFamily
+             << " cmdPool=" << std::hex << m_cmdPool;
+        DBG_INFO(info.str());
+    }
 
     VkDescriptorSetLayoutBinding bindings[2]{};
     bindings[0].binding = 0;
@@ -248,8 +255,12 @@ void GpuYuvConverter::cleanup() {
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         std::vector<uint16_t>& outPacked) {
-    LogProRes("[GPU] convertAndReadback invoked");
+                                         std::vector<uint16_t>& outPacked,
+                                         int frameIndex) {
+    std::ostringstream trace;
+    trace << "[GPU] convertAndReadback frame=" << frameIndex
+          << " size=" << width << "x" << height;
+    DBG_TRACE(trace.str());
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
@@ -283,6 +294,7 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
 
     VkCommandBuffer cmd = VulkanHelpers::beginSingleTimeCommands(m_renderer->m_device_p,
                                                                 m_cmdPool);
+    DBG_TRACE(std::string("cmdBuf=") + std::to_string((uint64_t)cmd));
 
     VkImageMemoryBarrier bar1{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar1.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -431,6 +443,18 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
+
+    uint16_t* dbgData = reinterpret_cast<uint16_t*>(rbAllocInfo.pMappedData);
+    std::ostringstream dump;
+    dump << "[GPU] rb16:";
+    for(int i=0;i<16 && (i*2)<outSize;i++){
+        dump << ' ' << std::hex << std::setw(4) << std::setfill('0') << dbgData[i];
+    }
+    DBG_TRACE(dump.str());
+    if (std::abs(int(dbgData[1])) < 2 && std::abs(int(dbgData[3])) < 2 &&
+        (dbgData[0] != dbgData[2])) {
+        DBG_WARN("Chroma looks constant – packing order may be wrong");
+    }
     LogProRes("[GPU] readback complete");
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
