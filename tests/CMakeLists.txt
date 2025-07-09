@@ -1,0 +1,8 @@
+find_package(GTest QUIET)
+if(GTest_FOUND)
+    add_executable(gpu_converter_test gpu_converter_test.cpp)
+    target_link_libraries(gpu_converter_test PRIVATE GTest::gtest GTest::gtest_main)
+    add_test(NAME gpu_converter_test COMMAND gpu_converter_test)
+else()
+    message(WARNING "GTest not found - skipping unit tests")
+endif()

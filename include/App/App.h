@@ -145,6 +145,7 @@ private:
     std::vector<std::optional<size_t>> m_inFlightStagingBufferIndices;
     std::atomic<bool> m_hasLastSuccessfullyUploadedPacket{ false };
     GpuUploadPacket m_lastSuccessfullyUploadedPacket;
+    std::atomic<bool> m_renderPaused{ false };
 
     int m_windowWidth = 1280;
     int m_windowHeight = 720;
