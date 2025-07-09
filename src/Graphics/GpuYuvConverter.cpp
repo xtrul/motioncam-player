@@ -3,12 +3,7 @@
 #include "Graphics/VulkanHelpers.h"
 #include "Graphics/ImageResource.h"
 #include "Utils/DebugLog.h"
-#ifndef MC_GPU_EXPORT_DEBUG
-#define MC_GPU_EXPORT_DEBUG 1
-#endif
 #include <vector>
-#include <sstream>
-#include <iomanip>
 #include <filesystem>
 #include <chrono>
 
@@ -41,8 +36,6 @@ bool GpuYuvConverter::init(int width, int height) {
     ci.queueFamilyIndex = graphicsFamily;
     ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     VK_CHECK_RENDERER(vkCreateCommandPool(m_renderer->m_device_p, &ci, nullptr, &m_cmdPool));
-    DBG_INFO(std::string("GpuYuvConverter init queueFamily=") + std::to_string(graphicsFamily) +
-             " cmdPool=" + std::to_string(reinterpret_cast<uint64_t>(m_cmdPool)));
 
     VkDescriptorSetLayoutBinding bindings[2]{};
     bindings[0].binding = 0;
@@ -141,7 +134,13 @@ bool GpuYuvConverter::init(int width, int height) {
     viewInfo.subresourceRange.layerCount = 1;
     VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &viewInfo, nullptr, &m_yuvView));
 
-
+    ImageResource::transitionImageLayout(
+        m_renderer->m_device_p,
+        m_cmdPool,
+        m_renderer->m_graphicsQueue_p,
+        m_yuvImage,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL);
 
     // Create private RAW image for input
     VkImageCreateInfo rawInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
@@ -191,34 +190,14 @@ bool GpuYuvConverter::init(int width, int height) {
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 0.0f;
     VK_CHECK_RENDERER(vkCreateSampler(m_renderer->m_device_p, &samplerInfo, nullptr, &m_rawSampler));
-    VkCommandBuffer initCmd = VulkanHelpers::beginSingleTimeCommands(m_renderer->m_device_p, m_cmdPool);
-    VkImageMemoryBarrier barriers[2]{};
-    barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barriers[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[0].image = m_yuvImage;
-    barriers[0].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
-    barriers[0].srcAccessMask = 0;
-    barriers[0].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-    barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barriers[1].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barriers[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[1].image = m_rawImage;
-    barriers[1].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
-    barriers[1].srcAccessMask = 0;
-    barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(initCmd,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0,nullptr,
-        0,nullptr,
-        2, barriers);
-    VulkanHelpers::endSingleTimeCommands(m_renderer->m_device_p, m_cmdPool, m_renderer->m_graphicsQueue_p, initCmd);
+
+    ImageResource::transitionImageLayout(
+        m_renderer->m_device_p,
+        m_cmdPool,
+        m_renderer->m_graphicsQueue_p,
+        m_rawImage,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     return true;
 }
@@ -269,9 +248,8 @@ void GpuYuvConverter::cleanup() {
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         std::vector<uint16_t>& outPacked, int frameIndex) {
-    DBG_TRACE(std::string("GpuYuvConverter::convertAndReadback w=") + std::to_string(width) +
-              " h=" + std::to_string(height) + " frame=" + std::to_string(frameIndex));
+                                         std::vector<uint16_t>& outPacked) {
+    LogProRes("[GPU] convertAndReadback invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
@@ -305,7 +283,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
 
     VkCommandBuffer cmd = VulkanHelpers::beginSingleTimeCommands(m_renderer->m_device_p,
                                                                 m_cmdPool);
-    DBG_TRACE(std::string("cmdBuf=") + std::to_string(reinterpret_cast<uint64_t>(cmd)));
 
     VkImageMemoryBarrier bar1{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar1.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -454,19 +431,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
-#if MC_GPU_EXPORT_DEBUG
-    {
-        const uint16_t* dump = static_cast<const uint16_t*>(rbAllocInfo.pMappedData);
-        std::ostringstream oss;
-        oss << "[GpuYuvConverter] dump";
-        for (int i=0;i<16 && (i*2<outSize);++i) {
-            oss << " 0x" << std::hex << std::setw(4) << std::setfill('0') << dump[i];
-        }
-        DBG_TRACE(oss.str());
-        if (std::abs(dump[2]) < 2 && std::abs(dump[3]) < 2 && std::abs(dump[0]-dump[1]) > 0)
-            DBG_WARN("Chroma looks constant – packing order may be wrong");
-    }
-#endif
     LogProRes("[GPU] readback complete");
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
