@@ -17,8 +17,6 @@
 #endif
 #include <tinydng/tiny_dng_writer.h>
 
-#include <string>
-
 
 #include <filesystem>
 #include <thread>
@@ -28,7 +26,6 @@
 #include <fstream>
 #include <numeric>
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdio>
 #include <sstream>
@@ -1177,13 +1174,13 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
+void App::exportCurrentClipToProRes() {
     if (m_proResStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = options.outputPath.empty() ? openSaveMovDialog() : options.outputPath;
+    std::string outputPath = openSaveMovDialog();
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
         outputPath += ".mov";
@@ -1208,8 +1205,7 @@ void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
         m_proResThread.join();
     }
 
-    ProResExportOptions optsCopy = options;
-    m_proResThread = std::thread([this, outputPath, optsCopy]() {
+    m_proResThread = std::thread([this, outputPath]() {
         av_log_set_level(AV_LOG_ERROR);
         LogProRes("[ProResExport] Thread started");
 
@@ -1294,14 +1290,6 @@ void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
         av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
-        const char* profStr = "3";
-        switch(optsCopy.quality){
-            case ProResQuality::Proxy: profStr = "0"; break;
-            case ProResQuality::LT: profStr = "1"; break;
-            case ProResQuality::Standard: profStr = "2"; break;
-            case ProResQuality::HQ: default: profStr = "3"; break;
-        }
-        av_dict_set(&encOpts, "profile", profStr, 0);
         LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_proResStatus.errorMsg = "avcodec_open2 failed";
@@ -1415,8 +1403,6 @@ void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
         cpParams.cfaType = m_cfaTypeFromMetadata;
         cpParams.blackLevel = m_staticBlack;
         cpParams.whiteLevel = m_staticWhite;
-        cpParams.gamma = optsCopy.gamma;
-        cpParams.color = optsCopy.color;
         auto asn_json = meta.value("asShotNeutral", std::vector<double>{1.0,1.0,1.0});
         if (asn_json.size() >= 3) {
             cpParams.gainR = (asn_json[1] > 1e-6 && asn_json[0] > 1e-6) ? (float)(asn_json[1]/asn_json[0]) : 1.0f;
@@ -1426,24 +1412,7 @@ void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
         if (ccm_json.size() == 9) {
             for(int i=0;i<9;++i) cpParams.ccm[i] = ccm_json[i];
         }
-        if (optsCopy.color != ColorSpace::Rec709) {
-            static const std::array<float,9> bt2020 = {1.168f, -0.188f, 0.020f,
-                                                      -0.045f, 1.045f, 0.000f,
-                                                      0.000f, -0.044f, 1.044f};
-            static const std::array<float,9> cinema = {1.224f, -0.224f, 0.000f,
-                                                     -0.042f, 1.042f, 0.000f,
-                                                      0.000f, -0.055f, 1.055f};
-            const std::array<float,9>* mat = &bt2020;
-            if (optsCopy.color == ColorSpace::Cinema) mat = &cinema;
-            for(int i=0;i<9;++i) cpParams.ccm[i] = (*mat)[i];
-        }
         cpParams.saturation = 1.0f;
-        LogProRes(std::string("[ProResExport] Gamma: ") +
-                   (optsCopy.gamma==GammaCurve::SRGB?"sRGB":
-                    optsCopy.gamma==GammaCurve::CineonLog?"Cineon":"SLog3"));
-        LogProRes(std::string("[ProResExport] ColorSpace: ") +
-                   (optsCopy.color==ColorSpace::Rec709?"Rec709":
-                    optsCopy.color==ColorSpace::BT2020?"BT2020":"Cinema"));
 
         {
             std::ostringstream oss;
@@ -1637,340 +1606,13 @@ void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
             LogToFile(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
             LogProRes(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
         }
-    m_proResStatus.active.store(false);
-    });
-}
-
-void App::exportCurrentClipToHevc(const HevcExportOptions& options) {
-    if (m_hevcStatus.active.load()) {
-        showActionMessage("Export already running");
-        return;
-    }
-
-    std::string outputPath = options.outputPath.empty() ? openSaveMovDialog() : options.outputPath;
-    if (outputPath.empty()) return;
-    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mp4") {
-        outputPath += ".mp4";
-    }
-
-    if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder()) {
-        showActionMessage("No clip loaded");
-        return;
-    }
-
-    LogHevc(std::string("[HevcExport] Starting export to ") + outputPath);
-
-    m_hevcStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
-    LogHevc(std::string("[HevcExport] Total frames: ") + std::to_string(m_hevcStatus.totalFrames));
-    m_hevcStatus.currentFrame.store(0);
-    m_hevcStatus.active.store(true);
-    m_hevcStatus.errorMsg.clear();
-    m_showHevcProgressPopup.store(true);
-    showActionMessage("Export Started");
-
-    if (m_hevcThread.joinable()) {
-        m_hevcThread.join();
-    }
-
-    m_hevcThread = std::thread([this, outputPath]() {
-        av_log_set_level(AV_LOG_ERROR);
-        LogHevc("[HevcExport] Thread started");
-
-        auto* dec = m_decoderWrapper_ptr->getDecoder();
-        const auto& frames = dec->getFrames();
-        LogHevc(std::string("[HevcExport] Frames to export: ") + std::to_string(frames.size()));
-        if (frames.empty()) {
-            m_hevcStatus.errorMsg = "No frames to export";
-            m_hevcStatus.active.store(false);
-            return;
-        }
-
-        RawBytes rawBuf;
-        nlohmann::json meta;
-        try {
-            dec->loadFrame(frames[0], rawBuf, meta);
-        } catch (...) {
-            m_hevcStatus.errorMsg = "Failed to load first frame";
-            m_hevcStatus.active.store(false);
-            return;
-        }
-        int width = meta.value("width", 0);
-        int height = meta.value("height", 0);
-        LogHevc(std::string("[HevcExport] Frame dimensions: ") + std::to_string(width) + "x" + std::to_string(height));
-        if (width <= 0 || height <= 0) {
-            m_hevcStatus.errorMsg = "Invalid frame dimensions";
-            m_hevcStatus.active.store(false);
-            return;
-        }
-
-        int64_t frameDurationNs = 0;
-        if (frames.size() >= 2) {
-            frameDurationNs = frames[1] - frames[0];
-        } else {
-            frameDurationNs = 41708333;
-        }
-        AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
-        LogHevc(std::string("[HevcExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
-
-        LogHevc("[HevcExport] Allocating output context");
-        AVFormatContext* fmt = nullptr;
-        if (avformat_alloc_output_context2(&fmt, nullptr, nullptr, outputPath.c_str()) < 0 || !fmt) {
-            m_hevcStatus.errorMsg = "avformat_alloc_output_context2 failed";
-            m_hevcStatus.active.store(false);
-            return;
-        }
-        LogHevc("[HevcExport] Output context created");
-
-        const char* hevcNames[] = { "hevc_amf", "hevc_nvenc", "libx265", nullptr };
-        const AVCodec* vcodec = nullptr;
-        const char* usedName = nullptr;
-        for (int i = 0; hevcNames[i]; ++i) {
-            vcodec = avcodec_find_encoder_by_name(hevcNames[i]);
-            if (vcodec) { usedName = hevcNames[i]; break; }
-        }
-        if (!vcodec) {
-            m_hevcStatus.errorMsg = "HEVC encoder not found";
-            m_hevcStatus.active.store(false);
-            avformat_free_context(fmt);
-            return;
-        }
-        LogHevc(std::string("[HevcExport] HEVC encoder: ") + usedName);
-
-        AVStream* vstream = avformat_new_stream(fmt, nullptr);
-        if (!vstream) {
-            m_hevcStatus.errorMsg = "avformat_new_stream failed";
-            m_hevcStatus.active.store(false);
-            avformat_free_context(fmt);
-            return;
-        }
-        AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
-        vctx->codec_id = vcodec->id;
-        vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        if (usedName && std::string(usedName) == "libx265")
-            vctx->pix_fmt = AV_PIX_FMT_YUV420P10LE;
-        else
-            vctx->pix_fmt = AV_PIX_FMT_P010LE;
-        vctx->width = width;
-        vctx->height = height;
-        vctx->time_base = timeBase;
-        vctx->framerate = av_inv_q(timeBase);
-        if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
-            vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-
-        AVDictionary* encOpts = nullptr;
-        av_dict_set(&encOpts, "profile", "main10", 0);
-        if (usedName && std::string(usedName) == "hevc_amf") {
-            av_dict_set(&encOpts, "usage", "high_quality", 0);
-            av_dict_set(&encOpts, "quality", "quality", 0);
-            av_dict_set(&encOpts, "rc", "hqvbr", 0);
-            av_dict_set(&encOpts, "qvbr_quality_level", "15", 0);
-        } else if (usedName && std::string(usedName) == "hevc_nvenc") {
-            av_dict_set(&encOpts, "preset", "p7", 0); // slowest/highest quality
-            av_dict_set(&encOpts, "rc", "vbrhq", 0);
-            av_dict_set(&encOpts, "cq", "19", 0);
-        } else { // libx265
-            av_dict_set(&encOpts, "preset", "slow", 0);
-            av_dict_set(&encOpts, "crf", "18", 0);
-        }
-        if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
-            m_hevcStatus.errorMsg = "avcodec_open2 failed";
-            m_hevcStatus.active.store(false);
-            avcodec_free_context(&vctx);
-            avformat_free_context(fmt);
-            av_dict_free(&encOpts);
-            return;
-        }
-        av_dict_free(&encOpts);
-        LogHevc(std::string("[HevcExport] Video encoder initialized"));
-        avcodec_parameters_from_context(vstream->codecpar, vctx);
-        vstream->time_base = timeBase;
-
-        const AVCodec* acodec = avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE);
-        AVStream* astream = nullptr;
-        AVCodecContext* actx = nullptr;
-        if (acodec) {
-            astream = avformat_new_stream(fmt, nullptr);
-            actx = avcodec_alloc_context3(acodec);
-            actx->codec_id = AV_CODEC_ID_PCM_S16LE;
-            actx->sample_rate = 48000;
-            av_channel_layout_default(&actx->ch_layout, 2);
-            actx->sample_fmt = AV_SAMPLE_FMT_S16;
-            actx->time_base = {1, actx->sample_rate};
-            if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
-                actx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-            if (avcodec_open2(actx, acodec, nullptr) >= 0) {
-                avcodec_parameters_from_context(astream->codecpar, actx);
-                astream->time_base = actx->time_base;
-            } else {
-                avcodec_free_context(&actx);
-                actx = nullptr;
-            }
-        }
-
-        if (!(fmt->oformat->flags & AVFMT_NOFILE)) {
-            LogHevc("[HevcExport] Opening output file");
-            if (avio_open(&fmt->pb, outputPath.c_str(), AVIO_FLAG_WRITE) < 0) {
-                m_hevcStatus.errorMsg = "avio_open failed";
-                m_hevcStatus.active.store(false);
-                avcodec_free_context(&vctx);
-                avformat_free_context(fmt);
-                return;
-            }
-            LogHevc("[HevcExport] Output file opened");
-        }
-
-        LogHevc("[HevcExport] Writing header");
-        if (avformat_write_header(fmt, nullptr) < 0) {
-            m_hevcStatus.errorMsg = "avformat_write_header failed";
-            m_hevcStatus.active.store(false);
-            if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
-            avcodec_free_context(&vctx);
-            avformat_free_context(fmt);
-            return;
-        }
-        LogHevc("[HevcExport] Header written");
-
-        AVFrame* frame = av_frame_alloc();
-        frame->format = vctx->pix_fmt;
-        frame->width = width;
-        frame->height = height;
-        if (av_frame_get_buffer(frame, 32) < 0) {
-            m_hevcStatus.errorMsg = "av_frame_get_buffer failed";
-            av_frame_free(&frame);
-            if (actx) avcodec_free_context(&actx);
-            if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
-            avcodec_free_context(&vctx);
-            avformat_free_context(fmt);
-            m_hevcStatus.active.store(false);
-            return;
-        }
-
-        unsigned threads = std::thread::hardware_concurrency();
-        if (threads == 0) threads = 1;
-        SwsContext* sws = sws_getContext(width, height, AV_PIX_FMT_RGB24,
-                                         width, height, AV_PIX_FMT_P010LE,
-                                         SWS_BILINEAR, nullptr, nullptr, nullptr);
-        av_opt_set_int(sws, "threads", threads, 0);
-
-        int framesEncoded = 0;
-        CPUColorParams cpParams{};
-        cpParams.width = width;
-        cpParams.height = height;
-        cpParams.cfaType = m_cfaTypeFromMetadata;
-        cpParams.blackLevel = m_staticBlack;
-        cpParams.whiteLevel = m_staticWhite;
-        cpParams.gamma = GammaCurve::SRGB;
-        cpParams.color = ColorSpace::Rec709;
-
-        AVPacket pkt{};
-        std::vector<uint8_t> rgbBuf;
-        int64_t pts = 0;
-        for (size_t idx = 0; idx < frames.size(); ++idx) {
-            RawBytes raw;
-            nlohmann::json metaTmp;
-            try { dec->loadFrame(frames[idx], raw, metaTmp); }
-            catch (...) { m_hevcStatus.errorMsg = "Frame read error"; break; }
-
-            if (av_frame_make_writable(frame) < 0) { m_hevcStatus.errorMsg = "frame not writable"; break; }
-            convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
-            const uint8_t* srcSlices[1] = { rgbBuf.data() };
-            int srcStride[1] = { width * 3 };
-            sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
-
-            frame->pts = pts;
-            pts++;
-
-            if (avcodec_send_frame(vctx, frame) < 0) { m_hevcStatus.errorMsg = "send_frame failed"; break; }
-            while (avcodec_receive_packet(vctx, &pkt) == 0) {
-                pkt.stream_index = vstream->index;
-                pkt.duration = 1;
-                pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
-                pkt.dts = pkt.pts;
-                if (av_interleaved_write_frame(fmt, &pkt) < 0) { m_hevcStatus.errorMsg = "write_frame failed"; av_packet_unref(&pkt); break; }
-                av_packet_unref(&pkt);
-                ++framesEncoded;
-            }
-            m_hevcStatus.currentFrame.store(static_cast<int>(idx + 1));
-        }
-
-        avcodec_send_frame(vctx, nullptr);
-        while (avcodec_receive_packet(vctx, &pkt) == 0) {
-            pkt.stream_index = vstream->index;
-            pkt.duration = 1;
-            pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
-            pkt.dts = pkt.pts;
-            av_interleaved_write_frame(fmt, &pkt);
-            av_packet_unref(&pkt);
-            ++framesEncoded;
-        }
-
-        av_write_trailer(fmt);
-        sws_freeContext(sws);
-        if (actx) avcodec_free_context(&actx);
-        if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
-        avcodec_free_context(&vctx);
-        avformat_free_context(fmt);
-
-        if (framesEncoded == 0 && m_hevcStatus.errorMsg.empty()) {
-            m_hevcStatus.errorMsg = "No video frames encoded";
-        }
-
-        if (m_hevcStatus.errorMsg.empty()) {
-            showActionMessage("Export Finished");
-            LogHevc(std::string("[HevcExport] Export finished successfully, frames encoded: ") + std::to_string(framesEncoded));
-        } else {
-            LogHevc(std::string("[HevcExport] Error: ") + m_hevcStatus.errorMsg);
-        }
-        m_hevcStatus.active.store(false);
+        m_proResStatus.active.store(false);
     });
 }
 #else
-void App::exportCurrentClipToProRes(const ProResExportOptions&) {
+void App::exportCurrentClipToProRes() {
     showActionMessage("FFmpeg support not built");
 }
-void App::exportCurrentClipToHevc(const HevcExportOptions&) {
-    showActionMessage("FFmpeg support not built");
-}
-#endif
-
-#ifdef ENABLE_PRORES_EXPORT
-void App::startProResBatch() {
-    if (m_batchOptions.empty()) return;
-    if (m_proResStatus.active.load()) {
-        showActionMessage("Export already running");
-        return;
-    }
-    for (auto& opts : m_batchOptions) {
-        if (opts.playlistIndex >= 0 && static_cast<size_t>(opts.playlistIndex) < m_fileList.size()) {
-            loadFileAtIndex(opts.playlistIndex);
-        }
-        exportCurrentClipToProRes(opts);
-        if (m_proResThread.joinable()) m_proResThread.join();
-    }
-    m_batchOptions.clear();
-}
-#else
-void App::startProResBatch() { showActionMessage("FFmpeg support not built"); }
-#endif
-
-#ifdef ENABLE_PRORES_EXPORT
-void App::startHevcBatch() {
-    if (m_hevcBatchOptions.empty()) return;
-    if (m_hevcStatus.active.load()) {
-        showActionMessage("Export already running");
-        return;
-    }
-    for (auto& opts : m_hevcBatchOptions) {
-        if (opts.playlistIndex >= 0 && static_cast<size_t>(opts.playlistIndex) < m_fileList.size()) {
-            loadFileAtIndex(opts.playlistIndex);
-        }
-        exportCurrentClipToHevc(opts);
-        if (m_hevcThread.joinable()) m_hevcThread.join();
-    }
-    m_hevcBatchOptions.clear();
-}
-#else
-void App::startHevcBatch() { showActionMessage("FFmpeg support not built"); }
 #endif
 
 void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
