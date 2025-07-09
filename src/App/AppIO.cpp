@@ -4,7 +4,6 @@
 #include "Decoder/DecoderWrapper.h"
 #include "Playback/PlaybackController.h"
 #include "Graphics/Renderer_VK.h"
-#include "Graphics/ComputePipeline.h"
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 #include "Utils/OrientationUtils.h"
@@ -36,10 +35,6 @@
 #include "Utils/ColorPipelineCPU.h"
 
 namespace fs = std::filesystem;
-
-#ifdef ENABLE_PRORES_EXPORT
-static bool g_useGpuProRes = false;
-#endif
 
 namespace {
     bool writeDngInternal(
@@ -1213,9 +1208,6 @@ void App::exportCurrentClipToProRes() {
     m_proResThread = std::thread([this, outputPath]() {
         av_log_set_level(AV_LOG_ERROR);
         LogProRes("[ProResExport] Thread started");
-        if (g_useGpuProRes) {
-            LogProRes("[ProResExport] GPU compute conversion enabled");
-        }
 
         auto* dec = m_decoderWrapper_ptr->getDecoder();
         const auto& frames = dec->getFrames();
@@ -1460,7 +1452,6 @@ void App::exportCurrentClipToProRes() {
         AVPacket pkt{};
 
         std::vector<uint8_t> rgbBuf;
-        std::vector<uint16_t> gpuBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
@@ -1472,39 +1463,17 @@ void App::exportCurrentClipToProRes() {
             readUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
             t0 = t1;
-            if (g_useGpuProRes) {
-                ComputePipeline::runRawToYuvAndReadback(m_rendererVk.get(), asU16(raw), width, height, gpuBuf);
-                t1 = std::chrono::steady_clock::now();
-                rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-                if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                uint16_t* yPlane = reinterpret_cast<uint16_t*>(frame->data[0]);
-                uint16_t* uPlane = reinterpret_cast<uint16_t*>(frame->data[1]);
-                uint16_t* vPlane = reinterpret_cast<uint16_t*>(frame->data[2]);
-                for (int y=0; y<height; ++y) {
-                    for (int x=0; x<width/2; ++x) {
-                        size_t srcIdx = static_cast<size_t>(y) * (width/2) * 4 + x*4;
-                        uint16_t y0 = gpuBuf[srcIdx] >> 6;
-                        uint16_t u = gpuBuf[srcIdx+1] >> 6;
-                        uint16_t y1 = gpuBuf[srcIdx+2] >> 6;
-                        uint16_t v = gpuBuf[srcIdx+3] >> 6;
-                        yPlane[y*frame->linesize[0]/2 + 2*x] = y0;
-                        yPlane[y*frame->linesize[0]/2 + 2*x+1] = y1;
-                        uPlane[y*frame->linesize[1]/2 + x] = u;
-                        vPlane[y*frame->linesize[2]/2 + x] = v;
-                    }
-                }
-            } else {
-                convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
-                t1 = std::chrono::steady_clock::now();
-                rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-                if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                const uint8_t* srcSlices[1] = { rgbBuf.data() };
-                int srcStride[1] = { width*3 };
-                t0 = std::chrono::steady_clock::now();
-                sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
-                t1 = std::chrono::steady_clock::now();
-                scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-            }
+            convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
+            t1 = std::chrono::steady_clock::now();
+            rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+
+            if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
+            const uint8_t* srcSlices[1] = { rgbBuf.data() };
+            int srcStride[1] = { width*3 };
+            t0 = std::chrono::steady_clock::now();
+            sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
+            t1 = std::chrono::steady_clock::now();
+            scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
             frame->pts = pts;
             pts++;
@@ -1684,14 +1653,4 @@ void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
 
     LogToFile(std::string("[App::setPlaybackMode] Changed from ") + std::to_string(static_cast<int>(oldMode)) +
         " to " + std::to_string(static_cast<int>(mode)));
-}
-
-void App::convertCurrentClipToProRes() {
-#ifdef ENABLE_PRORES_EXPORT
-    g_useGpuProRes = true;
-    exportCurrentClipToProRes();
-    g_useGpuProRes = false;
-#else
-    showActionMessage("FFmpeg support not built");
-#endif
 }
