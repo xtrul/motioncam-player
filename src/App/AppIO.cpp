@@ -7,6 +7,7 @@
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 #include "Utils/OrientationUtils.h"
+#include "Export/ProResExporter.h"
 #include <motioncam/Decoder.hpp>
 #include <motioncam/RawData.hpp>
 
@@ -1193,6 +1194,18 @@ void App::exportCurrentClipToProRes() {
 
     LogProRes(std::string("[ProResExport] Starting export to ") + outputPath);
 
+    std::string currentMcrawPath = m_fileList[m_currentFileIndex];
+
+    if (!m_gpuExporter)
+        m_gpuExporter = std::make_unique<ProResExporter>();
+
+    if (m_gpuExporter->start(currentMcrawPath, outputPath, m_decoderWrapper_ptr, m_rendererVk.get(), m_audio.get())) {
+        m_proResStatus.active.store(true);
+        m_showExportProgressPopup.store(true);
+        showActionMessage("Export Started");
+        return;
+    }
+
     m_proResStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
     LogProRes(std::string("[ProResExport] Total frames: ") + std::to_string(m_proResStatus.totalFrames));
     m_proResStatus.currentFrame.store(0);
@@ -1207,6 +1220,7 @@ void App::exportCurrentClipToProRes() {
 
     m_proResThread = std::thread([this, outputPath]() {
         av_log_set_level(AV_LOG_ERROR);
+        LogProRes("[ProResExport] MODE = CPU (swscale)");
         LogProRes("[ProResExport] Thread started");
 
         auto* dec = m_decoderWrapper_ptr->getDecoder();
