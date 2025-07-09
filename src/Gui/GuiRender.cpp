@@ -239,11 +239,11 @@ namespace GuiOverlay {
             }
             ImGui::Separator();
 #ifdef ENABLE_PRORES_EXPORT
-            if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
+            if (ImGui::MenuItem("Export \xE2\x86\x92 ProRes\xE2\x80\xA6", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->exportCurrentClipToProRes();
             }
 #else
-            ImGui::MenuItem("Export to ProRes", nullptr, false, false);
+            ImGui::MenuItem("Export \xE2\x86\x92 ProRes\xE2\x80\xA6", nullptr, false, false);
 #endif
             ImGui::EndPopup();
         }
