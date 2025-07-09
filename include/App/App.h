@@ -111,10 +111,7 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
-    enum class ProResExportMode { CPU, GPU };
-    void setProResExportMode(ProResExportMode mode) { m_proResExportMode = mode; }
-    ProResExportMode getProResExportMode() const { return m_proResExportMode; }
-    void exportCurrentClipToProRes(const std::string& outPath = "");
+    void exportCurrentClipToProRes();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -230,7 +227,6 @@ private:
     } m_proResStatus;
     std::atomic<bool> m_showExportProgressPopup{ false };
     std::thread m_proResThread;
-    ProResExportMode m_proResExportMode{ ProResExportMode::CPU };
 #endif
 
 

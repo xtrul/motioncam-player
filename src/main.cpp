@@ -264,14 +264,7 @@ int main(int argc, char* argv[]) {
 
 
     std::string inPath;
-    std::string outPath;
-    App::ProResExportMode exportMode = App::ProResExportMode::CPU;
-    if (argc >= 5 && std::string(argv[1]) == "--export-prores") {
-        exportMode = (std::string(argv[2]) == "gpu") ? App::ProResExportMode::GPU : App::ProResExportMode::CPU;
-        inPath = argv[3];
-        outPath = argv[4];
-        LogToFile("[main] ProRes export mode via CLI");
-    } else if (argc >= 2 && argv[1] != nullptr) {
+    if (argc >= 2 && argv[1] != nullptr) {
         inPath = argv[1];
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
     } else {
@@ -298,12 +291,6 @@ int main(int argc, char* argv[]) {
     }
 
     LogToFile(std::string("[main] Initializing App with file: ") + inPath);
-    if (!outPath.empty()) {
-        App app(inPath);
-        app.setProResExportMode(exportMode);
-        app.exportCurrentClipToProRes(outPath);
-        return 0;
-    }
     try {
         App app(inPath);
         LogToFile("[main] App object created. Calling app.run()...");
