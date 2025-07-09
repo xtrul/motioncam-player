@@ -301,6 +301,14 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 )
 message(STATUS "POST_BUILD: Configured to copy ${SHADER_COMPILED_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders_spv")
 
+find_package(GTest QUIET)
+if(GTest_FOUND)
+    enable_testing()
+    add_subdirectory(tests)
+else()
+    message(STATUS "GTest not found; tests will not be built")
+endif()
+
 if(EXISTS "${APP_ASSETS_DIR}")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
