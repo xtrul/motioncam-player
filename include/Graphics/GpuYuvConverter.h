@@ -30,6 +30,13 @@ private:
     VkImage m_yuvImage{VK_NULL_HANDLE};
     VmaAllocation m_yuvAlloc{VK_NULL_HANDLE};
     VkImageView m_yuvView{VK_NULL_HANDLE};
+
+    VkCommandPool m_cmdPool{VK_NULL_HANDLE};
+
+    VkImage m_rawImage{VK_NULL_HANDLE};
+    VmaAllocation m_rawAlloc{VK_NULL_HANDLE};
+    VkImageView m_rawView{VK_NULL_HANDLE};
+    VkSampler m_rawSampler{VK_NULL_HANDLE};
 };
 
 #endif // GPU_YUV_CONVERTER_H
