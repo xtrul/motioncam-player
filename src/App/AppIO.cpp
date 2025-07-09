@@ -31,11 +31,15 @@
 #include <sstream>
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
+#include "Graphics/GpuYuvConverter.h"
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
 namespace fs = std::filesystem;
 
+#ifdef ENABLE_PRORES_EXPORT
+static bool g_useGpuProRes = false;
+#endif
 namespace {
     bool writeDngInternal(
         const std::string& outputPath,
@@ -1205,9 +1209,11 @@ void App::exportCurrentClipToProRes() {
         m_proResThread.join();
     }
 
-    m_proResThread = std::thread([this, outputPath]() {
+    bool useGpu = g_useGpuProRes;
+    m_proResThread = std::thread([this, outputPath, useGpu]() {
         av_log_set_level(AV_LOG_ERROR);
         LogProRes("[ProResExport] Thread started");
+        LogProRes(std::string("[ProResExport] MODE = ") + (useGpu ? "GPU (Vulkan hw_frames)" : "CPU (swscale)"));
 
         auto* dec = m_decoderWrapper_ptr->getDecoder();
         const auto& frames = dec->getFrames();
@@ -1235,6 +1241,15 @@ void App::exportCurrentClipToProRes() {
             m_proResStatus.errorMsg = "Invalid frame dimensions";
             m_proResStatus.active.store(false);
             return;
+        }
+
+        GpuYuvConverter converter(m_rendererVk.get());
+        bool gpuActive = useGpu;
+        if (gpuActive) {
+            if (!converter.init(width, height)) {
+                LogProRes("[ProResExport] GPU init failed, falling back to CPU");
+                gpuActive = false;
+            }
         }
 
         int64_t frameDurationNs = 0;
@@ -1452,6 +1467,7 @@ void App::exportCurrentClipToProRes() {
         AVPacket pkt{};
 
         std::vector<uint8_t> rgbBuf;
+        std::vector<uint16_t> gpuBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
@@ -1463,17 +1479,39 @@ void App::exportCurrentClipToProRes() {
             readUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
             t0 = t1;
-            convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
-            t1 = std::chrono::steady_clock::now();
-            rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-
-            if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-            const uint8_t* srcSlices[1] = { rgbBuf.data() };
-            int srcStride[1] = { width*3 };
-            t0 = std::chrono::steady_clock::now();
-            sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
-            t1 = std::chrono::steady_clock::now();
-            scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            if (gpuActive) {
+                converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                t1 = std::chrono::steady_clock::now();
+                rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
+                uint16_t* yPlane = reinterpret_cast<uint16_t*>(frame->data[0]);
+                uint16_t* uPlane = reinterpret_cast<uint16_t*>(frame->data[1]);
+                uint16_t* vPlane = reinterpret_cast<uint16_t*>(frame->data[2]);
+                for (int y=0; y<height; ++y) {
+                    for (int x=0; x<width/2; ++x) {
+                        size_t srcIdx = static_cast<size_t>(y) * (width/2) * 4 + x*4;
+                        uint16_t y0 = gpuBuf[srcIdx] >> 6;
+                        uint16_t u = gpuBuf[srcIdx+1] >> 6;
+                        uint16_t y1 = gpuBuf[srcIdx+2] >> 6;
+                        uint16_t v = gpuBuf[srcIdx+3] >> 6;
+                        yPlane[y*frame->linesize[0]/2 + 2*x] = y0;
+                        yPlane[y*frame->linesize[0]/2 + 2*x+1] = y1;
+                        uPlane[y*frame->linesize[1]/2 + x] = u;
+                        vPlane[y*frame->linesize[2]/2 + x] = v;
+                    }
+                }
+            } else {
+                convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
+                t1 = std::chrono::steady_clock::now();
+                rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
+                const uint8_t* srcSlices[1] = { rgbBuf.data() };
+                int srcStride[1] = { width*3 };
+                t0 = std::chrono::steady_clock::now();
+                sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
+                t1 = std::chrono::steady_clock::now();
+                scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            }
 
             frame->pts = pts;
             pts++;
@@ -1624,6 +1662,7 @@ void App::exportCurrentClipToProRes() {
             LogProRes(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
         }
         m_proResStatus.active.store(false);
+        g_useGpuProRes = false;
     });
 }
 #else
@@ -1631,6 +1670,16 @@ void App::exportCurrentClipToProRes() {
     showActionMessage("FFmpeg support not built");
 }
 #endif
+
+void App::convertCurrentClipToProRes() {
+#ifdef ENABLE_PRORES_EXPORT
+    LogProRes("[App] convertCurrentClipToProRes invoked");
+    g_useGpuProRes = true;
+    exportCurrentClipToProRes();
+#else
+    showActionMessage("FFmpeg support not built");
+#endif
+}
 
 void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
     if (!m_playbackController_ptr) return;
