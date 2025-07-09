@@ -239,20 +239,8 @@ namespace GuiOverlay {
             }
             ImGui::Separator();
 #ifdef ENABLE_PRORES_EXPORT
-            if (ImGui::BeginMenu("Export to ProRes")) {
-                App::ProResExportMode mode = appInstance ? appInstance->getProResExportMode() : App::ProResExportMode::CPU;
-                bool cpu = (mode == App::ProResExportMode::CPU);
-                bool gpu = (mode == App::ProResExportMode::GPU);
-                if (ImGui::RadioButton("CPU", cpu) && appInstance)
-                    appInstance->setProResExportMode(App::ProResExportMode::CPU);
-#ifdef ENABLE_GPU_PRORES
-                if (ImGui::RadioButton("GPU", gpu) && appInstance)
-                    appInstance->setProResExportMode(App::ProResExportMode::GPU);
-#endif
-                if (ImGui::MenuItem("Start", nullptr, false, canOperateOnCurrentFile)) {
-                    if (appInstance) appInstance->exportCurrentClipToProRes("");
-                }
-                ImGui::EndMenu();
+            if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->exportCurrentClipToProRes();
             }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
