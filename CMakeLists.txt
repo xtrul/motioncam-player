@@ -97,7 +97,6 @@ file(MAKE_DIRECTORY ${SHADER_COMPILED_DIR})
 set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
-    "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -149,8 +148,6 @@ set(APP_SOURCES
   src/Graphics/ImageResource.cpp
   src/Graphics/Pipeline.cpp
   src/Graphics/Descriptor.cpp
-  src/Graphics/GpuYuvConverter.cpp
-  src/Export/ProResExporter.cpp
 
   src/Gui/GuiSetup.cpp
   src/Gui/GuiRender.cpp
@@ -200,7 +197,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${PROJECT_SOURCE_DIR}/include/Gui"
   "${PROJECT_SOURCE_DIR}/include/Playback"
   "${PROJECT_SOURCE_DIR}/include/Utils"
-  "${PROJECT_SOURCE_DIR}/include/Export"
 
   "${VMA_INCLUDE_DIR}"
   "${Vulkan_INCLUDE_DIRS}"
