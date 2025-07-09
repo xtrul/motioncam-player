@@ -6,7 +6,6 @@
 #include "Graphics/Pipeline.h"
 #include "Graphics/Descriptor.h"
 #include "Graphics/VulkanHelpers.h"
-#include "Graphics/ComputePipeline.h"
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 #include "Utils/OrientationUtils.h"
@@ -55,8 +54,6 @@ bool Renderer_VK::init(VkRenderPass renderPass, uint32_t swapChainImageCount) {
 
     if (!ImageResource::createRawImageResources(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create initial raw image resources."); return false; }
     LogToFile("[Renderer_VK::init] Initial raw image resources created.");
-    if (!ImageResource::createYuvImageResources(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create initial yuv image resources."); return false; }
-    if (!ComputePipeline::createRawToYuvPipeline(this)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create compute pipeline."); return false; }
 
     onSwapChainRecreated(renderPass, swapChainImageCount);
 
@@ -68,8 +65,6 @@ void Renderer_VK::cleanup() {
     LogToFile("[Renderer_VK::cleanup] Starting cleanup...");
     Pipeline::cleanupSwapChainResources(this);
     ImageResource::cleanupRawImageResources(this);
-    ImageResource::cleanupYuvImageResources(this);
-    ComputePipeline::cleanup(this);
 
     if (m_descriptorSetLayout != VK_NULL_HANDLE) {
         LogToFile("[Renderer_VK::cleanup] Destroying descriptor set layout.");
@@ -368,4 +363,4 @@ void Renderer_VK::ensureRawImageCapacity(uint32_t w, uint32_t h)
         LogToFile("[Renderer_VK::ensureRawImageCapacity] ERROR: Failed to recreate raw image resources for new capacity.");
         throw std::runtime_error("Failed to ensure raw image capacity by recreating resources.");
     }
-    ImageResource::createYuvImageResources(this, static_cast<int>(w), static_cast<int>(h));}
+}
