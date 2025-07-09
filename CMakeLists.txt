@@ -19,8 +19,6 @@ set(APP_ASSETS_DIR      "${APP_ROOT_DIR}/assets")
 set(APP_SHADERS_SRC_DIR "${APP_ROOT_DIR}/shaders")
 set(APP_CMAKE_DIR       "${APP_ROOT_DIR}/cmake")
 
-list(APPEND CMAKE_MODULE_PATH "${APP_CMAKE_DIR}")
-
 message(STATUS "Application Structure:")
 message(STATUS "  Source files (.cpp):      ${APP_ROOT_DIR}/src (structured)")
 message(STATUS "  Header files (.h):        ${APP_ROOT_DIR}/include (structured)")
@@ -34,7 +32,7 @@ if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
 find_package(Threads REQUIRED)
-find_package(FFMPEG QUIET COMPONENTS avcodec avformat avutil swscale swresample)
+find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample)
 message(STATUS "FFmpeg_FOUND=${FFmpeg_FOUND} FFMPEG_FOUND=${FFMPEG_FOUND}")
 if(FFMPEG_FOUND OR FFmpeg_FOUND)
     message(STATUS "FFmpeg found via vcpkg, enabling ProRes export")
@@ -99,7 +97,6 @@ file(MAKE_DIRECTORY ${SHADER_COMPILED_DIR})
 set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
-    "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -151,7 +148,6 @@ set(APP_SOURCES
   src/Graphics/ImageResource.cpp
   src/Graphics/Pipeline.cpp
   src/Graphics/Descriptor.cpp
-  src/Graphics/GpuYuvConverter.cpp
 
   src/Gui/GuiSetup.cpp
   src/Gui/GuiRender.cpp
@@ -166,10 +162,6 @@ set(APP_SOURCES
 
   src/main.cpp
 )
-
-if(HAVE_FFMPEG)
-  list(APPEND APP_SOURCES src/Export/ProResExporter.cpp)
-endif()
 
 list(APPEND APP_SOURCES "${IMGUI_SOURCE_DIR}/backends/imgui_impl_glfw.cpp")
 list(APPEND APP_SOURCES "${IMGUI_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp")
@@ -205,7 +197,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${PROJECT_SOURCE_DIR}/include/Gui"
   "${PROJECT_SOURCE_DIR}/include/Playback"
   "${PROJECT_SOURCE_DIR}/include/Utils"
-  "${PROJECT_SOURCE_DIR}/include/Export"
 
   "${VMA_INCLUDE_DIR}"
   "${Vulkan_INCLUDE_DIRS}"

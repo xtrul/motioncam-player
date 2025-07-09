@@ -58,11 +58,6 @@ App::~App() {
         m_proResThread.join();
         LogToFile("[App::~App] ProRes export thread joined.");
     }
-    if (m_gpuExporter && m_gpuExporter->isRunning()) {
-        LogToFile("[App::~App] Joining GPU ProRes export thread...");
-        m_gpuExporter->join();
-        LogToFile("[App::~App] GPU ProRes export thread joined.");
-    }
 #endif
 
     destroyPersistentStagingBuffers();

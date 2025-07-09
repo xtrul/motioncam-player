@@ -227,7 +227,6 @@ private:
     } m_proResStatus;
     std::atomic<bool> m_showExportProgressPopup{ false };
     std::thread m_proResThread;
-    std::unique_ptr<ProResExporter> m_gpuExporter;
 #endif
 
 
