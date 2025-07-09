@@ -230,8 +230,6 @@ private:
     std::thread m_proResThread;
 #endif
 
-    // When true the render loop skips drawFrame() allowing export threads to own the GPU
-    std::atomic<bool> m_renderPaused{ false };
 
 #ifdef _WIN32
     HWND _ipcWnd = nullptr;

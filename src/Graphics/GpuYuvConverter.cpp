@@ -36,12 +36,6 @@ bool GpuYuvConverter::init(int width, int height) {
     ci.queueFamilyIndex = graphicsFamily;
     ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     VK_CHECK_RENDERER(vkCreateCommandPool(m_renderer->m_device_p, &ci, nullptr, &m_cmdPool));
-    {
-        std::ostringstream oss;
-        oss << "[GPU] converter init qFamily=" << graphicsFamily
-            << " pool=" << m_cmdPool;
-        DBG_INFO(oss.str());
-    }
 
     VkDescriptorSetLayoutBinding bindings[2]{};
     bindings[0].binding = 0;
@@ -254,12 +248,8 @@ void GpuYuvConverter::cleanup() {
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         int frameIndex,
                                          std::vector<uint16_t>& outPacked) {
-    std::ostringstream inf;
-    inf << "[GPU] convertAndReadback frame=" << frameIndex
-        << " size=" << width << "x" << height;
-    DBG_TRACE(inf.str());
+    LogProRes("[GPU] convertAndReadback invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
@@ -293,11 +283,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
 
     VkCommandBuffer cmd = VulkanHelpers::beginSingleTimeCommands(m_renderer->m_device_p,
                                                                 m_cmdPool);
-    {
-        std::ostringstream oss;
-        oss << "[GPU] cmdBuf=" << cmd;
-        DBG_TRACE(oss.str());
-    }
 
     VkImageMemoryBarrier bar1{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar1.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -444,21 +429,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
         m_renderer->m_graphicsQueue_p, cmd);
 
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
-    {
-        const uint16_t* dumpPtr = static_cast<const uint16_t*>(rbAllocInfo.pMappedData);
-        std::ostringstream dump;
-        dump << "[GPU] dump:";
-        int words = std::min<int>(16, static_cast<int>(outSize/sizeof(uint16_t)));
-        for (int i=0;i<words;++i) {
-            dump << " 0x" << std::hex << std::setw(4) << std::setfill('0') << dumpPtr[i];
-        }
-        DBG_TRACE(dump.str());
-        if (words>=4) {
-            if (dumpPtr[2]==0 && dumpPtr[3]==0 && (dumpPtr[0]!=dumpPtr[1])) {
-                DBG_WARN("Chroma looks constant – packing order may be wrong");
-            }
-        }
-    }
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
     LogProRes("[GPU] readback complete");
