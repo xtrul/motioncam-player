@@ -1654,3 +1654,14 @@ void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
     LogToFile(std::string("[App::setPlaybackMode] Changed from ") + std::to_string(static_cast<int>(oldMode)) +
         " to " + std::to_string(static_cast<int>(mode)));
 }
+
+void App::convertCurrentClipToProRes() {
+#ifdef ENABLE_PRORES_EXPORT
+    // For now this reuses the CPU path. A full GPU implementation would
+    // upload each RAW frame to the Vulkan compute pipeline and dispatch
+    // the raw_to_yuv422 shader before handing frames off to FFmpeg.
+    exportCurrentClipToProRes();
+#else
+    showActionMessage("FFmpeg support not built");
+#endif
+}

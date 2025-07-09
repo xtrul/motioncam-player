@@ -96,6 +96,17 @@ public:
     std::vector<VkDescriptorSet> m_descriptorSets;
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
 
+    // Compute pipeline members for RAW -> YUV conversion
+    VkPipeline m_computePipeline = VK_NULL_HANDLE;
+    VkPipelineLayout m_computePipelineLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_computeDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_computeDescriptorPool = VK_NULL_HANDLE;
+    VkDescriptorSet m_computeDescriptorSet = VK_NULL_HANDLE;
+
+    VkImage m_yuvImage = VK_NULL_HANDLE;
+    VmaAllocation m_yuvImageAllocation = VK_NULL_HANDLE;
+    VkImageView m_yuvImageView = VK_NULL_HANDLE;
+
     uint32_t m_swapChainImageCount = 0; // Needed by Descriptor helpers
 
 private:
@@ -138,6 +149,8 @@ private:
     friend void Descriptor::updateDescriptorSetsWithNewRawImage(Renderer_VK* renderer);
     friend bool Descriptor::createUniformBuffers(Renderer_VK* renderer);
     friend void Descriptor::cleanupUniformBuffers(Renderer_VK* renderer);
+    friend bool ComputePipeline::createRawToYuvPipeline(Renderer_VK* renderer);
+    friend void ComputePipeline::cleanup(Renderer_VK* renderer);
+    friend bool ComputePipeline::dispatchRawToYuv(Renderer_VK* renderer, VkCommandBuffer commandBuffer, int width, int height);
 };
-
 #endif // RENDERER_VK_H

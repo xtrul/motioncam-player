@@ -10,6 +10,8 @@ namespace ImageResource {
 
     bool createRawImageResources(Renderer_VK* renderer, int width, int height);
     void cleanupRawImageResources(Renderer_VK* renderer);
+    bool createYuvImageResources(Renderer_VK* renderer, int width, int height);
+    void cleanupYuvImageResources(Renderer_VK* renderer);
 
     void transitionImageLayout(
         VkDevice device,
@@ -21,5 +23,4 @@ namespace ImageResource {
     );
 
 }
-
 #endif
