@@ -155,11 +155,6 @@ App::App(const std::string& filePath) :
 #ifndef NDEBUG
     std::cout << "App::App Constructor called for file: " << this->m_filePath << std::endl;
 #endif
-#ifdef ENABLE_GPU_PRORES
-    LogToFile("[App] GPU ProRes support ENABLED in this build");
-#else
-    LogToFile("[App] GPU ProRes support DISABLED in this build");
-#endif
 
     LogToFile(std::string("App::App Effective kNumPersistentStagingBuffers: ") + std::to_string(kNumPersistentStagingBuffers));
     LogToFile(std::string("App::App GpuUploadQueueCapacity (static const): ") + std::to_string(GpuUploadQueueCapacity));

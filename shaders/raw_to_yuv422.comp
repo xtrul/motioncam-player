@@ -1,9 +1,0 @@
-#version 450
-layout(local_size_x = 32, local_size_y = 32) in;
-layout(set = 0, binding = 0) readonly buffer Raw16 { uint data[]; } raw;
-layout(set = 0, binding = 1, rgba10a2) writeonly uniform image2D yuv;
-void main() {
-    ivec2 px = ivec2(gl_GlobalInvocationID.xy);
-    // stub compute - real shader would perform demosaic and YUV packing
-    imageStore(yuv, px, uvec4(0));
-}
