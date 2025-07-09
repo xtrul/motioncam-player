@@ -26,5 +26,6 @@ void main() {
     uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
     uint u = 512u;
     uint v = 512u;
-    imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
+    // Shader outputs components in order Y0,Y1,U,V for easier CPU unpacking
+    imageStore(yuvImage, gid, uvec4(y0, y1, u, v));
 }
