@@ -163,21 +163,32 @@ bool App::run() {
         loopEndTime = steady_clock::now();
         m_totalLoopTimeMs = std::chrono::duration<double, std::milli>(loopEndTime - loopStartTime).count();
 
-        // Update UI auto-hide and fade
+        // Update UI auto-hide and fade. Keep UI visible while exporting.
         {
-            steady_clock::time_point now = steady_clock::now();
-            double idleSec = std::chrono::duration<double>(now - m_lastInteractionTime).count();
-            if (m_showUI && !m_uiAutoHidden && idleSec >= m_uiAutoHideDelaySec) {
-                m_uiAutoHidden = true;
-            }
+            bool exporting = false;
+#ifdef ENABLE_PRORES_EXPORT
+            exporting = m_proResStatus.active.load();
+#endif
+            if (!exporting) {
+                steady_clock::time_point now = steady_clock::now();
+                double idleSec = std::chrono::duration<double>(now - m_lastInteractionTime).count();
+                if (m_showUI && !m_uiAutoHidden && idleSec >= m_uiAutoHideDelaySec) {
+                    m_uiAutoHidden = true;
+                }
 
-            float dt = std::chrono::duration<float>(now - m_lastUiFadeUpdate).count();
-            m_lastUiFadeUpdate = now;
-            float targetAlpha = (m_showUI && !m_uiAutoHidden) ? 1.0f : 0.0f;
-            if (m_uiOpacity < targetAlpha) {
-                m_uiOpacity = std::min(targetAlpha, m_uiOpacity + dt * m_uiFadeSpeed);
-            } else if (m_uiOpacity > targetAlpha) {
-                m_uiOpacity = std::max(targetAlpha, m_uiOpacity - dt * m_uiFadeSpeed);
+                float dt = std::chrono::duration<float>(now - m_lastUiFadeUpdate).count();
+                m_lastUiFadeUpdate = now;
+                float targetAlpha = (m_showUI && !m_uiAutoHidden) ? 1.0f : 0.0f;
+                if (m_uiOpacity < targetAlpha) {
+                    m_uiOpacity = std::min(targetAlpha, m_uiOpacity + dt * m_uiFadeSpeed);
+                } else if (m_uiOpacity > targetAlpha) {
+                    m_uiOpacity = std::max(targetAlpha, m_uiOpacity - dt * m_uiFadeSpeed);
+                }
+            } else {
+                // Force UI fully visible during export
+                m_uiAutoHidden = false;
+                m_uiOpacity = 1.0f;
+                m_lastUiFadeUpdate = steady_clock::now();
             }
         }
 
