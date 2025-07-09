@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <sstream>
 
 extern std::string g_AppBasePath;
 
@@ -160,7 +161,13 @@ void GpuYuvConverter::cleanup() {
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
                                          std::vector<uint16_t>& outPacked) {
+    static int callCounter = 0;
     LogProRes("[GPU] convertAndReadback invoked");
+    if (callCounter == 0) {
+        std::ostringstream info;
+        info << "[GPU] first call width=" << width << " height=" << height;
+        LogProRes(info.str());
+    }
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
@@ -275,7 +282,15 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
+    if (callCounter == 0 && outPacked.size() >= 4) {
+        std::ostringstream vals;
+        vals << "[GPU] first pixel values "
+             << outPacked[0] << "," << outPacked[1] << "," << outPacked[2]
+             << "," << outPacked[3];
+        LogProRes(vals.str());
+    }
     LogProRes("[GPU] readback complete");
+    ++callCounter;
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
     vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
