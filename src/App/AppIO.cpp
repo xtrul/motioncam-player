@@ -17,6 +17,8 @@
 #endif
 #include <tinydng/tiny_dng_writer.h>
 
+#include <string>
+
 
 #include <filesystem>
 #include <thread>
@@ -1639,13 +1641,13 @@ void App::exportCurrentClipToProRes(const ProResExportOptions& options) {
     });
 }
 
-void App::exportCurrentClipToHevc() {
+void App::exportCurrentClipToHevc(const HevcExportOptions& options) {
     if (m_hevcStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = openSaveMovDialog();
+    std::string outputPath = options.outputPath.empty() ? openSaveMovDialog() : options.outputPath;
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mp4") {
         outputPath += ".mp4";
@@ -1719,14 +1721,20 @@ void App::exportCurrentClipToHevc() {
         }
         LogHevc("[HevcExport] Output context created");
 
-        const AVCodec* vcodec = avcodec_find_encoder_by_name("hevc_amf");
+        const char* hevcNames[] = { "hevc_amf", "hevc_nvenc", "libx265", nullptr };
+        const AVCodec* vcodec = nullptr;
+        const char* usedName = nullptr;
+        for (int i = 0; hevcNames[i]; ++i) {
+            vcodec = avcodec_find_encoder_by_name(hevcNames[i]);
+            if (vcodec) { usedName = hevcNames[i]; break; }
+        }
         if (!vcodec) {
             m_hevcStatus.errorMsg = "HEVC encoder not found";
             m_hevcStatus.active.store(false);
             avformat_free_context(fmt);
             return;
         }
-        LogHevc(std::string("[HevcExport] HEVC encoder: ") + avcodec_get_name(vcodec->id));
+        LogHevc(std::string("[HevcExport] HEVC encoder: ") + usedName);
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
         if (!vstream) {
@@ -1738,7 +1746,10 @@ void App::exportCurrentClipToHevc() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        vctx->pix_fmt = AV_PIX_FMT_P010LE;
+        if (usedName && std::string(usedName) == "libx265")
+            vctx->pix_fmt = AV_PIX_FMT_YUV420P10LE;
+        else
+            vctx->pix_fmt = AV_PIX_FMT_P010LE;
         vctx->width = width;
         vctx->height = height;
         vctx->time_base = timeBase;
@@ -1748,6 +1759,19 @@ void App::exportCurrentClipToHevc() {
 
         AVDictionary* encOpts = nullptr;
         av_dict_set(&encOpts, "profile", "main10", 0);
+        if (usedName && std::string(usedName) == "hevc_amf") {
+            av_dict_set(&encOpts, "usage", "high_quality", 0);
+            av_dict_set(&encOpts, "quality", "quality", 0);
+            av_dict_set(&encOpts, "rc", "hqvbr", 0);
+            av_dict_set(&encOpts, "qvbr_quality_level", "15", 0);
+        } else if (usedName && std::string(usedName) == "hevc_nvenc") {
+            av_dict_set(&encOpts, "preset", "p7", 0); // slowest/highest quality
+            av_dict_set(&encOpts, "rc", "vbrhq", 0);
+            av_dict_set(&encOpts, "cq", "19", 0);
+        } else { // libx265
+            av_dict_set(&encOpts, "preset", "slow", 0);
+            av_dict_set(&encOpts, "crf", "18", 0);
+        }
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_hevcStatus.errorMsg = "avcodec_open2 failed";
             m_hevcStatus.active.store(false);
@@ -1904,7 +1928,7 @@ void App::exportCurrentClipToHevc() {
 void App::exportCurrentClipToProRes(const ProResExportOptions&) {
     showActionMessage("FFmpeg support not built");
 }
-void App::exportCurrentClipToHevc() {
+void App::exportCurrentClipToHevc(const HevcExportOptions&) {
     showActionMessage("FFmpeg support not built");
 }
 #endif
@@ -1927,6 +1951,26 @@ void App::startProResBatch() {
 }
 #else
 void App::startProResBatch() { showActionMessage("FFmpeg support not built"); }
+#endif
+
+#ifdef ENABLE_PRORES_EXPORT
+void App::startHevcBatch() {
+    if (m_hevcBatchOptions.empty()) return;
+    if (m_hevcStatus.active.load()) {
+        showActionMessage("Export already running");
+        return;
+    }
+    for (auto& opts : m_hevcBatchOptions) {
+        if (opts.playlistIndex >= 0 && static_cast<size_t>(opts.playlistIndex) < m_fileList.size()) {
+            loadFileAtIndex(opts.playlistIndex);
+        }
+        exportCurrentClipToHevc(opts);
+        if (m_hevcThread.joinable()) m_hevcThread.join();
+    }
+    m_hevcBatchOptions.clear();
+}
+#else
+void App::startHevcBatch() { showActionMessage("FFmpeg support not built"); }
 #endif
 
 void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
