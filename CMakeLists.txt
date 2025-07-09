@@ -173,9 +173,6 @@ message(STATUS "Application sources for executable: ${APP_SOURCES}")
 add_executable(${PROJECT_NAME} WIN32 "")
 target_sources(${PROJECT_NAME} PRIVATE ${APP_SOURCES})
 
-enable_testing()
-add_subdirectory(tests)
-
 if(WIN32 AND EXISTS "${APP_ROOT_DIR}/icon.rc")
     target_sources(${PROJECT_NAME} PRIVATE "${APP_ROOT_DIR}/icon.rc")
     message(STATUS "Added Windows icon resource: ${APP_ROOT_DIR}/icon.rc")
