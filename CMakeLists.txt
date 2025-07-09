@@ -97,6 +97,7 @@ file(MAKE_DIRECTORY ${SHADER_COMPILED_DIR})
 set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
+    "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -147,6 +148,7 @@ set(APP_SOURCES
   src/Graphics/VulkanHelpers.cpp
   src/Graphics/ImageResource.cpp
   src/Graphics/Pipeline.cpp
+  src/Graphics/ComputePipeline.cpp
   src/Graphics/Descriptor.cpp
 
   src/Gui/GuiSetup.cpp
