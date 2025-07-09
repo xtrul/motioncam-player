@@ -1,0 +1,277 @@
+#include "Graphics/GpuYuvConverter.h"
+#include "Graphics/Renderer_VK.h"
+#include "Graphics/VulkanHelpers.h"
+#include "Graphics/ImageResource.h"
+#include "Utils/DebugLog.h"
+#include <filesystem>
+#include <chrono>
+
+extern std::string g_AppBasePath;
+
+GpuYuvConverter::GpuYuvConverter(Renderer_VK* renderer)
+    : m_renderer(renderer) {}
+
+GpuYuvConverter::~GpuYuvConverter() { cleanup(); }
+
+bool GpuYuvConverter::init(int width, int height) {
+    namespace fs = std::filesystem;
+    fs::path shaderPath = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_yuv422.comp.spv";
+    auto code = VulkanHelpers::readFile(shaderPath.string());
+    VkShaderModule module = VulkanHelpers::createShaderModule(m_renderer->m_device_p, code);
+    LogProRes("[GPU] Creating RAW->YUV compute pipeline");
+
+    VkDescriptorSetLayoutBinding bindings[2]{};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutCI{};
+    layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutCI.bindingCount = 2;
+    layoutCI.pBindings = bindings;
+    VK_CHECK_RENDERER(vkCreateDescriptorSetLayout(m_renderer->m_device_p, &layoutCI, nullptr, &m_setLayout));
+
+    VkPushConstantRange pcRange{};
+    pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pcRange.offset = 0;
+    pcRange.size = sizeof(int) * 2;
+
+    VkPipelineLayoutCreateInfo pli{};
+    pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pli.setLayoutCount = 1;
+    pli.pSetLayouts = &m_setLayout;
+    pli.pushConstantRangeCount = 1;
+    pli.pPushConstantRanges = &pcRange;
+    VK_CHECK_RENDERER(vkCreatePipelineLayout(m_renderer->m_device_p, &pli, nullptr, &m_pipelineLayout));
+
+    VkPipelineShaderStageCreateInfo stage{};
+    stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    stage.module = module;
+    stage.pName = "main";
+
+    VkComputePipelineCreateInfo cp{};
+    cp.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    cp.stage = stage;
+    cp.layout = m_pipelineLayout;
+    VK_CHECK_RENDERER(vkCreateComputePipelines(m_renderer->m_device_p, VK_NULL_HANDLE, 1, &cp, nullptr, &m_pipeline));
+
+    vkDestroyShaderModule(m_renderer->m_device_p, module, nullptr);
+
+    VkDescriptorPoolSize poolSizes[2]{};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[0].descriptorCount = 1;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    poolSizes[1].descriptorCount = 1;
+    VkDescriptorPoolCreateInfo poolCI{};
+    poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolCI.maxSets = 1;
+    poolCI.poolSizeCount = 2;
+    poolCI.pPoolSizes = poolSizes;
+    VK_CHECK_RENDERER(vkCreateDescriptorPool(m_renderer->m_device_p, &poolCI, nullptr, &m_descPool));
+
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = m_descPool;
+    ai.descriptorSetCount = 1;
+    ai.pSetLayouts = &m_setLayout;
+    VK_CHECK_RENDERER(vkAllocateDescriptorSets(m_renderer->m_device_p, &ai, &m_descSet));
+    LogProRes("[GPU] Compute pipeline initialized");
+
+    // Create YUV image for compute output
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = static_cast<uint32_t>((width + 1) / 2);
+    imageInfo.extent.height = static_cast<uint32_t>(height);
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = VK_FORMAT_R16G16B16A16_UINT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+
+    VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &imageInfo, &allocInfo, &m_yuvImage, &m_yuvAlloc, nullptr));
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = m_yuvImage;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = VK_FORMAT_R16G16B16A16_UINT;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &viewInfo, nullptr, &m_yuvView));
+
+    ImageResource::transitionImageLayout(
+        m_renderer->m_device_p,
+        m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p,
+        m_yuvImage,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL);
+
+    return true;
+}
+
+void GpuYuvConverter::cleanup() {
+    if (m_yuvView != VK_NULL_HANDLE) {
+        vkDestroyImageView(m_renderer->m_device_p, m_yuvView, nullptr);
+        m_yuvView = VK_NULL_HANDLE;
+    }
+    if (m_yuvImage != VK_NULL_HANDLE) {
+        vmaDestroyImage(m_renderer->m_allocator_p, m_yuvImage, m_yuvAlloc);
+        m_yuvImage = VK_NULL_HANDLE;
+        m_yuvAlloc = VK_NULL_HANDLE;
+    }
+    if (m_descPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(m_renderer->m_device_p, m_descPool, nullptr);
+        m_descPool = VK_NULL_HANDLE;
+    }
+    if (m_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(m_renderer->m_device_p, m_pipeline, nullptr);
+        m_pipeline = VK_NULL_HANDLE;
+    }
+    if (m_pipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(m_renderer->m_device_p, m_pipelineLayout, nullptr);
+        m_pipelineLayout = VK_NULL_HANDLE;
+    }
+    if (m_setLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(m_renderer->m_device_p, m_setLayout, nullptr);
+        m_setLayout = VK_NULL_HANDLE;
+    }
+}
+
+bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
+                                         std::vector<uint16_t>& outPacked) {
+    VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
+    VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
+
+    VkBuffer stagingBuf = VK_NULL_HANDLE;
+    VmaAllocation stagingAlloc = VK_NULL_HANDLE;
+    VkBufferCreateInfo sbInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    sbInfo.size = rawSize;
+    sbInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    VmaAllocationCreateInfo sbAlloc{};
+    sbAlloc.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    sbAlloc.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                    VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VmaAllocationInfo sbAllocInfo{};
+    VK_CHECK_RENDERER(vmaCreateBuffer(m_renderer->m_allocator_p, &sbInfo, &sbAlloc,
+                                      &stagingBuf, &stagingAlloc, &sbAllocInfo));
+    memcpy(sbAllocInfo.pMappedData, raw, rawSize);
+    vmaFlushAllocation(m_renderer->m_allocator_p, stagingAlloc, 0, rawSize);
+
+    VkBuffer readbackBuf = VK_NULL_HANDLE;
+    VmaAllocation readbackAlloc = VK_NULL_HANDLE;
+    VkBufferCreateInfo rbInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    rbInfo.size = outSize;
+    rbInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    VmaAllocationCreateInfo rbAlloc{};
+    rbAlloc.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    rbAlloc.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+                    VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VmaAllocationInfo rbAllocInfo{};
+    VK_CHECK_RENDERER(vmaCreateBuffer(m_renderer->m_allocator_p, &rbInfo, &rbAlloc,
+                                      &readbackBuf, &readbackAlloc, &rbAllocInfo));
+
+    VkCommandBuffer cmd = VulkanHelpers::beginSingleTimeCommands(m_renderer->m_device_p,
+                                                                m_renderer->m_hostSiteCommandPool_p);
+
+    ImageResource::transitionImageLayout(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, m_renderer->m_rawImage,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = {0,0,0};
+    region.imageExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
+    vkCmdCopyBufferToImage(cmd, stagingBuf, m_renderer->m_rawImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    ImageResource::transitionImageLayout(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, m_renderer->m_rawImage,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    VkDescriptorImageInfo inputInfo{};
+    inputInfo.sampler = m_renderer->m_rawImageSampler;
+    inputInfo.imageView = m_renderer->m_rawImageView;
+    inputInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkDescriptorImageInfo outInfo{};
+    outInfo.imageView = m_yuvView;
+    outInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet writes[2]{};
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].dstSet = m_descSet;
+    writes[0].dstBinding = 0;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[0].pImageInfo = &inputInfo;
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstSet = m_descSet;
+    writes[1].dstBinding = 1;
+    writes[1].descriptorCount = 1;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    writes[1].pImageInfo = &outInfo;
+    vkUpdateDescriptorSets(m_renderer->m_device_p, 2, writes, 0, nullptr);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
+
+    struct Push { int w; int h; } push{ width, height };
+    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
+
+    vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
+
+    ImageResource::transitionImageLayout(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, m_yuvImage,
+        VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+    VkBufferImageCopy rbRegion{};
+    rbRegion.bufferOffset = 0;
+    rbRegion.bufferRowLength = 0;
+    rbRegion.bufferImageHeight = 0;
+    rbRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    rbRegion.imageSubresource.mipLevel = 0;
+    rbRegion.imageSubresource.baseArrayLayer = 0;
+    rbRegion.imageSubresource.layerCount = 1;
+    rbRegion.imageOffset = {0,0,0};
+    rbRegion.imageExtent = { static_cast<uint32_t>((width + 1) / 2), static_cast<uint32_t>(height), 1 };
+    vkCmdCopyImageToBuffer(cmd, m_yuvImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           readbackBuf, 1, &rbRegion);
+
+    ImageResource::transitionImageLayout(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, m_yuvImage,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+
+    VulkanHelpers::endSingleTimeCommands(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, cmd);
+
+    vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
+    outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
+    memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
+
+    vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
+    vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
+    return true;
+}
