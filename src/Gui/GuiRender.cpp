@@ -259,6 +259,20 @@ namespace GuiOverlay {
                     }
                 }
             }
+            if (ImGui::MenuItem("Add Current to HEVC Batch", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) {
+                    appInstance->m_showHevcBatchWindow.store(true);
+                    HevcExportOptions hopts{};
+                    if (appInstance->m_currentFileIndex >= 0 &&
+                        static_cast<size_t>(appInstance->m_currentFileIndex) < appInstance->m_fileList.size()) {
+                        hopts.playlistIndex = appInstance->m_currentFileIndex;
+                        hopts.inputPath = appInstance->m_fileList[appInstance->m_currentFileIndex];
+                        hopts.outputPath = appInstance->openSaveMovDialog();
+                        if (!hopts.outputPath.empty())
+                            appInstance->m_hevcBatchOptions.push_back(hopts);
+                    }
+                }
+            }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
@@ -306,6 +320,7 @@ namespace GuiOverlay {
                         if (ImGui::BeginDragDropSource()) {
                             int payloadIndex = i;
                             ImGui::SetDragDropPayload("PRORES_INDEX", &payloadIndex, sizeof(int));
+                            ImGui::SetDragDropPayload("HEVC_INDEX", &payloadIndex, sizeof(int));
                             ImGui::Text("%s", filename_to_display.c_str());
                             ImGui::EndDragDropSource();
                         }
@@ -318,6 +333,16 @@ namespace GuiOverlay {
                                 if (!opts.outputPath.empty()) {
                                     appInstance->m_batchOptions.push_back(opts);
                                     appInstance->m_showBatchWindow.store(true);
+                                }
+                            }
+                            if (ImGui::MenuItem("Add to HEVC Batch")) {
+                                HevcExportOptions hopts{};
+                                hopts.playlistIndex = i;
+                                hopts.inputPath = filePath;
+                                hopts.outputPath = appInstance->openSaveMovDialog();
+                                if (!hopts.outputPath.empty()) {
+                                    appInstance->m_hevcBatchOptions.push_back(hopts);
+                                    appInstance->m_showHevcBatchWindow.store(true);
                                 }
                             }
                             ImGui::EndPopup();
@@ -425,6 +450,52 @@ namespace GuiOverlay {
                 ImGui::SameLine();
                 if (ImGui::Button("Close")) {
                     appInstance->m_showBatchWindow.store(false);
+                }
+            }
+            ImGui::End();
+        }
+        if (appInstance->m_showHevcBatchWindow.load()) {
+            ImGui::SetNextWindowSize(ImVec2(420,280), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("HEVC Batch", nullptr, ImGuiWindowFlags_NoCollapse)) {
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HEVC_INDEX")) {
+                        int pindex = *(const int*)payload->Data;
+                        if (pindex >= 0 && static_cast<size_t>(pindex) < appInstance->m_fileList.size()) {
+                            HevcExportOptions opts{};
+                            opts.playlistIndex = pindex;
+                            opts.inputPath = appInstance->m_fileList[pindex];
+                            opts.outputPath = "";
+                            appInstance->m_hevcBatchOptions.push_back(opts);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                ImGui::Text("Drag files here or use context menu to add.");
+                ImGui::Separator();
+                for (size_t i = 0; i < appInstance->m_hevcBatchOptions.size(); ++i) {
+                    HevcExportOptions &opts = appInstance->m_hevcBatchOptions[i];
+                    ImGui::PushID(static_cast<int>(i));
+                    ImGui::Text("%s", fs::path(opts.inputPath).filename().string().c_str());
+                    ImGui::Text("Output: %s", opts.outputPath.c_str());
+                    ImGui::SameLine();
+                    if (ImGui::Button("Browse")) {
+                        std::string newPath = appInstance->openSaveMovDialog();
+                        if (!newPath.empty()) opts.outputPath = newPath;
+                    }
+                    if (ImGui::Button("Remove")) {
+                        appInstance->m_hevcBatchOptions.erase(appInstance->m_hevcBatchOptions.begin()+i);
+                        ImGui::PopID();
+                        break;
+                    }
+                    ImGui::Separator();
+                    ImGui::PopID();
+                }
+                if (ImGui::Button("Start Batch")) {
+                    appInstance->startHevcBatch();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Close")) {
+                    appInstance->m_showHevcBatchWindow.store(false);
                 }
             }
             ImGui::End();
