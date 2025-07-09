@@ -1,0 +1,31 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0) uniform usampler2D rawImage;
+layout(binding = 1, rgba16ui) writeonly uniform uimage2D yuvImage;
+
+layout(push_constant) uniform PushConsts {
+    int width;
+    int height;
+} pc;
+
+uint readU16(int x, int y) {
+    x = clamp(x, 0, pc.width - 1);
+    y = clamp(y, 0, pc.height - 1);
+    return texelFetch(rawImage, ivec2(x, y), 0).r;
+}
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    int x0 = gid.x * 2;
+    int y = gid.y;
+    if (x0 >= pc.width || y >= pc.height) return;
+    int x1 = x0 + 1;
+    uint y0 = readU16(x0, y) >> 6;
+    uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
+    uint u = 512u;
+    uint v = 512u;
+    imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
+}
+
