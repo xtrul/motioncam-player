@@ -112,7 +112,6 @@ public:
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
     void exportCurrentClipToProRes();
-    void convertCurrentClipToProRes();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
