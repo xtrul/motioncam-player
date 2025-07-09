@@ -1247,13 +1247,16 @@ void App::exportCurrentClipToProRes() {
         LogProRes(std::string("[ProResExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
 
         LogProRes("[ProResExport] Allocating output context");
+        auto allocStart = std::chrono::steady_clock::now();
         AVFormatContext* fmt = nullptr;
         if (avformat_alloc_output_context2(&fmt, nullptr, nullptr, outputPath.c_str()) < 0 || !fmt) {
             m_proResStatus.errorMsg = "avformat_alloc_output_context2 failed";
             m_proResStatus.active.store(false);
             return;
         }
-        LogProRes("[ProResExport] Output context created");
+        auto allocMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - allocStart).count();
+        LogProRes("[ProResExport] Output context created in " + std::to_string(allocMs) + "ms");
 
         const AVCodec* vcodec = avcodec_find_encoder_by_name("prores_ks");
         if (!vcodec) {
@@ -1291,6 +1294,7 @@ void App::exportCurrentClipToProRes() {
         AVDictionary* encOpts = nullptr;
         av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
         LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
+        auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_proResStatus.errorMsg = "avcodec_open2 failed";
             m_proResStatus.active.store(false);
@@ -1299,7 +1303,10 @@ void App::exportCurrentClipToProRes() {
             av_dict_free(&encOpts);
             return;
         }
+        auto openVMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - openVStart).count();
         av_dict_free(&encOpts);
+        LogProRes(std::string("[ProResExport] Video codec opened in ") + std::to_string(openVMs) + "ms");
         LogProRes(std::string("[ProResExport] Actual thread count: ") +
                   std::to_string(vctx->thread_count));
         {
@@ -1346,6 +1353,7 @@ void App::exportCurrentClipToProRes() {
 
         if (!(fmt->oformat->flags & AVFMT_NOFILE)) {
             LogProRes("[ProResExport] Opening output file");
+            auto fileOpenStart = std::chrono::steady_clock::now();
             if (avio_open(&fmt->pb, outputPath.c_str(), AVIO_FLAG_WRITE) < 0) {
                 m_proResStatus.errorMsg = "avio_open failed";
                 m_proResStatus.active.store(false);
@@ -1353,10 +1361,13 @@ void App::exportCurrentClipToProRes() {
                 avformat_free_context(fmt);
                 return;
             }
-            LogProRes("[ProResExport] Output file opened");
+            auto fileOpenMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - fileOpenStart).count();
+            LogProRes("[ProResExport] Output file opened in " + std::to_string(fileOpenMs) + "ms");
         }
 
         LogProRes("[ProResExport] Writing header");
+        auto headerStart = std::chrono::steady_clock::now();
         if (avformat_write_header(fmt, nullptr) < 0) {
             m_proResStatus.errorMsg = "avformat_write_header failed";
             m_proResStatus.active.store(false);
@@ -1365,7 +1376,9 @@ void App::exportCurrentClipToProRes() {
             avformat_free_context(fmt);
             return;
         }
-        LogProRes("[ProResExport] Header written");
+        auto headerMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - headerStart).count();
+        LogProRes("[ProResExport] Header written in " + std::to_string(headerMs) + "ms");
 
         auto encodeStart = std::chrono::steady_clock::now();
         LogProRes("[ProResExport] Encode loop starting");
@@ -1591,7 +1604,11 @@ void App::exportCurrentClipToProRes() {
             LogProRes(pct.str());
         }
 
+        auto trailerStart = std::chrono::steady_clock::now();
         av_write_trailer(fmt);
+        auto trailerMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - trailerStart).count();
+        LogProRes("[ProResExport] Trailer written in " + std::to_string(trailerMs) + "ms");
         sws_freeContext(sws);
         if (actx) avcodec_free_context(&actx);
         if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
