@@ -21,7 +21,6 @@
 #include <filesystem>
 #include <thread>
 #include <chrono>
-#include <sys/resource.h>
 #include <iomanip>
 #include <iostream>
 #include <fstream>
@@ -1244,16 +1243,7 @@ void App::exportCurrentClipToProRes() {
         } else {
             frameDurationNs = 41708333; // ~24fps fallback
         }
-        double fpsExact = 1e9 / static_cast<double>(frameDurationNs);
         AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
-        if (std::abs(fpsExact - 23.976) < 0.02) timeBase = {1001, 24000};
-        else if (std::abs(fpsExact - 24.0) < 0.001) timeBase = {1, 24};
-        else if (std::abs(fpsExact - 25.0) < 0.001) timeBase = {1, 25};
-        else if (std::abs(fpsExact - 29.97) < 0.02) timeBase = {1001, 30000};
-        else if (std::abs(fpsExact - 30.0) < 0.001) timeBase = {1, 30};
-        else if (std::abs(fpsExact - 50.0) < 0.001) timeBase = {1, 50};
-        else if (std::abs(fpsExact - 59.94) < 0.02) timeBase = {1001, 60000};
-        else if (std::abs(fpsExact - 60.0) < 0.001) timeBase = {1, 60};
         LogProRes(std::string("[ProResExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
 
         LogProRes("[ProResExport] Allocating output context");
@@ -1267,7 +1257,6 @@ void App::exportCurrentClipToProRes() {
         auto allocMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - allocStart).count();
         LogProRes("[ProResExport] Output context created in " + std::to_string(allocMs) + "ms");
-        av_dict_set(&fmt->metadata, "vendor", "apl0", 0);
 
         const AVCodec* vcodec = avcodec_find_encoder_by_name("prores_ks");
         if (!vcodec) {
@@ -1293,30 +1282,21 @@ void App::exportCurrentClipToProRes() {
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
-        vctx->flags |= AV_CODEC_FLAG_QSCALE;
-        vctx->global_quality = FF_QP2LAMBDA * 9;
         unsigned threads = std::thread::hardware_concurrency();
         if (threads == 0) threads = 1;
-        vctx->thread_count = 0; // auto
-        vctx->thread_type = FF_THREAD_SLICE;
-        av_opt_set_int(vctx, "slices", 8, 0);
+        vctx->thread_count = 0; // let FFmpeg decide based on HW
+        vctx->thread_type = FF_THREAD_FRAME;
         LogProRes(std::string("[ProResExport] Detected CPU threads: ") +
                   std::to_string(threads));
-        LogProRes(std::string("[ProResExport] Thread type: SLICE"));
+        LogProRes(std::string("[ProResExport] Thread type: FRAME"));
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
-        av_dict_set(&encOpts, "slice_count", "8", 0);
-        av_dict_set(&encOpts, "profile", "3", 0);
-        av_dict_set(&encOpts, "qscale", "9", 0);
-        av_dict_set(&encOpts, "bits_per_mb", "8000", 0);
-        LogProRes("[ProResExport] Slice count: 8");
+        av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
+        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
         auto openVStart = std::chrono::steady_clock::now();
-        int err = avcodec_open2(vctx, vcodec, &encOpts);
-        if (err < 0) {
-            char errbuf[AV_ERROR_MAX_STRING_SIZE];
-            av_strerror(err, errbuf, sizeof(errbuf));
-            m_proResStatus.errorMsg = std::string("avcodec_open2 failed: ") + errbuf;
+        if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
+            m_proResStatus.errorMsg = "avcodec_open2 failed";
             m_proResStatus.active.store(false);
             avcodec_free_context(&vctx);
             avformat_free_context(fmt);
@@ -1339,10 +1319,6 @@ void App::exportCurrentClipToProRes() {
         }
         avcodec_parameters_from_context(vstream->codecpar, vctx);
         vstream->time_base = timeBase;
-        vstream->codecpar->color_range = AVCOL_RANGE_MPEG;
-        vstream->codecpar->color_primaries = AVCOL_PRI_BT709;
-        vstream->codecpar->color_trc = AVCOL_TRC_BT709;
-        vstream->codecpar->color_space = AVCOL_SPC_BT709;
 
         // Audio stream (PCM s16le)
         const AVCodec* acodec = avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE);
@@ -1378,11 +1354,8 @@ void App::exportCurrentClipToProRes() {
         if (!(fmt->oformat->flags & AVFMT_NOFILE)) {
             LogProRes("[ProResExport] Opening output file");
             auto fileOpenStart = std::chrono::steady_clock::now();
-            int ferr = avio_open(&fmt->pb, outputPath.c_str(), AVIO_FLAG_WRITE);
-            if (ferr < 0) {
-                char errbuf[AV_ERROR_MAX_STRING_SIZE];
-                av_strerror(ferr, errbuf, sizeof(errbuf));
-                m_proResStatus.errorMsg = std::string("avio_open failed: ") + errbuf;
+            if (avio_open(&fmt->pb, outputPath.c_str(), AVIO_FLAG_WRITE) < 0) {
+                m_proResStatus.errorMsg = "avio_open failed";
                 m_proResStatus.active.store(false);
                 avcodec_free_context(&vctx);
                 avformat_free_context(fmt);
@@ -1395,11 +1368,8 @@ void App::exportCurrentClipToProRes() {
 
         LogProRes("[ProResExport] Writing header");
         auto headerStart = std::chrono::steady_clock::now();
-        int herr = avformat_write_header(fmt, nullptr);
-        if (herr < 0) {
-            char errbuf[AV_ERROR_MAX_STRING_SIZE];
-            av_strerror(herr, errbuf, sizeof(errbuf));
-            m_proResStatus.errorMsg = std::string("avformat_write_header failed: ") + errbuf;
+        if (avformat_write_header(fmt, nullptr) < 0) {
+            m_proResStatus.errorMsg = "avformat_write_header failed";
             m_proResStatus.active.store(false);
             if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
             avcodec_free_context(&vctx);
@@ -1432,17 +1402,13 @@ void App::exportCurrentClipToProRes() {
             return;
         }
 
-        int swsFlags = SWS_FAST_BILINEAR | SWS_FULL_CHR_H_INT | SWS_FULL_CHR_H_INP;
         SwsContext* sws = sws_getContext(width, height, AV_PIX_FMT_RGB24,
                                          width, height, AV_PIX_FMT_YUV422P10LE,
-                                         swsFlags, nullptr,nullptr,nullptr);
+                                         SWS_BILINEAR, nullptr,nullptr,nullptr);
         av_opt_set_int(sws, "threads", threads, 0);
         LogProRes(std::string("[ProResExport] swscale threads: ") + std::to_string(threads));
 
         int framesEncoded = 0;
-        auto lastUsageLog = encodeStart;
-        struct rusage lastRu{};
-        getrusage(RUSAGE_SELF, &lastRu);
 
         CPUColorParams cpParams{};
         cpParams.width = width;
@@ -1529,28 +1495,10 @@ void App::exportCurrentClipToProRes() {
             if ((idx + 1) % 50 == 0) {
                 auto now = std::chrono::steady_clock::now();
                 auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - encodeStart).count();
-                double fpsNow = ms > 0 ? (idx + 1) * 1000.0 / ms : 0.0;
                 std::ostringstream prog;
                 prog << "[ProResExport] Encoded frame " << (idx + 1) << "/" << frames.size()
-                     << " elapsed=" << ms << "ms fps=" << std::fixed << std::setprecision(1) << fpsNow;
+                     << " elapsed=" << ms << "ms";
                 LogProRes(prog.str());
-
-                if (std::chrono::duration_cast<std::chrono::seconds>(now - lastUsageLog).count() >= 1) {
-                    struct rusage ru{}; getrusage(RUSAGE_SELF, &ru);
-                    double cpuTime = (ru.ru_utime.tv_sec - lastRu.ru_utime.tv_sec) +
-                                     (ru.ru_utime.tv_usec - lastRu.ru_utime.tv_usec) / 1e6 +
-                                     (ru.ru_stime.tv_sec - lastRu.ru_stime.tv_sec) +
-                                     (ru.ru_stime.tv_usec - lastRu.ru_stime.tv_usec) / 1e6;
-                    double interval = std::chrono::duration<double>(now - lastUsageLog).count();
-                    double cpuPct = interval > 0 ? (cpuTime / interval) * 100.0 : 0.0;
-                    long memMB = ru.ru_maxrss / 1024;
-                    std::ostringstream usage;
-                    usage << "[ProResExport] CPU=" << std::fixed << std::setprecision(1) << cpuPct
-                          << "% MEM=" << memMB << "MB";
-                    LogProRes(usage.str());
-                    lastUsageLog = now;
-                    lastRu = ru;
-                }
             }
         }
 
