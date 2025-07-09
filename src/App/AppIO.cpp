@@ -1491,8 +1491,8 @@ void App::exportCurrentClipToProRes() {
                     for (int x=0; x<width/2; ++x) {
                         size_t srcIdx = static_cast<size_t>(y) * (width/2) * 4 + x*4;
                         uint16_t y0 = gpuBuf[srcIdx] >> 6;
-                        uint16_t u = gpuBuf[srcIdx+1] >> 6;
-                        uint16_t y1 = gpuBuf[srcIdx+2] >> 6;
+                        uint16_t u = gpuBuf[srcIdx+2] >> 6;
+                        uint16_t y1 = gpuBuf[srcIdx+1] >> 6;
                         uint16_t v = gpuBuf[srcIdx+3] >> 6;
                         yPlane[y*frame->linesize[0]/2 + 2*x] = y0;
                         yPlane[y*frame->linesize[0]/2 + 2*x+1] = y1;
