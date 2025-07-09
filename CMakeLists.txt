@@ -19,6 +19,8 @@ set(APP_ASSETS_DIR      "${APP_ROOT_DIR}/assets")
 set(APP_SHADERS_SRC_DIR "${APP_ROOT_DIR}/shaders")
 set(APP_CMAKE_DIR       "${APP_ROOT_DIR}/cmake")
 
+option(ENABLE_GPU_PRORES "Enable GPU accelerated ProRes export" OFF)
+
 message(STATUS "Application Structure:")
 message(STATUS "  Source files (.cpp):      ${APP_ROOT_DIR}/src (structured)")
 message(STATUS "  Header files (.h):        ${APP_ROOT_DIR}/include (structured)")
@@ -97,6 +99,7 @@ file(MAKE_DIRECTORY ${SHADER_COMPILED_DIR})
 set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
+    "$<IF:$<BOOL:${ENABLE_GPU_PRORES}>,${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp,>"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -182,6 +185,12 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 if(HAVE_FFMPEG)
     target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
+    if(ENABLE_GPU_PRORES)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_GPU_PRORES)
+        target_sources(${PROJECT_NAME} PRIVATE
+            src/Graphics/GpuYuvConverter.cpp
+            src/Export/ProResGpuExporter.cpp)
+    endif()
 endif()
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")

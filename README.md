@@ -67,3 +67,13 @@ runtime DLLs will be copied automatically.
   video packets were written.
 - You can override the detected CFA pattern at runtime by pressing the number
   keys `1`‑`4` which map to **BGGR**, **RGGB**, **GBRG**, and **GRBG** respectively.
+
+## GPU ProRes Export (Design Draft)
+
+A design for a GPU-accelerated ProRes exporter is provided in
+[`docs/gpu_prores_super_prompt.md`](docs/gpu_prores_super_prompt.md).
+It outlines a Vulkan-based pipeline that converts RAW frames to
+YUV422P10 on the GPU and streams them directly to FFmpeg.
+The current implementation only supports the CPU pipeline described
+above, but the document can be used as a starting point for adding
+the GPU path.
