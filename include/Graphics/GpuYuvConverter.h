@@ -17,6 +17,7 @@ public:
     void cleanup();
 
     bool convertAndReadback(const uint16_t* raw, int width, int height,
+                            int frameIndex,
                             std::vector<uint16_t>& outPacked);
 private:
     Renderer_VK* m_renderer;

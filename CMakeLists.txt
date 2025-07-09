@@ -320,3 +320,6 @@ message(STATUS "  Target Executable: MotionCam Player")
 message(STATUS "  Output Directory:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}")
 message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/MotionCam Player${CMAKE_EXECUTABLE_SUFFIX}")
 message(STATUS "---------------------------------------------------------------------")
+
+enable_testing()
+add_subdirectory(tests)

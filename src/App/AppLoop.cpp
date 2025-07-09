@@ -55,6 +55,10 @@ bool App::run() {
 
         appLogicStartTime = steady_clock::now();
         glfwPollEvents();
+        if (m_renderPaused.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            continue;
+        }
 
         bool paused = (m_playbackController ? m_playbackController->isPaused() : true);
         bool segment_looped_or_ended = false;
