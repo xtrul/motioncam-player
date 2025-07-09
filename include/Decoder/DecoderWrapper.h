@@ -62,10 +62,11 @@
          */
         motioncam::AudioChunkLoader* makeFreshAudioLoader();
 
+        const std::string& getFilePath() const { return m_filePath; }
+
     private:
         std::string                         m_filePath;
         std::unique_ptr<motioncam::Decoder> m_decoder;
         nlohmann::json                      m_containerMetadata;
 };
-
 #endif // DECODER_WRAPPER_H

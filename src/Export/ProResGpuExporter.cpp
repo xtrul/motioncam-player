@@ -1,5 +1,6 @@
-#include "Export/ProResExporter.h"
+#include "Export/ProResGpuExporter.h"
 #include "Graphics/GpuYuvConverter.h"
+#include "Export/ProResCpuExporter.h"
 #include "Decoder/DecoderWrapper.h"
 #include "Graphics/Renderer_VK.h"
 #include "Audio/AudioController.h"
@@ -8,16 +9,16 @@
 #include "Utils/OrientationUtils.h"
 #include <filesystem>
 
-ProResExporter::ProResExporter() = default;
-ProResExporter::~ProResExporter() {
+ProResGpuExporter::ProResGpuExporter() = default;
+ProResGpuExporter::~ProResGpuExporter() {
     join();
     if(m_hwFrames) av_buffer_unref(&m_hwFrames);
     if(m_hwDevice) av_buffer_unref(&m_hwDevice);
 }
 
-bool ProResExporter::start(const std::string& path, const std::string& outMov,
-                           DecoderWrapper* decoder, Renderer_VK* renderer,
-                           AudioController* audio){
+bool ProResGpuExporter::start(const std::string& path, const std::string& outMov,
+                              DecoderWrapper* decoder, Renderer_VK* renderer,
+                              AudioController* audio){
     if(m_running.load()) return false;
     m_path = path;
     m_out = outMov;
@@ -26,19 +27,20 @@ bool ProResExporter::start(const std::string& path, const std::string& outMov,
     m_audio = audio;
     m_converter = std::make_unique<GpuYuvConverter>();
     m_running.store(true);
-    m_thread = std::thread(&ProResExporter::run, this);
+    m_thread = std::thread(&ProResGpuExporter::run, this);
     return true;
 }
 
-void ProResExporter::join(){
+void ProResGpuExporter::join(){
     if(m_thread.joinable()) m_thread.join();
     m_running.store(false);
 }
 
-void ProResExporter::run(){
+void ProResGpuExporter::run(){
     av_log_set_level(AV_LOG_ERROR);
     LogProRes("[ProResExporter] Thread started");
     if(!m_decoder || !m_renderer){ m_running.store(false); return; }
+    try {
 
     auto* dec = m_decoder->getDecoder();
     const auto& frames = dec->getFrames();
@@ -141,4 +143,12 @@ void ProResExporter::run(){
     if(m_hwFrames) av_buffer_unref(&m_hwFrames);
     if(m_hwDevice) av_buffer_unref(&m_hwDevice);
     m_running.store(false);
+    return;
+    } catch (...) {
+        LogProRes("[Exporter] Vulkan error - falling back to CPU path");
+        ProResCpuExporter cpu;
+        cpu.start(m_path, m_out, m_decoder, nullptr, m_audio);
+        cpu.join();
+        m_running.store(false);
+    }
 }
