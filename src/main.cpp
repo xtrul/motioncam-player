@@ -35,6 +35,8 @@
 
 #include "App/App.h"
 #include "Utils/DebugLog.h"
+#include "Export/ProResExporterFactory.h"
+#include "Decoder/DecoderWrapper.h"
 #ifdef _WIN32
 #include "Utils/SingleInstanceGuard.h"
 #ifdef _WIN32
@@ -262,6 +264,22 @@ int main(int argc, char* argv[]) {
         LogToFile(std::string("[main] argv[0] is nullptr."));
     }
 
+
+    if (argc >= 5 && std::string(argv[1]) == "--export-prores") {
+        std::string mode = argv[2];
+        std::string inPath = argv[3];
+        std::string outPath = argv[4];
+        try {
+            DecoderWrapper dec(inPath);
+            auto exporter = createProResExporter(mode == "gpu" ? ProResMode::GPU : ProResMode::CPU);
+            exporter->start(inPath, outPath, &dec, nullptr, nullptr);
+            exporter->join();
+        } catch (const std::exception& e) {
+            std::cerr << "Export failed: " << e.what() << std::endl;
+            return 1;
+        }
+        return 0;
+    }
 
     std::string inPath;
     if (argc >= 2 && argv[1] != nullptr) {

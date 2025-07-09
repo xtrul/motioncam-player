@@ -240,7 +240,22 @@ namespace GuiOverlay {
             ImGui::Separator();
 #ifdef ENABLE_PRORES_EXPORT
             if (ImGui::MenuItem("Export \xE2\x86\x92 ProRes\xE2\x80\xA6", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->exportCurrentClipToProRes();
+                ImGui::OpenPopup("EXPORT_SELECT_MODE");
+            }
+            if (ImGui::BeginPopup("EXPORT_SELECT_MODE")) {
+                static int mode = 0;
+                ImGui::RadioButton("CPU", &mode, 0);
+                ImGui::RadioButton("GPU", &mode, 1);
+                if (ImGui::Button("Start")) {
+                    if (appInstance) {
+                        if (mode == 1)
+                            appInstance->exportCurrentClipToProResGpu();
+                        else
+                            appInstance->exportCurrentClipToProRes();
+                    }
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
             }
 #else
             ImGui::MenuItem("Export \xE2\x86\x92 ProRes\xE2\x80\xA6", nullptr, false, false);

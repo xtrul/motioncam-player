@@ -4,16 +4,17 @@
 #include <atomic>
 #include <vulkan/vulkan.h>
 #include "ffmpeg_headers.hpp"
+#include "Export/IProResExporter.h"
 
 class DecoderWrapper;
 class Renderer_VK;
 class AudioController;
 class GpuYuvConverter;
 
-class ProResExporter {
+class ProResGpuExporter : public IProResExporter {
 public:
-    ProResExporter();
-    ~ProResExporter();
+    ProResGpuExporter();
+    ~ProResGpuExporter();
 
     bool start(const std::string& path, const std::string& outMov,
                DecoderWrapper* decoder, Renderer_VK* renderer,
