@@ -20,9 +20,13 @@ namespace ImageResource {
         if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED) oldLayoutStr = "UNDEFINED";
         else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) oldLayoutStr = "TRANSFER_DST_OPTIMAL";
         else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) oldLayoutStr = "SHADER_READ_ONLY_OPTIMAL";
+        else if (oldLayout == VK_IMAGE_LAYOUT_GENERAL) oldLayoutStr = "GENERAL";
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) oldLayoutStr = "TRANSFER_SRC_OPTIMAL";
 
         if (newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) newLayoutStr = "TRANSFER_DST_OPTIMAL";
         else if (newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) newLayoutStr = "SHADER_READ_ONLY_OPTIMAL";
+        else if (newLayout == VK_IMAGE_LAYOUT_GENERAL) newLayoutStr = "GENERAL";
+        else if (newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) newLayoutStr = "TRANSFER_SRC_OPTIMAL";
 
         LogToFile(std::string("transitionImageLayout: Image ") + std::to_string(reinterpret_cast<uintptr_t>(image)) + ": " + oldLayoutStr + " -> " + newLayoutStr);
 
@@ -67,6 +71,24 @@ namespace ImageResource {
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_GENERAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
         }
         else {
             LogToFile(std::string("transitionImageLayout: ERROR - Unsupported layout transition from ") + oldLayoutStr + " to " + newLayoutStr + " for image " + std::to_string(reinterpret_cast<uintptr_t>(image)));
