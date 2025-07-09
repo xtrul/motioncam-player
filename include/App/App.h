@@ -179,7 +179,6 @@ private:
     std::thread m_ioThread;
     std::thread m_decodeThread;
     std::atomic<bool> m_threadsShouldStop{ false };
-    std::atomic<bool> m_renderPaused{ false };
 
     std::string m_ioThreadCurrentFilePath;
     std::mutex m_ioThreadFileMutex;

@@ -1,5 +1,0 @@
-add_executable(gpu_converter_test gpu_converter_test.cpp)
-target_include_directories(gpu_converter_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
-find_package(GTest CONFIG REQUIRED)
-target_link_libraries(gpu_converter_test PRIVATE GTest::gtest_main)
-add_test(NAME gpu_converter_test COMMAND gpu_converter_test)

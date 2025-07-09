@@ -35,17 +35,11 @@
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
-#define MC_GPU_EXPORT_DEBUG 1
-
 namespace fs = std::filesystem;
 
 #ifdef ENABLE_PRORES_EXPORT
 static bool g_useGpuProRes = false;
 #endif
-
-static inline uint16_t scale16to10(uint16_t v) {
-    return static_cast<uint16_t>((static_cast<uint32_t>(v) * 1023 + 32767) / 65535);
-}
 namespace {
     bool writeDngInternal(
         const std::string& outputPath,
@@ -1258,19 +1252,6 @@ void App::exportCurrentClipToProRes() {
             }
         }
 
-        struct PauseGuard {
-            App* app;
-            explicit PauseGuard(App* a) : app(a) {
-                app->m_renderPaused.store(true);
-                DBG_INFO("Render paused for export...");
-                vkDeviceWaitIdle(app->m_device);
-            }
-            ~PauseGuard() {
-                app->m_renderPaused.store(false);
-                DBG_INFO("Render resumed");
-            }
-        } guard(this);
-
         int64_t frameDurationNs = 0;
         if (frames.size() >= 2) {
             frameDurationNs = frames[1] - frames[0];
@@ -1499,53 +1480,33 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-                converter.convertAndReadback(asU16(raw), width, height, gpuBuf, static_cast<int>(idx));
+                converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
                 uint16_t* yPlane = reinterpret_cast<uint16_t*>(frame->data[0]);
                 uint16_t* uPlane = reinterpret_cast<uint16_t*>(frame->data[1]);
                 uint16_t* vPlane = reinterpret_cast<uint16_t*>(frame->data[2]);
-#if MC_GPU_EXPORT_DEBUG
-                DBG_INFO(std::string("[Export] frame ") + std::to_string(idx) + " -> AVFrame planes");
-                uint64_t sumY = 0, sumU = 0, sumV = 0;
-#endif
                 for (int y=0; y<height; ++y) {
                     for (int x=0; x<width/2; ++x) {
                         size_t srcIdx = static_cast<size_t>(y) * (width/2) * 4 + x*4;
-                        uint16_t y0 = scale16to10(gpuBuf[srcIdx]);
-                        uint16_t u  = scale16to10(gpuBuf[srcIdx+1]);
-                        uint16_t y1 = scale16to10(gpuBuf[srcIdx+2]);
-                        uint16_t v  = scale16to10(gpuBuf[srcIdx+3]);
+                        uint16_t y0 = gpuBuf[srcIdx] >> 6;
+                        uint16_t y1 = gpuBuf[srcIdx+1] >> 6; // Y1 directly
+                        uint16_t u  = gpuBuf[srcIdx+2] >> 6;
+                        uint16_t v  = gpuBuf[srcIdx+3] >> 6;
                         yPlane[y*frame->linesize[0]/2 + 2*x] = y0;
                         yPlane[y*frame->linesize[0]/2 + 2*x+1] = y1;
                         uPlane[y*frame->linesize[1]/2 + x] = u;
                         vPlane[y*frame->linesize[2]/2 + x] = v;
-#if MC_GPU_EXPORT_DEBUG
-                        sumY += y0 + y1;
-                        sumU += u;
-                        sumV += v;
-                        if (y==0 && x==0) {
-                            std::ostringstream s;
-                            s << "[Export] first samples: Y0=" << y0 << " Y1=" << y1
-                              << " U=" << u << " V=" << v;
-                            DBG_INFO(s.str());
-                        }
-#endif
                     }
                 }
-#if MC_GPU_EXPORT_DEBUG
-                double avgY = static_cast<double>(sumY) / (width * height);
-                double avgU = static_cast<double>(sumU) / ((width/2) * height);
-                double avgV = static_cast<double>(sumV) / ((width/2) * height);
-                {
-                    std::ostringstream ss;
-                    ss << "[Export] stats Y=" << avgY << " U=" << avgU << " V=" << avgV;
-                    DBG_TRACE(ss.str());
-                    if (std::abs(avgU-512.0) + std::abs(avgV-512.0) < 5.0)
-                        DBG_WARN("Chroma is ~zero => green frame risk");
+                if (idx == 0) {
+                    std::ostringstream dbg;
+                    dbg << "[GPU] AVFrame first: "
+                        << yPlane[0] << "," << yPlane[1] << "," << uPlane[0]
+                        << "," << vPlane[0];
+                    LogProRes(dbg.str());
                 }
-#endif
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();
@@ -1557,40 +1518,6 @@ void App::exportCurrentClipToProRes() {
                 sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
                 t1 = std::chrono::steady_clock::now();
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-#if MC_GPU_EXPORT_DEBUG
-                DBG_INFO(std::string("[Export] frame ") + std::to_string(idx) + " -> AVFrame planes");
-                uint64_t sumY = 0, sumU = 0, sumV = 0;
-                uint16_t* yPlane = reinterpret_cast<uint16_t*>(frame->data[0]);
-                uint16_t* uPlane = reinterpret_cast<uint16_t*>(frame->data[1]);
-                uint16_t* vPlane = reinterpret_cast<uint16_t*>(frame->data[2]);
-                for (int y=0; y<height; ++y) {
-                    for (int x=0; x<width/2; ++x) {
-                        uint16_t y0 = yPlane[y*frame->linesize[0]/2 + 2*x];
-                        uint16_t y1 = yPlane[y*frame->linesize[0]/2 + 2*x+1];
-                        uint16_t u = uPlane[y*frame->linesize[1]/2 + x];
-                        uint16_t v = vPlane[y*frame->linesize[2]/2 + x];
-                        sumY += y0 + y1;
-                        sumU += u;
-                        sumV += v;
-                        if (y==0 && x==0) {
-                            std::ostringstream s;
-                            s << "[Export] first samples: Y0=" << y0 << " Y1=" << y1
-                              << " U=" << u << " V=" << v;
-                            DBG_INFO(s.str());
-                        }
-                    }
-                }
-                double avgY = static_cast<double>(sumY) / (width * height);
-                double avgU = static_cast<double>(sumU) / ((width/2) * height);
-                double avgV = static_cast<double>(sumV) / ((width/2) * height);
-                {
-                    std::ostringstream ss;
-                    ss << "[Export] stats Y=" << avgY << " U=" << avgU << " V=" << avgV;
-                    DBG_TRACE(ss.str());
-                    if (std::abs(avgU-512.0) + std::abs(avgV-512.0) < 5.0)
-                        DBG_WARN("Chroma is ~zero => green frame risk");
-                }
-#endif
             }
 
             frame->pts = pts;

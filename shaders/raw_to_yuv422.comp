@@ -26,6 +26,5 @@ void main() {
     uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
     uint u = 512u;
     uint v = 512u;
-    // Store as {Y0, U, Y1, V} so CPU must read back in same order
     imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
 }
