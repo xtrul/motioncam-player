@@ -35,6 +35,8 @@
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
+#define MC_GPU_EXPORT_DEBUG 1
+
 namespace fs = std::filesystem;
 
 #ifdef ENABLE_PRORES_EXPORT
@@ -1205,6 +1207,10 @@ void App::exportCurrentClipToProRes() {
     m_showExportProgressPopup.store(true);
     showActionMessage("Export Started");
 
+    DBG_INFO("Render paused for export…");
+    m_renderPaused.store(true);
+    vkDeviceWaitIdle(m_device);
+
     if (m_proResThread.joinable()) {
         m_proResThread.join();
     }
@@ -1480,33 +1486,49 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-                converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                converter.convertAndReadback(asU16(raw), width, height, static_cast<int>(idx), gpuBuf);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
                 uint16_t* yPlane = reinterpret_cast<uint16_t*>(frame->data[0]);
                 uint16_t* uPlane = reinterpret_cast<uint16_t*>(frame->data[1]);
                 uint16_t* vPlane = reinterpret_cast<uint16_t*>(frame->data[2]);
+
+                auto scale10 = [](uint16_t v){ return static_cast<uint16_t>((static_cast<uint32_t>(v) * 1023 + 32767) / 65535); };
+                uint64_t sumY=0,sumU=0,sumV=0;
+
+                DBG_INFO(std::string("[Export] frame ") + std::to_string(idx) + " → AVFrame planes");
                 for (int y=0; y<height; ++y) {
                     for (int x=0; x<width/2; ++x) {
                         size_t srcIdx = static_cast<size_t>(y) * (width/2) * 4 + x*4;
-                        uint16_t y0 = gpuBuf[srcIdx] >> 6;
-                        uint16_t y1 = gpuBuf[srcIdx+1] >> 6; // Y1 directly
-                        uint16_t u  = gpuBuf[srcIdx+2] >> 6;
-                        uint16_t v  = gpuBuf[srcIdx+3] >> 6;
+                        uint16_t y0 = scale10(gpuBuf[srcIdx]);
+                        uint16_t u  = scale10(gpuBuf[srcIdx+1]);
+                        uint16_t y1 = scale10(gpuBuf[srcIdx+2]);
+                        uint16_t v  = scale10(gpuBuf[srcIdx+3]);
                         yPlane[y*frame->linesize[0]/2 + 2*x] = y0;
                         yPlane[y*frame->linesize[0]/2 + 2*x+1] = y1;
                         uPlane[y*frame->linesize[1]/2 + x] = u;
                         vPlane[y*frame->linesize[2]/2 + x] = v;
+                        sumY += y0 + y1;
+                        sumU += u;
+                        sumV += v;
+                        if (idx==0 && y==0 && x==0) {
+                            std::ostringstream first;
+                            first << "[Export] first samples " << y0 << "," << y1 << " U=" << u << " V=" << v;
+                            DBG_INFO(first.str());
+                        }
                     }
                 }
-                if (idx == 0) {
-                    std::ostringstream dbg;
-                    dbg << "[GPU] AVFrame first: "
-                        << yPlane[0] << "," << yPlane[1] << "," << uPlane[0]
-                        << "," << vPlane[0];
-                    LogProRes(dbg.str());
+                double avgY = static_cast<double>(sumY) / (width*height);
+                double avgU = static_cast<double>(sumU) / ((width/2)*height);
+                double avgV = static_cast<double>(sumV) / ((width/2)*height);
+                {
+                    std::ostringstream ss;
+                    ss << "[Export] avgY=" << avgY << " avgU=" << avgU << " avgV=" << avgV;
+                    DBG_TRACE(ss.str());
                 }
+                if (std::abs(avgU-512)+std::abs(avgV-512) < 5)
+                    DBG_WARN("Chroma is ~zero ⇒ green frame risk");
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();
@@ -1668,6 +1690,8 @@ void App::exportCurrentClipToProRes() {
             LogToFile(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
             LogProRes(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
         }
+        m_renderPaused.store(false);
+        DBG_INFO("Render resumed");
         m_proResStatus.active.store(false);
         g_useGpuProRes = false;
     });
