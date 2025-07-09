@@ -7,6 +7,7 @@
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 #include "Utils/OrientationUtils.h"
+#include "Export/ProResExporterFactory.h"
 #include <motioncam/Decoder.hpp>
 #include <motioncam/RawData.hpp>
 
@@ -1654,3 +1655,35 @@ void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
     LogToFile(std::string("[App::setPlaybackMode] Changed from ") + std::to_string(static_cast<int>(oldMode)) +
         " to " + std::to_string(static_cast<int>(mode)));
 }
+
+#ifdef ENABLE_PRORES_EXPORT
+void App::exportCurrentClipToProResGpu() {
+    if (m_proResStatus.active.load()) {
+        showActionMessage("Export already running");
+        return;
+    }
+    std::string outputPath = openSaveMovDialog();
+    if (outputPath.empty()) return;
+    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
+        outputPath += ".mov";
+    }
+    if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder() || !m_rendererVk) {
+        showActionMessage("No clip loaded");
+        return;
+    }
+    m_proResStatus.currentFrame.store(0);
+    m_proResStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
+    m_proResStatus.active.store(true);
+    m_proResStatus.errorMsg.clear();
+    m_showExportProgressPopup.store(true);
+    showActionMessage("Export Started");
+    if (m_proResThread.joinable()) m_proResThread.join();
+    std::string inPath = m_decoderWrapper_ptr->getFilePath();
+    m_proResThread = std::thread([this,inPath,outputPath]() {
+        auto exp = createProResExporter(ProResMode::GPU);
+        exp->start(inPath, outputPath, m_decoderWrapper_ptr.get(), m_rendererVk.get(), m_audio.get());
+        exp->join();
+        m_proResStatus.active.store(false);
+    });
+}
+#endif
