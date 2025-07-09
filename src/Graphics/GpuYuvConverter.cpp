@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <sstream>
 
 extern std::string g_AppBasePath;
 
@@ -19,7 +20,9 @@ bool GpuYuvConverter::init(int width, int height) {
     fs::path shaderPath = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_yuv422.comp.spv";
     auto code = VulkanHelpers::readFile(shaderPath.string());
     VkShaderModule module = VulkanHelpers::createShaderModule(m_renderer->m_device_p, code);
-    LogProRes("[GPU] Creating RAW->YUV compute pipeline");
+    std::ostringstream oss;
+    oss << "[GPU] Creating RAW->YUV compute pipeline (" << width << "x" << height << ")";
+    LogProRes(oss.str());
     LogProRes("[GPU] init start");
 
     // Create a private command pool for all converter operations
@@ -249,7 +252,14 @@ void GpuYuvConverter::cleanup() {
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
                                          std::vector<uint16_t>& outPacked) {
-    LogProRes("[GPU] convertAndReadback invoked");
+    std::ostringstream oss;
+    oss << "[GPU] convertAndReadback invoked w=" << width << " h=" << height;
+    LogProRes(oss.str());
+    if (raw != nullptr) {
+        std::ostringstream rvals;
+        rvals << "[GPU] raw first vals: " << raw[0] << "," << raw[1] << "," << raw[2] << "," << raw[3];
+        LogProRes(rvals.str());
+    }
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
@@ -431,7 +441,17 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
-    LogProRes("[GPU] readback complete");
+    {
+        std::ostringstream info;
+        info << "[GPU] readback complete bytes=" << outSize;
+        LogProRes(info.str());
+    }
+    if (outPacked.size() >= 4) {
+        std::ostringstream oss;
+        oss << "[GPU] first values: " << outPacked[0] << "," << outPacked[1]
+            << "," << outPacked[2] << "," << outPacked[3];
+        LogProRes(oss.str());
+    }
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
     vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
