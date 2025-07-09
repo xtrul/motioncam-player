@@ -22,21 +22,6 @@ bool GpuYuvConverter::init(int width, int height) {
     LogProRes("[GPU] Creating RAW->YUV compute pipeline");
     LogProRes("[GPU] init start");
 
-    // Create a private command pool for all converter operations
-    uint32_t graphicsFamily = 0;
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(m_renderer->m_physicalDevice_p, &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> families(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(m_renderer->m_physicalDevice_p, &queueFamilyCount, families.data());
-    for (uint32_t i = 0; i < queueFamilyCount; ++i) {
-        if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { graphicsFamily = i; break; }
-    }
-
-    VkCommandPoolCreateInfo ci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
-    ci.queueFamilyIndex = graphicsFamily;
-    ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-    VK_CHECK_RENDERER(vkCreateCommandPool(m_renderer->m_device_p, &ci, nullptr, &m_cmdPool));
-
     VkDescriptorSetLayoutBinding bindings[2]{};
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -136,86 +121,16 @@ bool GpuYuvConverter::init(int width, int height) {
 
     ImageResource::transitionImageLayout(
         m_renderer->m_device_p,
-        m_cmdPool,
+        m_renderer->m_hostSiteCommandPool_p,
         m_renderer->m_graphicsQueue_p,
         m_yuvImage,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_GENERAL);
 
-    // Create private RAW image for input
-    VkImageCreateInfo rawInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
-    rawInfo.imageType = VK_IMAGE_TYPE_2D;
-    rawInfo.extent.width = static_cast<uint32_t>(width);
-    rawInfo.extent.height = static_cast<uint32_t>(height);
-    rawInfo.extent.depth = 1;
-    rawInfo.mipLevels = 1;
-    rawInfo.arrayLayers = 1;
-    rawInfo.format = VK_FORMAT_R16_UINT;
-    rawInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    rawInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    rawInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    rawInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    rawInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-
-    VmaAllocationCreateInfo rawAllocInfo{};
-    rawAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &rawInfo, &rawAllocInfo,
-                                     &m_rawImage, &m_rawAlloc, nullptr));
-
-    VkImageViewCreateInfo rawViewCI{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-    rawViewCI.image = m_rawImage;
-    rawViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    rawViewCI.format = VK_FORMAT_R16_UINT;
-    rawViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    rawViewCI.subresourceRange.baseMipLevel = 0;
-    rawViewCI.subresourceRange.levelCount = 1;
-    rawViewCI.subresourceRange.baseArrayLayer = 0;
-    rawViewCI.subresourceRange.layerCount = 1;
-    VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &rawViewCI, nullptr, &m_rawView));
-
-    VkSamplerCreateInfo samplerInfo{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
-    samplerInfo.magFilter = VK_FILTER_NEAREST;
-    samplerInfo.minFilter = VK_FILTER_NEAREST;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
-    VK_CHECK_RENDERER(vkCreateSampler(m_renderer->m_device_p, &samplerInfo, nullptr, &m_rawSampler));
-
-    ImageResource::transitionImageLayout(
-        m_renderer->m_device_p,
-        m_cmdPool,
-        m_renderer->m_graphicsQueue_p,
-        m_rawImage,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
     return true;
 }
 
 void GpuYuvConverter::cleanup() {
-    if (m_rawSampler != VK_NULL_HANDLE) {
-        vkDestroySampler(m_renderer->m_device_p, m_rawSampler, nullptr);
-        m_rawSampler = VK_NULL_HANDLE;
-    }
-    if (m_rawView != VK_NULL_HANDLE) {
-        vkDestroyImageView(m_renderer->m_device_p, m_rawView, nullptr);
-        m_rawView = VK_NULL_HANDLE;
-    }
-    if (m_rawImage != VK_NULL_HANDLE) {
-        vmaDestroyImage(m_renderer->m_allocator_p, m_rawImage, m_rawAlloc);
-        m_rawImage = VK_NULL_HANDLE;
-        m_rawAlloc = VK_NULL_HANDLE;
-    }
     if (m_yuvView != VK_NULL_HANDLE) {
         vkDestroyImageView(m_renderer->m_device_p, m_yuvView, nullptr);
         m_yuvView = VK_NULL_HANDLE;
@@ -240,10 +155,6 @@ void GpuYuvConverter::cleanup() {
     if (m_setLayout != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(m_renderer->m_device_p, m_setLayout, nullptr);
         m_setLayout = VK_NULL_HANDLE;
-    }
-    if (m_cmdPool != VK_NULL_HANDLE) {
-        vkDestroyCommandPool(m_renderer->m_device_p, m_cmdPool, nullptr);
-        m_cmdPool = VK_NULL_HANDLE;
     }
 }
 
@@ -282,28 +193,11 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
                                       &readbackBuf, &readbackAlloc, &rbAllocInfo));
 
     VkCommandBuffer cmd = VulkanHelpers::beginSingleTimeCommands(m_renderer->m_device_p,
-                                                                m_cmdPool);
+                                                                m_renderer->m_hostSiteCommandPool_p);
 
-    VkImageMemoryBarrier bar1{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-    bar1.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    bar1.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    bar1.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar1.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar1.image = m_rawImage;
-    bar1.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    bar1.subresourceRange.baseMipLevel = 0;
-    bar1.subresourceRange.levelCount = 1;
-    bar1.subresourceRange.baseArrayLayer = 0;
-    bar1.subresourceRange.layerCount = 1;
-    bar1.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bar1.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    vkCmdPipelineBarrier(cmd,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &bar1);
+    ImageResource::transitionImageLayout(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, m_renderer->m_rawImage,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
@@ -315,32 +209,15 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     region.imageSubresource.layerCount = 1;
     region.imageOffset = {0,0,0};
     region.imageExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
-    vkCmdCopyBufferToImage(cmd, stagingBuf, m_rawImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdCopyBufferToImage(cmd, stagingBuf, m_renderer->m_rawImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-    VkImageMemoryBarrier bar2{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-    bar2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    bar2.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    bar2.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar2.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar2.image = m_rawImage;
-    bar2.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    bar2.subresourceRange.baseMipLevel = 0;
-    bar2.subresourceRange.levelCount = 1;
-    bar2.subresourceRange.baseArrayLayer = 0;
-    bar2.subresourceRange.layerCount = 1;
-    bar2.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    bar2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(cmd,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &bar2);
+    ImageResource::transitionImageLayout(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, m_renderer->m_rawImage,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     VkDescriptorImageInfo inputInfo{};
-    inputInfo.sampler = m_rawSampler;
-    inputInfo.imageView = m_rawView;
+    inputInfo.sampler = m_renderer->m_rawImageSampler;
+    inputInfo.imageView = m_renderer->m_rawImageView;
     inputInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkDescriptorImageInfo outInfo{};
@@ -371,26 +248,9 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
 
-    VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-    bar3.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    bar3.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    bar3.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar3.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar3.image = m_yuvImage;
-    bar3.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    bar3.subresourceRange.baseMipLevel = 0;
-    bar3.subresourceRange.levelCount = 1;
-    bar3.subresourceRange.baseArrayLayer = 0;
-    bar3.subresourceRange.layerCount = 1;
-    bar3.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    bar3.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    vkCmdPipelineBarrier(cmd,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &bar3);
+    ImageResource::transitionImageLayout(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, m_yuvImage,
+        VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     VkBufferImageCopy rbRegion{};
     rbRegion.bufferOffset = 0;
@@ -405,27 +265,11 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vkCmdCopyImageToBuffer(cmd, m_yuvImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                            readbackBuf, 1, &rbRegion);
 
-    VkImageMemoryBarrier bar4{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-    bar4.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    bar4.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    bar4.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar4.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar4.image = m_yuvImage;
-    bar4.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    bar4.subresourceRange.baseMipLevel = 0;
-    bar4.subresourceRange.levelCount = 1;
-    bar4.subresourceRange.baseArrayLayer = 0;
-    bar4.subresourceRange.layerCount = 1;
-    bar4.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    bar4.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    vkCmdPipelineBarrier(cmd,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &bar4);
-    VulkanHelpers::endSingleTimeCommands(m_renderer->m_device_p, m_cmdPool,
+    ImageResource::transitionImageLayout(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
+        m_renderer->m_graphicsQueue_p, m_yuvImage,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+
+    VulkanHelpers::endSingleTimeCommands(m_renderer->m_device_p, m_renderer->m_hostSiteCommandPool_p,
         m_renderer->m_graphicsQueue_p, cmd);
 
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
