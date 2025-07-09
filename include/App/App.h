@@ -226,6 +226,7 @@ private:
         int totalFrames{ 0 };
         std::string errorMsg;
     } m_proResStatus;
+    std::atomic<bool> m_renderPaused{ false };
     std::atomic<bool> m_showExportProgressPopup{ false };
     std::thread m_proResThread;
 #endif
