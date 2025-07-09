@@ -1174,13 +1174,13 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToProRes(const std::string& outPath) {
+void App::exportCurrentClipToProRes() {
     if (m_proResStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = outPath.empty() ? openSaveMovDialog() : outPath;
+    std::string outputPath = openSaveMovDialog();
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
         outputPath += ".mov";
@@ -1201,12 +1201,6 @@ void App::exportCurrentClipToProRes(const std::string& outPath) {
     m_showExportProgressPopup.store(true);
     showActionMessage("Export Started");
 
-#ifndef ENABLE_GPU_PRORES
-    if (m_proResExportMode == ProResExportMode::GPU) {
-        LogProRes("[ProResExport] GPU mode requested but not built - using CPU path");
-    }
-#endif
-
     if (m_proResThread.joinable()) {
         m_proResThread.join();
     }
@@ -1214,11 +1208,6 @@ void App::exportCurrentClipToProRes(const std::string& outPath) {
     m_proResThread = std::thread([this, outputPath]() {
         av_log_set_level(AV_LOG_ERROR);
         LogProRes("[ProResExport] Thread started");
-#ifndef ENABLE_GPU_PRORES
-        if (m_proResExportMode == ProResExportMode::GPU) {
-            LogProRes("[ProResExport] GPU mode selected but binary lacks GPU support - using CPU path");
-        }
-#endif
 
         auto* dec = m_decoderWrapper_ptr->getDecoder();
         const auto& frames = dec->getFrames();
@@ -1256,18 +1245,6 @@ void App::exportCurrentClipToProRes(const std::string& outPath) {
         }
         AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
         LogProRes(std::string("[ProResExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
-
-#ifdef ENABLE_GPU_PRORES
-        if (m_proResExportMode == ProResExportMode::GPU) {
-            ProResGpuExporter gpu(m_device, m_vmaAllocator, m_graphicsQueue, m_commandPool);
-            if (gpu.run(m_decoderWrapper_ptr.get(), outputPath)) {
-                m_proResStatus.active.store(false);
-                showActionMessage("Export Finished");
-                return;
-            }
-            LogProRes("[Exporter] GPU path failed - falling back to CPU path");
-        }
-#endif
 
         LogProRes("[ProResExport] Allocating output context");
         auto allocStart = std::chrono::steady_clock::now();
@@ -1650,7 +1627,7 @@ void App::exportCurrentClipToProRes(const std::string& outPath) {
     });
 }
 #else
-void App::exportCurrentClipToProRes(const std::string&) {
+void App::exportCurrentClipToProRes() {
     showActionMessage("FFmpeg support not built");
 }
 #endif
