@@ -262,9 +262,28 @@ int main(int argc, char* argv[]) {
         LogToFile(std::string("[main] argv[0] is nullptr."));
     }
 
+#ifdef ENABLE_GPU_PRORES
+    LogToFile("[main] GPU ProRes support ENABLED");
+#else
+    LogToFile("[main] GPU ProRes support DISABLED - rebuild with -DENABLE_GPU_PRORES=ON to enable");
+#endif
+
 
     std::string inPath;
-    if (argc >= 2 && argv[1] != nullptr) {
+    std::string outPath;
+    App::ProResExportMode exportMode = App::ProResExportMode::CPU;
+    if (argc >= 5 && std::string(argv[1]) == "--export-prores") {
+        exportMode = (std::string(argv[2]) == "gpu") ? App::ProResExportMode::GPU : App::ProResExportMode::CPU;
+        inPath = argv[3];
+        outPath = argv[4];
+        LogToFile("[main] ProRes export mode via CLI");
+#ifndef ENABLE_GPU_PRORES
+        if (exportMode == App::ProResExportMode::GPU) {
+            LogToFile("[main] GPU export requested via CLI but this binary was built without ENABLE_GPU_PRORES. Falling back to CPU");
+            exportMode = App::ProResExportMode::CPU;
+        }
+#endif
+    } else if (argc >= 2 && argv[1] != nullptr) {
         inPath = argv[1];
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
     } else {
@@ -291,6 +310,12 @@ int main(int argc, char* argv[]) {
     }
 
     LogToFile(std::string("[main] Initializing App with file: ") + inPath);
+    if (!outPath.empty()) {
+        App app(inPath);
+        app.setProResExportMode(exportMode);
+        app.exportCurrentClipToProRes(outPath);
+        return 0;
+    }
     try {
         App app(inPath);
         LogToFile("[main] App object created. Calling app.run()...");
