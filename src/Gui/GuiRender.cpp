@@ -242,6 +242,9 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->exportCurrentClipToProRes();
             }
+            if (ImGui::MenuItem("Convert to ProRes (GPU)", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->convertCurrentClipToProRes();
+            }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
