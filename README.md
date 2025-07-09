@@ -40,10 +40,20 @@ configure step prints "FFmpeg found via vcpkg, enabling ProRes export". When
 this message appears, the `ENABLE_PRORES_EXPORT` definition is added and the
 runtime DLLs will be copied automatically.
 
+### Command line
+
+To test the export without the GUI you can run:
+
+```bash
+./MotionCam\ Player --headless --export input.mcraw --out output.mov
+```
+
+The progress and mode banner will be written to `Logs/prores_export_log.txt`.
+
 ## ProRes Export
 
 - Right-click anywhere in the player window to open the context menu.
-- Choose **Export to ProRes** and select a `.mov` file path.
+- Choose **Export → ProRes…** and select a `.mov` file path.
 - Encoding uses FFmpeg linked via vcpkg. Make sure the libraries are installed in your vcpkg instance.
  - Progress is shown in a modal popup while the encoding thread runs.
  - The export uses the `prores_ks` encoder with frame threading and sets
@@ -62,6 +72,10 @@ runtime DLLs will be copied automatically.
   numbers so you can verify them.
 - Encoder parameters, metadata values, and the detected CFA pattern are written
   to `prores_export_log.txt` so you can verify exactly how the clip was processed.
+- The export now attempts to use Vulkan hardware frames for color conversion.
+- At the start of each export the log prints either `MODE = GPU` or `MODE = CPU`.
+- If the Vulkan path fails to initialize it will automatically fall back to the CPU pipeline.
+- Check `Logs/prores_export_log.txt` to confirm the chosen mode and timing.
 - If the resulting `.mov` only contains audio, check the log for
   **"No video frames encoded"**. This means the frame conversion failed and no
   video packets were written.
