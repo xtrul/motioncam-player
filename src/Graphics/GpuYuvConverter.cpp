@@ -276,6 +276,12 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
     LogProRes("[GPU] readback complete");
+    if (outPacked.size() >= 4) {
+        std::ostringstream oss;
+        oss << "[GPU] first values: " << outPacked[0] << "," << outPacked[1]
+            << "," << outPacked[2] << "," << outPacked[3];
+        LogProRes(oss.str());
+    }
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
     vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);

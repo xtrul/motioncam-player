@@ -2,6 +2,9 @@
 #include "Utils/DebugLog.h" // For LogToFile
 #include <fstream>
 #include <stdexcept> // For std::runtime_error
+#include <mutex>
+
+std::mutex g_vulkanQueueMutex; // Protect queue submissions
 
 namespace VulkanHelpers {
 
@@ -64,10 +67,14 @@ namespace VulkanHelpers {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
-        VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
+        LogToFile("[VulkanHelpers] Submitting single-time command buffer");
+        {
+            std::lock_guard<std::mutex> lock(g_vulkanQueueMutex);
+            VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+            VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
+        }
+        LogToFile("[VulkanHelpers] Command buffer completed");
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
-
 } // namespace VulkanHelpers
