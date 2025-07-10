@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <zlib.h>
 #include <sstream>
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
@@ -1480,7 +1481,12 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                printf("Frame %zu first four GPU words: %u %u %u %u\n", idx,
+                       gpuBuf.size() > 3 ? gpuBuf[0] : 0,
+                       gpuBuf.size() > 3 ? gpuBuf[1] : 0,
+                       gpuBuf.size() > 3 ? gpuBuf[2] : 0,
+                       gpuBuf.size() > 3 ? gpuBuf[3] : 0);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
@@ -1505,6 +1511,11 @@ void App::exportCurrentClipToProRes() {
                         vRow[x >> 1] = v << 6;
                     }
                 }
+
+                uint32_t crcY = crc32(0, reinterpret_cast<const unsigned char*>(frame->data[0]), 32);
+                uint32_t crcU = crc32(0, reinterpret_cast<const unsigned char*>(frame->data[1]), 32);
+                uint32_t crcV = crc32(0, reinterpret_cast<const unsigned char*>(frame->data[2]), 32);
+                printf("Y_CRC=%08x U_CRC=%08x V_CRC=%08x\n", crcY, crcU, crcV);
 
                 /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
                 if (idx == 0) {
