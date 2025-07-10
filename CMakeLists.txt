@@ -148,7 +148,6 @@ set(APP_SOURCES
   src/Graphics/VulkanHelpers.cpp
   src/Graphics/ImageResource.cpp
   src/Graphics/GpuYuvConverter.cpp
-  src/Graphics/GpuFrameCopy.cpp
   src/Graphics/Pipeline.cpp
   src/Graphics/Descriptor.cpp
 
@@ -212,7 +211,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${IMGUI_SOURCE_DIR}"
   "${IMGUI_SOURCE_DIR}/backends"
   "${APP_EXTERNAL_DIR}/tinydngwriter"
-  "${APP_EXTERNAL_DIR}"
 )
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
