@@ -370,6 +370,7 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
+    // TODO RenderDoc/validation: verify barriers around compute output
 
     VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar3.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
