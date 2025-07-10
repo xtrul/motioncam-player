@@ -4,7 +4,6 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <cstdint>
-#include <mutex>
 #include "Utils/vma_usage.h"
 
 class Renderer_VK;
@@ -38,8 +37,6 @@ private:
     VmaAllocation m_rawAlloc{VK_NULL_HANDLE};
     VkImageView m_rawView{VK_NULL_HANDLE};
     VkSampler m_rawSampler{VK_NULL_HANDLE};
-
-    std::mutex m_queueMutex;
 };
 
 #endif // GPU_YUV_CONVERTER_H
