@@ -5,8 +5,6 @@
 
 namespace VulkanHelpers {
 
-    std::mutex queueMutex;
-
     std::vector<char> readFile(const std::string& filename) {
         std::string fullPath = filename;
         LogToFile(std::string("[VulkanHelpers::readFile] Attempting to read shader file: ") + fullPath);
@@ -41,7 +39,6 @@ namespace VulkanHelpers {
         return shaderModule;
     }
 
-
     VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool) {
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -67,11 +64,8 @@ namespace VulkanHelpers {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        {
-            std::scoped_lock lock(queueMutex);
-            VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
-            VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
-        }
+        VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+        VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
