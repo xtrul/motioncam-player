@@ -24,6 +24,10 @@ void main() {
     int x1 = x0 + 1;
     uint y0 = readU16(x0, y) >> 6;
     uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
+#ifdef DEBUG_GRADIENT
+    y0 = uint(gid.x & 1023);
+    y1 = uint(gid.y & 1023);
+#endif
     uint u = 512u;
     uint v = 512u;
     imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
