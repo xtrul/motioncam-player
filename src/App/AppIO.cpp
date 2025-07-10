@@ -1487,20 +1487,17 @@ void App::exportCurrentClipToProRes() {
                 uint16_t* yPlane = reinterpret_cast<uint16_t*>(frame->data[0]);
                 uint16_t* uPlane = reinterpret_cast<uint16_t*>(frame->data[1]);
                 uint16_t* vPlane = reinterpret_cast<uint16_t*>(frame->data[2]);
-                for (int y = 0; y < height; ++y) {
-                    for (int x = 0; x < width / 2; ++x) {
-                        size_t srcIdx = static_cast<size_t>(y) * (width / 2) * 4 + x * 4;
-                        // GPU layout per pair: [Y0, U, Y1, V] each 10-bit in 16-bit words
-                        uint16_t y0 = gpuBuf[srcIdx];
-                        uint16_t u  = gpuBuf[srcIdx + 1];
-                        uint16_t y1 = gpuBuf[srcIdx + 2];
-                        uint16_t v  = gpuBuf[srcIdx + 3];
-
-                        // FFmpeg expects 10-bit samples in the high bits of a 16-bit word
-                        yPlane[y * frame->linesize[0] / 2 + 2 * x]     = y0 << 6;
-                        yPlane[y * frame->linesize[0] / 2 + 2 * x + 1] = y1 << 6;
-                        uPlane[y * frame->linesize[1] / 2 + x]         = u  << 6;
-                        vPlane[y * frame->linesize[2] / 2 + x]         = v  << 6;
+                for (int y=0; y<height; ++y) {
+                    for (int x=0; x<width/2; ++x) {
+                        size_t srcIdx = static_cast<size_t>(y) * (width/2) * 4 + x*4;
+                        uint16_t y0 = gpuBuf[srcIdx] >> 6;
+                        uint16_t y1 = gpuBuf[srcIdx+1] >> 6; // Y1 directly
+                        uint16_t u  = gpuBuf[srcIdx+2] >> 6;
+                        uint16_t v  = gpuBuf[srcIdx+3] >> 6;
+                        yPlane[y*frame->linesize[0]/2 + 2*x] = y0;
+                        yPlane[y*frame->linesize[0]/2 + 2*x+1] = y1;
+                        uPlane[y*frame->linesize[1]/2 + x] = u;
+                        vPlane[y*frame->linesize[2]/2 + x] = v;
                     }
                 }
                 if (idx == 0) {
