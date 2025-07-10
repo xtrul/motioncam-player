@@ -161,7 +161,6 @@ set(APP_SOURCES
   src/Utils/DebugLog.cpp
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
-  src/Utils/GpuProresFix.cpp
 
   src/main.cpp
 )
