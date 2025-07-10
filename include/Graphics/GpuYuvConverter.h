@@ -16,12 +16,8 @@ public:
     bool init(int width, int height);
     void cleanup();
 
-    // Convert RAW Bayer data to packed YUV422 on the GPU and copy the
-    // result back to the CPU. Each pair of output pixels is represented
-    // by two uint32_t words. The first word packs U, Y0 and V into
-    // 10-bit fields, the second word contains Y1.
     bool convertAndReadback(const uint16_t* raw, int width, int height,
-                            std::vector<uint32_t>& outPacked);
+                            std::vector<uint16_t>& outPacked);
 private:
     Renderer_VK* m_renderer;
 
