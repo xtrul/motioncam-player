@@ -148,7 +148,6 @@ set(APP_SOURCES
   src/Graphics/VulkanHelpers.cpp
   src/Graphics/ImageResource.cpp
   src/Graphics/GpuYuvConverter.cpp
-  src/Graphics/GpuFrameCopy.cpp
   src/Graphics/Pipeline.cpp
   src/Graphics/Descriptor.cpp
 
@@ -181,12 +180,6 @@ endif()
 
 add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 
-# Enable full debug logging in spdlog and ensure UTF-8 source encoding for MSVC
-target_compile_definitions(${PROJECT_NAME} PRIVATE SPDLOG_ACTIVE_LEVEL=0)
-target_compile_options(${PROJECT_NAME} PRIVATE
-  $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
-)
-
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 if(HAVE_FFMPEG)
@@ -218,7 +211,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${IMGUI_SOURCE_DIR}"
   "${IMGUI_SOURCE_DIR}/backends"
   "${APP_EXTERNAL_DIR}/tinydngwriter"
-  "${APP_EXTERNAL_DIR}"
 )
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
