@@ -39,6 +39,70 @@ namespace fs = std::filesystem;
 
 #ifdef ENABLE_PRORES_EXPORT
 static bool g_useGpuProRes = false;
+
+static inline bool validateMacroPixel(const uint16_t* p)
+{
+#ifdef PRORES_GPU_VALIDATE
+    return (p[0] <= 1023 && p[1] <= 1023 && p[2] <= 1023 && p[3] <= 1023);
+#else
+    (void)p;
+    return true;
+#endif
+}
+
+static bool copyFromGpuToFrame(const uint16_t* gpuBuf,
+                               int videoWidth, int videoHeight,
+                               AVFrame* frame, bool validate = false)
+{
+    for (int y = 0; y < videoHeight; ++y)
+    {
+        auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
+        auto* uRow = reinterpret_cast<uint16_t*>(frame->data[1] + y * frame->linesize[1]);
+        auto* vRow = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
+
+        const size_t srcBase = static_cast<size_t>(y) * (videoWidth / 2) * 4;
+
+        for (int x = 0; x < videoWidth; x += 2)
+        {
+            const size_t src = srcBase + (x >> 1) * 4;
+
+            const uint16_t y0 = gpuBuf[src + 0];
+            const uint16_t u  = gpuBuf[src + 1];
+            const uint16_t y1 = gpuBuf[src + 2];
+            const uint16_t v  = gpuBuf[src + 3];
+
+            if (validate && y == 0 && x == 0)
+            {
+                if (!validateMacroPixel(&gpuBuf[src]))
+                {
+                    std::ostringstream oss;
+                    oss << "[GPU-CHECK] Unexpected macropixel at (0,0): Y0=" << y0
+                        << " U=" << u << " Y1=" << y1 << " V=" << v;
+                    LogProRes(oss.str());
+                    return false;
+                }
+                else
+                {
+                    std::ostringstream oss;
+                    oss << "[GPU-CHECK] Macropixel layout validated (Y0=" << y0
+                        << " U=" << u << " Y1=" << y1 << " V=" << v << ")";
+                    LogProRes(oss.str());
+                }
+            }
+
+            yRow[x    ] = y0 << 6;
+            yRow[x + 1] = y1 << 6;
+            uRow[x >> 1] = u << 6;
+            vRow[x >> 1] = v << 6;
+        }
+    }
+
+    std::ostringstream oss;
+    oss << "[GPU-COPY] Unpacked " << videoWidth << "x" << videoHeight
+        << " YUV422P10 frame from GPU buffer";
+    LogProRes(oss.str());
+    return true;
+}
 #endif
 namespace {
     bool writeDngInternal(
@@ -1480,43 +1544,14 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                        converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
 
-                /*  ✅  FINAL, CORRECT GPU->planar unpack  */
-                for (int y = 0; y < height; ++y) {
-                    auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
-                    auto* uRow = reinterpret_cast<uint16_t*>(frame->data[1] + y * frame->linesize[1]);
-                    auto* vRow = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
-
-                    size_t srcBase = static_cast<size_t>(y) * (width / 2) * 4;   /* 4×u16 per 2-pixel group */
-                    for (int x = 0; x < width; x += 2) {
-                        size_t src = srcBase + (x >> 1) * 4;
-                        uint16_t y0 = gpuBuf[src + 0];   /* Y0 */
-                        uint16_t u  = gpuBuf[src + 1];   /* U  */
-                        uint16_t y1 = gpuBuf[src + 2];   /* Y1 */
-                        uint16_t v  = gpuBuf[src + 3];   /* V  */
-
-                        yRow[x    ] = y0 << 6;           /* 10-bit → 16-bit */
-                        yRow[x + 1] = y1 << 6;
-                        uRow[x >> 1] = u << 6;
-                        vRow[x >> 1] = v << 6;
-                    }
-                }
-
-                /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
-                if (idx == 0) {
-                    const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
-                    const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
-                    const uint16_t* vDbg = reinterpret_cast<const uint16_t*>(frame->data[2]);
-                    std::ostringstream dbg;
-                    dbg << "[GPU] AVFrame first: "
-                        << (yDbg[0] >> 6) << "," << (yDbg[1] >> 6) << ","
-                        << (uDbg[0] >> 6) << "," << (vDbg[0] >> 6);
-                    LogProRes(dbg.str());
-                
+                if (!copyFromGpuToFrame(gpuBuf.data(), width, height, frame, idx == 0)) {
+                    m_proResStatus.errorMsg = "GPU validation failed";
+                    break;
                 }
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
