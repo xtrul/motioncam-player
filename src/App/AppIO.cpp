@@ -35,6 +35,18 @@
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
+#ifdef VERBOSE_PRORES_FIX
+static uint32_t crc32(const uint8_t* data, size_t len) {
+    uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; ++i) {
+        crc ^= data[i];
+        for (int b = 0; b < 8; ++b)
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+    }
+    return ~crc;
+}
+#endif
+
 namespace fs = std::filesystem;
 
 #ifdef ENABLE_PRORES_EXPORT
@@ -1480,7 +1492,16 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                        converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+#ifdef VERBOSE_PRORES_FIX
+                if (idx == 0) {
+                    std::ostringstream ginfo;
+                    ginfo << "[GPU] macropixel 0: "
+                          << gpuBuf[0] << "," << gpuBuf[1] << ","
+                          << gpuBuf[2] << "," << gpuBuf[3];
+                    LogProRes(ginfo.str());
+                }
+#endif
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
@@ -1492,7 +1513,7 @@ void App::exportCurrentClipToProRes() {
                     auto* vRow = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
 
                     size_t srcBase = static_cast<size_t>(y) * (width / 2) * 4;   /* 4×u16 per 2-pixel group */
-                    for (int x = 0; x < width; x += 2) {
+                for (int x = 0; x < width; x += 2) {
                         size_t src = srcBase + (x >> 1) * 4;
                         uint16_t y0 = gpuBuf[src + 0];   /* Y0 */
                         uint16_t u  = gpuBuf[src + 1];   /* U  */
@@ -1505,6 +1526,17 @@ void App::exportCurrentClipToProRes() {
                         vRow[x >> 1] = v << 6;
                     }
                 }
+#ifdef VERBOSE_PRORES_FIX
+                {
+                    uint32_t cy = crc32(frame->data[0], 32);
+                    uint32_t cu = crc32(frame->data[1], 32);
+                    uint32_t cv = crc32(frame->data[2], 32);
+                    std::ostringstream coss;
+                    coss << "[GPU] CRC Y=" << std::hex << cy
+                         << " U=" << cu << " V=" << cv;
+                    LogProRes(coss.str());
+                }
+#endif
 
                 /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
                 if (idx == 0) {

@@ -6,6 +6,9 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <mutex>
+
+static std::mutex g_queueMutex;
 
 extern std::string g_AppBasePath;
 
@@ -250,6 +253,7 @@ void GpuYuvConverter::cleanup() {
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
                                          std::vector<uint16_t>& outPacked) {
     LogProRes("[GPU] convertAndReadback invoked");
+    std::lock_guard<std::mutex> lk(g_queueMutex);
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
@@ -370,6 +374,7 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
+    // TODO RenderDoc/validation: verify barriers around compute output
 
     VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar3.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
