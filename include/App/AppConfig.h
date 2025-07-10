@@ -22,7 +22,10 @@ constexpr size_t AvailableStagingIndicesQueueSlack = 8;
 constexpr size_t MAX_LEAD_FRAMES_IO_WORKER = 8;
 constexpr size_t MAX_LAG_FRAMES_IO_WORKER = 4;
 
-// Enable Vulkan validation layers for both debug and release builds.
-constexpr bool enableValidationLayers = true;
+#ifndef NDEBUG
+const bool enableValidationLayers = true;
+#else
+const bool enableValidationLayers = false;
+#endif
 
 #endif // APP_CONFIG_H
