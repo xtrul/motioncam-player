@@ -74,7 +74,7 @@ namespace ImageResource {
         }
         else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_GENERAL) {
             barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
             sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
         }
@@ -167,17 +167,14 @@ namespace ImageResource {
         samplerInfo.maxLod = 0.0f;
         VK_CHECK_RENDERER(vkCreateSampler(renderer->m_device_p, &samplerInfo, nullptr, &renderer->m_rawImageSampler));
 
-        {
-            std::scoped_lock lock(renderer->m_queueMutex);
-            transitionImageLayout(
-                renderer->m_device_p,
-                renderer->m_hostSiteCommandPool_p,
-                renderer->m_graphicsQueue_p,
-                renderer->m_rawImage,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-            );
-        }
+        transitionImageLayout(
+            renderer->m_device_p,
+            renderer->m_hostSiteCommandPool_p,
+            renderer->m_graphicsQueue_p,
+            renderer->m_rawImage,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        );
         LogToFile("ImageResource::createRawImageResources Raw image resources created and transitioned.");
         return true;
     }
