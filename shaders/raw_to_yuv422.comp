@@ -22,22 +22,9 @@ void main() {
     int y = gid.y;
     if (x0 >= pc.width || y >= pc.height) return;
     int x1 = x0 + 1;
-    uint raw0 = readU16(x0, y);
-    uint raw1 = (x1 < pc.width) ? readU16(x1, y) : raw0;
-    uint raw2 = readU16(x0, y + 1);
-    uint raw3 = (x1 < pc.width) ? readU16(x1, y + 1) : raw2;
-
-    uint y0 = raw0 >> 6;
-    uint y1 = raw1 >> 6;
-
-    float r = float(raw3) / 65535.0;
-    float g = float(raw1 + raw2) * 0.5 / 65535.0;
-    float b = float(raw0) / 65535.0;
-    float lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    float uNorm = clamp((b - lum) / (2.0 * (1.0 - 0.0722)) + 0.5, 0.0, 1.0);
-    float vNorm = clamp((r - lum) / (2.0 * (1.0 - 0.2126)) + 0.5, 0.0, 1.0);
-    uint u = uint(round(uNorm * 1023.0));
-    uint v = uint(round(vNorm * 1023.0));
-
+    uint y0 = readU16(x0, y) >> 6;
+    uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
+    uint u = 512u;
+    uint v = 512u;
     imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
 }
