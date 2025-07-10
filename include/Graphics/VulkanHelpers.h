@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
+#include <mutex>
 #include <iostream> // For std::cerr in VK_CHECK_RENDERER
 #include "Utils/DebugLog.h" // For LogToFile in VK_CHECK_RENDERER
 
@@ -35,6 +36,8 @@ namespace VulkanHelpers {
     // that holds these Vulkan objects. For now, make them free functions requiring device context.
     VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
     void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkCommandBuffer commandBuffer);
+
+    extern std::mutex queueMutex;
 
 } // namespace VulkanHelpers
 
