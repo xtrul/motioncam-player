@@ -1,5 +1,4 @@
 #version 450
-// YUV output order in yuvImage: r=Y0, g=Y1, b=U, a=V
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
