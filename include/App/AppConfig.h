@@ -4,10 +4,6 @@
 
 #include <cstddef>
 
-#define VERBOSE_GPU_YUV 1
-#define DEBUG_PATTERN_MODE 0
-#define ENABLE_CRC_PLANE 1
-
 const int MAX_FRAMES_IN_FLIGHT = 3;
 
 #ifdef NDEBUG
