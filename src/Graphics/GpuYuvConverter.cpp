@@ -248,7 +248,7 @@ void GpuYuvConverter::cleanup() {
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         std::vector<uint16_t>& outPacked) {
+                                         std::vector<uint32_t>& outPacked) {
     LogProRes("[GPU] convertAndReadback invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
@@ -429,7 +429,7 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
         m_renderer->m_graphicsQueue_p, cmd);
 
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
-    outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
+    outPacked.resize(static_cast<size_t>(outSize / sizeof(uint32_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
     LogProRes("[GPU] readback complete");
 

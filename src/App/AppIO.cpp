@@ -1467,7 +1467,7 @@ void App::exportCurrentClipToProRes() {
         AVPacket pkt{};
 
         std::vector<uint8_t> rgbBuf;
-        std::vector<uint16_t> gpuBuf;
+        std::vector<uint32_t> gpuBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
@@ -1487,24 +1487,28 @@ void App::exportCurrentClipToProRes() {
                 uint16_t* yPlane = reinterpret_cast<uint16_t*>(frame->data[0]);
                 uint16_t* uPlane = reinterpret_cast<uint16_t*>(frame->data[1]);
                 uint16_t* vPlane = reinterpret_cast<uint16_t*>(frame->data[2]);
+                int packedIndex = 0;
                 for (int y=0; y<height; ++y) {
-                    for (int x=0; x<width/2; ++x) {
-                        size_t srcIdx = static_cast<size_t>(y) * (width/2) * 4 + x*4;
-                        uint16_t y0 = gpuBuf[srcIdx] >> 6;
-                        uint16_t y1 = gpuBuf[srcIdx+1] >> 6; // Y1 directly
-                        uint16_t u  = gpuBuf[srcIdx+2] >> 6;
-                        uint16_t v  = gpuBuf[srcIdx+3] >> 6;
-                        yPlane[y*frame->linesize[0]/2 + 2*x] = y0;
-                        yPlane[y*frame->linesize[0]/2 + 2*x+1] = y1;
-                        uPlane[y*frame->linesize[1]/2 + x] = u;
-                        vPlane[y*frame->linesize[2]/2 + x] = v;
+                    uint16_t* rowY = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
+                    uint16_t* rowU = reinterpret_cast<uint16_t*>(frame->data[1] + y * frame->linesize[1]);
+                    uint16_t* rowV = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
+                    for (int x=0; x<width; x+=2) {
+                        uint32_t packed0 = gpuBuf[packedIndex++];
+                        uint32_t packed1 = gpuBuf[packedIndex++];
+                        uint16_t U  = (packed0 >> 0)  & 0x3FF;
+                        uint16_t Y0 = (packed0 >> 10) & 0x3FF;
+                        uint16_t V  = (packed0 >> 20) & 0x3FF;
+                        uint16_t Y1 = packed1 & 0x3FF;
+                        rowY[x]     = static_cast<uint16_t>(Y0 << 6);
+                        rowY[x + 1] = static_cast<uint16_t>(Y1 << 6);
+                        rowU[x / 2] = static_cast<uint16_t>(U  << 6);
+                        rowV[x / 2] = static_cast<uint16_t>(V  << 6);
                     }
                 }
                 if (idx == 0) {
                     std::ostringstream dbg;
-                    dbg << "[GPU] AVFrame first: "
-                        << yPlane[0] << "," << yPlane[1] << "," << uPlane[0]
-                        << "," << vPlane[0];
+                    dbg << "[GPU] AVFrame first: " << yPlane[0] << "," << yPlane[1]
+                        << "," << uPlane[0] << "," << vPlane[0];
                     LogProRes(dbg.str());
                 }
             } else {
