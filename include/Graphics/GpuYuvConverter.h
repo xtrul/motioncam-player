@@ -16,12 +16,8 @@ public:
     bool init(int width, int height);
     void cleanup();
 
-    // Converts RAW Bayer input to a packed YUV422 10-bit buffer and reads it
-    // back into CPU memory. Each pair of pixels is encoded into two uint32_t
-    // words as: [U | Y0 | V] and [Y1]. The caller is responsible for unpacking
-    // into planar form.
     bool convertAndReadback(const uint16_t* raw, int width, int height,
-                            std::vector<uint32_t>& outPacked);
+                            std::vector<uint16_t>& outPacked);
 private:
     Renderer_VK* m_renderer;
 
