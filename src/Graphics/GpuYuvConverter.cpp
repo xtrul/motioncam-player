@@ -431,7 +431,8 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
-    LogProRes("[GPU] readback complete");
+    // Layout is [Y0, U, Y1, V] per 2-pixel block, 10-bit values stored in 16-bit words
+   LogProRes("[GPU] readback complete");
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
     vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
