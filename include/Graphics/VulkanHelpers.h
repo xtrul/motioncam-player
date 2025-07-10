@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <iostream> // For std::cerr in VK_CHECK_RENDERER
+#include <mutex>
 #include "Utils/DebugLog.h" // For LogToFile in VK_CHECK_RENDERER
 
 // Macro for Vulkan error checking, specific to Renderer context or general Vulkan calls.
@@ -26,6 +27,8 @@
 
 
 namespace VulkanHelpers {
+
+    extern std::mutex gVkSubmitMutex;
 
     std::vector<char> readFile(const std::string& filename);
     VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code);
