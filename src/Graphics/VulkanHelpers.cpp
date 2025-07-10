@@ -2,8 +2,11 @@
 #include "Utils/DebugLog.h" // For LogToFile
 #include <fstream>
 #include <stdexcept> // For std::runtime_error
+#include <mutex>
 
 namespace VulkanHelpers {
+
+    static std::mutex g_queueMutex;
 
     std::vector<char> readFile(const std::string& filename) {
         std::string fullPath = filename;
@@ -64,8 +67,11 @@ namespace VulkanHelpers {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
-        VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
+        {
+            std::lock_guard<std::mutex> lock(g_queueMutex);
+            VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+            VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
+        }
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
