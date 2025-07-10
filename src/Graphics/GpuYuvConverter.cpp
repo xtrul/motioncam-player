@@ -247,6 +247,9 @@ void GpuYuvConverter::cleanup() {
     }
 }
 
+// Convert RAW Bayer data to a packed YUV422 buffer using the compute shader and
+// read the result back to CPU memory. The returned buffer contains width/2 *
+// height pixels, each with four 16-bit components arranged as [Y0, U, Y1, V].
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
                                          std::vector<uint16_t>& outPacked) {
     LogProRes("[GPU] convertAndReadback invoked");
@@ -431,6 +434,8 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
+    // Each pair of pixels is stored as [Y0, U, Y1, V] using 16-bit components
+    // where the 10-bit values occupy the lower bits.
     LogProRes("[GPU] readback complete");
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
