@@ -39,38 +39,6 @@ namespace fs = std::filesystem;
 
 #ifdef ENABLE_PRORES_EXPORT
 static bool g_useGpuProRes = false;
-
-// -----------------------------------------------------------------------------
-// Helper: unpack GPU-generated packed YUV422 (layout [Y0,U,Y1,V] per pair)
-// into planar AV_PIX_FMT_YUV422P10LE buffers.
-// Each component in the GPU buffer is a 10‑bit value stored in 16 bits.
-// -----------------------------------------------------------------------------
-static void unpackGpuYuv422(const std::vector<uint16_t>& src,
-                            int width, int height, AVFrame* frame)
-{
-    const int pairsPerRow = (width + 1) / 2;
-    for (int y = 0; y < height; ++y) {
-        auto* yPlane = reinterpret_cast<uint16_t*>(frame->data[0] +
-                                                  y * frame->linesize[0]);
-        auto* uPlane = reinterpret_cast<uint16_t*>(frame->data[1] +
-                                                  y * frame->linesize[1]);
-        auto* vPlane = reinterpret_cast<uint16_t*>(frame->data[2] +
-                                                  y * frame->linesize[2]);
-        for (int x = 0; x < pairsPerRow; ++x) {
-            size_t idx = static_cast<size_t>(y) * pairsPerRow * 4 + x * 4;
-            uint16_t y0 = src[idx];
-            uint16_t u  = src[idx + 1];
-            uint16_t y1 = src[idx + 2];
-            uint16_t v  = src[idx + 3];
-
-            yPlane[2 * x] = static_cast<uint16_t>(y0 << 6);
-            if (2 * x + 1 < width)
-                yPlane[2 * x + 1] = static_cast<uint16_t>(y1 << 6);
-            uPlane[x] = static_cast<uint16_t>(u << 6);
-            vPlane[x] = static_cast<uint16_t>(v << 6);
-        }
-    }
-}
 #endif
 namespace {
     bool writeDngInternal(
@@ -1516,15 +1484,27 @@ void App::exportCurrentClipToProRes() {
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                unpackGpuYuv422(gpuBuf, width, height, frame);
+                uint16_t* yPlane = reinterpret_cast<uint16_t*>(frame->data[0]);
+                uint16_t* uPlane = reinterpret_cast<uint16_t*>(frame->data[1]);
+                uint16_t* vPlane = reinterpret_cast<uint16_t*>(frame->data[2]);
+                for (int y=0; y<height; ++y) {
+                    for (int x=0; x<width/2; ++x) {
+                        size_t srcIdx = static_cast<size_t>(y) * (width/2) * 4 + x*4;
+                        uint16_t y0 = gpuBuf[srcIdx] >> 6;
+                        uint16_t y1 = gpuBuf[srcIdx+1] >> 6; // Y1 directly
+                        uint16_t u  = gpuBuf[srcIdx+2] >> 6;
+                        uint16_t v  = gpuBuf[srcIdx+3] >> 6;
+                        yPlane[y*frame->linesize[0]/2 + 2*x] = y0;
+                        yPlane[y*frame->linesize[0]/2 + 2*x+1] = y1;
+                        uPlane[y*frame->linesize[1]/2 + x] = u;
+                        vPlane[y*frame->linesize[2]/2 + x] = v;
+                    }
+                }
                 if (idx == 0) {
-                    auto* yp = reinterpret_cast<uint16_t*>(frame->data[0]);
-                    auto* up = reinterpret_cast<uint16_t*>(frame->data[1]);
-                    auto* vp = reinterpret_cast<uint16_t*>(frame->data[2]);
                     std::ostringstream dbg;
                     dbg << "[GPU] AVFrame first: "
-                        << yp[0] << "," << yp[1] << "," << up[0]
-                        << "," << vp[0];
+                        << yPlane[0] << "," << yPlane[1] << "," << uPlane[0]
+                        << "," << vPlane[0];
                     LogProRes(dbg.str());
                 }
             } else {
