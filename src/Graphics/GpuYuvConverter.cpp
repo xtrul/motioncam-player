@@ -110,7 +110,10 @@ bool GpuYuvConverter::init(int width, int height) {
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
-    imageInfo.format = VK_FORMAT_R16G16B16A16_UINT;
+    // Two uint32_t values hold the packed YUV422 output for a pair of pixels
+    // (U,Y0,V,Y1). Using an RG32 format allows us to store both words without
+    // any loss of precision or component swizzling.
+    imageInfo.format = VK_FORMAT_R32G32_UINT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -126,7 +129,7 @@ bool GpuYuvConverter::init(int width, int height) {
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = m_yuvImage;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R16G16B16A16_UINT;
+    viewInfo.format = VK_FORMAT_R32G32_UINT;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
@@ -248,10 +251,10 @@ void GpuYuvConverter::cleanup() {
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         std::vector<uint16_t>& outPacked) {
+                                         std::vector<uint32_t>& outPacked) {
     LogProRes("[GPU] convertAndReadback invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
-    VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
+    VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint32_t);
 
     VkBuffer stagingBuf = VK_NULL_HANDLE;
     VmaAllocation stagingAlloc = VK_NULL_HANDLE;
@@ -429,7 +432,7 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
         m_renderer->m_graphicsQueue_p, cmd);
 
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
-    outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
+    outPacked.resize(static_cast<size_t>(outSize / sizeof(uint32_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
     LogProRes("[GPU] readback complete");
 
