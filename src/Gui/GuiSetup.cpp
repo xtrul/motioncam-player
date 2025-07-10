@@ -12,7 +12,6 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
-#include "Graphics/VulkanHelpers.h"
 
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
@@ -134,11 +133,8 @@ namespace GuiOverlay {
         end_info.pCommandBuffers = &command_buffer;
         vkEndCommandBuffer(command_buffer);
 
-        {
-            std::lock_guard<std::mutex> lk(VulkanHelpers::gVkSubmitMutex);
-            vkQueueSubmit(appInstance->m_graphicsQueue, 1, &end_info, VK_NULL_HANDLE);
-            vkQueueWaitIdle(appInstance->m_graphicsQueue); // Ensure fonts are uploaded
-        }
+        vkQueueSubmit(appInstance->m_graphicsQueue, 1, &end_info, VK_NULL_HANDLE);
+        vkQueueWaitIdle(appInstance->m_graphicsQueue); // Ensure fonts are uploaded
 
         ImGui_ImplVulkan_DestroyFontsTexture(); // Device Staging Bufs are no longer needed
     }
