@@ -2,7 +2,6 @@
 #include "Graphics/Renderer_VK.h"
 #include "Graphics/VulkanHelpers.h"
 #include "Graphics/ImageResource.h"
-#include <spdlog/spdlog.h>
 #include "Utils/DebugLog.h"
 #include <vector>
 #include <filesystem>
@@ -370,7 +369,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
-    SPDLOG_TRACE("compute dispatched");
     LogProRes("[GPU] compute dispatched");
 
     VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
@@ -393,7 +391,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
         0, nullptr,
         0, nullptr,
         1, &bar3);
-    SPDLOG_TRACE("barrier compute->transfer");
 
     VkBufferImageCopy rbRegion{};
     rbRegion.bufferOffset = 0;
@@ -428,7 +425,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
         0, nullptr,
         0, nullptr,
         1, &bar4);
-    SPDLOG_TRACE("barrier transfer->compute");
     VulkanHelpers::endSingleTimeCommands(m_renderer->m_device_p, m_cmdPool,
         m_renderer->m_graphicsQueue_p, cmd);
 
