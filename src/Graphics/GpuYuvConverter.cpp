@@ -6,31 +6,20 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
-#include <sstream>
-#include <mutex>
-
 
 extern std::string g_AppBasePath;
 
 GpuYuvConverter::GpuYuvConverter(Renderer_VK* renderer)
     : m_renderer(renderer) {}
 
-static const char* kRawShaderSHA = "890edb64b053f4ba9e4f9abe2d6cdb2c0d599526";
-
 GpuYuvConverter::~GpuYuvConverter() { cleanup(); }
 
 bool GpuYuvConverter::init(int width, int height) {
-    std::scoped_lock lock(m_renderer->m_queueMutex);
     namespace fs = std::filesystem;
     fs::path shaderPath = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_yuv422.comp.spv";
     auto code = VulkanHelpers::readFile(shaderPath.string());
     VkShaderModule module = VulkanHelpers::createShaderModule(m_renderer->m_device_p, code);
     LogProRes("[GPU] Creating RAW->YUV compute pipeline");
-    {
-        std::ostringstream shaMsg;
-        shaMsg << "[GPU] raw_to_yuv422.comp SHA=" << kRawShaderSHA;
-        LogProRes(shaMsg.str());
-    }
     LogProRes("[GPU] init start");
 
     // Create a private command pool for all converter operations
@@ -109,10 +98,6 @@ bool GpuYuvConverter::init(int width, int height) {
     ai.descriptorSetCount = 1;
     ai.pSetLayouts = &m_setLayout;
     VK_CHECK_RENDERER(vkAllocateDescriptorSets(m_renderer->m_device_p, &ai, &m_descSet));
-    VkQueryPoolCreateInfo qpci{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
-    qpci.queryType = VK_QUERY_TYPE_TIMESTAMP;
-    qpci.queryCount = 2;
-    VK_CHECK_RENDERER(vkCreateQueryPool(m_renderer->m_device_p, &qpci, nullptr, &m_perfQueryPool));
     LogProRes("[GPU] Compute pipeline initialized");
     LogProRes("[GPU] init complete");
 
@@ -260,16 +245,11 @@ void GpuYuvConverter::cleanup() {
         vkDestroyCommandPool(m_renderer->m_device_p, m_cmdPool, nullptr);
         m_cmdPool = VK_NULL_HANDLE;
     }
-    if (m_perfQueryPool != VK_NULL_HANDLE) {
-        vkDestroyQueryPool(m_renderer->m_device_p, m_perfQueryPool, nullptr);
-        m_perfQueryPool = VK_NULL_HANDLE;
-    }
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
                                          std::vector<uint16_t>& outPacked) {
     LogProRes("[GPU] convertAndReadback invoked");
-    std::scoped_lock lock(m_renderer->m_queueMutex);
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
@@ -301,18 +281,8 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     VK_CHECK_RENDERER(vmaCreateBuffer(m_renderer->m_allocator_p, &rbInfo, &rbAlloc,
                                       &readbackBuf, &readbackAlloc, &rbAllocInfo));
 
-    VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-    allocInfo.commandPool = m_cmdPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
-    VkCommandBuffer cmd;
-    VK_CHECK_RENDERER(vkAllocateCommandBuffers(m_renderer->m_device_p, &allocInfo, &cmd));
-    VK_CHECK_RENDERER(vkResetCommandBuffer(cmd, 0));
-    VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    VK_CHECK_RENDERER(vkBeginCommandBuffer(cmd, &beginInfo));
-    vkCmdResetQueryPool(cmd, m_perfQueryPool, 0, 2);
-    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_perfQueryPool, 0);
+    VkCommandBuffer cmd = VulkanHelpers::beginSingleTimeCommands(m_renderer->m_device_p,
+                                                                m_cmdPool);
 
     VkImageMemoryBarrier bar1{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar1.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -398,11 +368,7 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     struct Push { int w; int h; } push{ width, height };
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
-    uint32_t grpX = (uint32_t)((width + 15) / 16);
-    uint32_t grpY = (uint32_t)((height + 15) / 16);
-    uint32_t grpZ = 1;
-    vkCmdDispatch(cmd, grpX, grpY, grpZ);
-    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, m_perfQueryPool, 1);
+    vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
 
     VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
@@ -438,9 +404,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     rbRegion.imageExtent = { static_cast<uint32_t>((width + 1) / 2), static_cast<uint32_t>(height), 1 };
     vkCmdCopyImageToBuffer(cmd, m_yuvImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                            readbackBuf, 1, &rbRegion);
-    printf("[GPU] dispatch(%u,%u,%u) \xE2\x86\x92 copy bytes=%zu\n",
-           grpX, grpY, grpZ,
-           static_cast<size_t>(rbRegion.imageExtent.width) * rbRegion.imageExtent.height * 8);
 
     VkImageMemoryBarrier bar4{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar4.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -462,27 +425,10 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
         0, nullptr,
         0, nullptr,
         1, &bar4);
-    VK_CHECK_RENDERER(vkEndCommandBuffer(cmd));
-
-    VkSubmitInfo submit{};
-    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit.commandBufferCount = 1;
-    submit.pCommandBuffers = &cmd;
-    VkFenceCreateInfo fi{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    VkFence fence;
-    VK_CHECK_RENDERER(vkCreateFence(m_renderer->m_device_p, &fi, nullptr, &fence));
-    {
-        std::scoped_lock lk(m_renderer->m_queueMutex);
-        VK_CHECK_RENDERER(vkQueueSubmit(m_renderer->m_graphicsQueue_p, 1, &submit, fence));
-    }
-    VK_CHECK_RENDERER(vkWaitForFences(m_renderer->m_device_p, 1, &fence, VK_TRUE, UINT64_MAX));
-    vkDestroyFence(m_renderer->m_device_p, fence, nullptr);
-    vkFreeCommandBuffers(m_renderer->m_device_p, m_cmdPool, 1, &cmd);
+    VulkanHelpers::endSingleTimeCommands(m_renderer->m_device_p, m_cmdPool,
+        m_renderer->m_graphicsQueue_p, cmd);
 
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
-    uint16_t* pMap = static_cast<uint16_t*>(rbAllocInfo.pMappedData);
-    printf("[GPU] Staging[0..7] = %u %u %u %u %u %u %u %u\n",
-           pMap[0],pMap[1],pMap[2],pMap[3],pMap[4],pMap[5],pMap[6],pMap[7]);
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
     LogProRes("[GPU] readback complete");

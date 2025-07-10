@@ -16,12 +16,12 @@
 #define TINY_DNG_WRITER_IMPLEMENTATION
 #endif
 #include <tinydng/tiny_dng_writer.h>
-#include <iomanip>
 
 
 #include <filesystem>
 #include <thread>
 #include <chrono>
+#include <iomanip>
 #include <iostream>
 #include <fstream>
 #include <numeric>
@@ -36,17 +36,6 @@
 #include "Utils/ColorPipelineCPU.h"
 
 namespace fs = std::filesystem;
-
-static uint32_t simple_crc32(const uint8_t* data, size_t len) {
-    uint32_t crc = 0xffffffffu;
-    for (size_t i = 0; i < len; ++i) {
-        crc ^= data[i];
-        for (int j = 0; j < 8; ++j) {
-            crc = (crc >> 1) ^ (0xEDB88320u & -(crc & 1));
-        }
-    }
-    return ~crc;
-}
 
 #ifdef ENABLE_PRORES_EXPORT
 static bool g_useGpuProRes = false;
@@ -1491,19 +1480,11 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-                        converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
-                printf("Frame %zu first four GPU words: %u %u %u %u\n", idx,
-                       gpuBuf.size() > 0 ? gpuBuf[0] : 0,
-                       gpuBuf.size() > 1 ? gpuBuf[1] : 0,
-                       gpuBuf.size() > 2 ? gpuBuf[2] : 0,
-                       gpuBuf.size() > 3 ? gpuBuf[3] : 0);
+			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
 
-#if VERBOSE_GPU_YUV
-                auto timeStart = std::chrono::high_resolution_clock::now();
-#endif
                 /*  ✅  FINAL, CORRECT GPU->planar unpack  */
                 for (int y = 0; y < height; ++y) {
                     auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
@@ -1525,7 +1506,8 @@ void App::exportCurrentClipToProRes() {
                     }
                 }
 
-                if (idx < 3) {
+                /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
+                if (idx == 0) {
                     const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
                     const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
                     const uint16_t* vDbg = reinterpret_cast<const uint16_t*>(frame->data[2]);
@@ -1534,19 +1516,8 @@ void App::exportCurrentClipToProRes() {
                         << (yDbg[0] >> 6) << "," << (yDbg[1] >> 6) << ","
                         << (uDbg[0] >> 6) << "," << (vDbg[0] >> 6);
                     LogProRes(dbg.str());
-#if ENABLE_CRC_PLANE
-                    uint32_t crcY = simple_crc32(frame->data[0], 32);
-                    uint32_t crcU = simple_crc32(frame->data[1], 32);
-                    uint32_t crcV = simple_crc32(frame->data[2], 32);
-                    printf("[CPU] CRC Y=%08x U=%08x V=%08x  firstY=%u\n",
-                           crcY, crcU, crcV, yDbg[0] >> 6);
-#endif
+                
                 }
-#if VERBOSE_GPU_YUV
-                auto ms = std::chrono::duration_cast<std::chrono::microseconds>(
-                             std::chrono::high_resolution_clock::now() - timeStart).count();
-                printf("[CPU] Unpack done in %ld \xC2\xB5s\n", (long)ms);
-#endif
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();
@@ -1562,17 +1533,6 @@ void App::exportCurrentClipToProRes() {
 
             frame->pts = pts;
             pts++;
-
-            if (idx < 3) {
-                const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
-                const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
-                const uint16_t* vDbg = reinterpret_cast<const uint16_t*>(frame->data[2]);
-                std::ostringstream sendMsg;
-                sendMsg << "[GPU] Pre-encode sample Y=" << (yDbg[0] >> 6)
-                        << " U=" << (uDbg[0] >> 6)
-                        << " V=" << (vDbg[0] >> 6);
-                LogProRes(sendMsg.str());
-            }
 
             t0 = std::chrono::steady_clock::now();
             if (avcodec_send_frame(vctx, frame) < 0) { m_proResStatus.errorMsg = "send_frame failed"; break; }
