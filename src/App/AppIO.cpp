@@ -1493,16 +1493,11 @@ void App::exportCurrentClipToProRes() {
 
                     size_t srcBase = static_cast<size_t>(y) * (width / 2) * 4;   /* 4×u16 per 2-pixel group */
                     for (int x = 0; x < width; x += 2) {
-                        if (y == 0 && x == 0) {
-                            printf("W0=%u W1=%u W2=%u W3=%u\n",
-                                   gpuBuf[srcBase], gpuBuf[srcBase + 1],
-                                   gpuBuf[srcBase + 2], gpuBuf[srcBase + 3]);
-                        }
                         size_t src = srcBase + (x >> 1) * 4;
                         uint16_t y0 = gpuBuf[src + 0];   /* Y0 */
-                        uint16_t v  = gpuBuf[src + 1];   /* V  */
+                        uint16_t u  = gpuBuf[src + 1];   /* U  */
                         uint16_t y1 = gpuBuf[src + 2];   /* Y1 */
-                        uint16_t u  = gpuBuf[src + 3];   /* U  */
+                        uint16_t v  = gpuBuf[src + 3];   /* V  */
 
                         yRow[x    ] = y0 << 6;           /* 10-bit → 16-bit */
                         yRow[x + 1] = y1 << 6;
