@@ -8,6 +8,8 @@ layout(binding = 1, rgba16ui) writeonly uniform uimage2D yuvImage;
 layout(push_constant) uniform PushConsts {
     int width;
     int height;
+    float gainR;
+    float gainB;
 } pc;
 
 uint readU16(int x, int y) {
@@ -22,9 +24,11 @@ void main() {
     int y = gid.y;
     if (x0 >= pc.width || y >= pc.height) return;
     int x1 = x0 + 1;
-    uint y0 = readU16(x0, y) >> 6;
-    uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
+    uint y0 = readU16(x0, y);
+    uint y1 = (x1 < pc.width) ? readU16(x1, y) : y0;
+    float f0 = clamp(float(y0) * pc.gainR / 16.0, 0.0, 1023.0);
+    float f1 = clamp(float(y1) * pc.gainB / 16.0, 0.0, 1023.0);
     uint u = 512u;
     uint v = 512u;
-    imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
+    imageStore(yuvImage, gid, uvec4(uint(f0), u, uint(f1), v));
 }
