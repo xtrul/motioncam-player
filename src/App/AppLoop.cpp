@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <numeric>
 #include <algorithm>
+#include <mutex>
 
 namespace fs = std::filesystem;
 
@@ -472,15 +473,17 @@ void App::drawFrame() {
     submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
 
     timePoint_A = steady_clock::now();
-    VK_APP_CHECK(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame]));
-
-    VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &m_swapChain;
-    presentInfo.pImageIndices = &imageIndex;
-    result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+    {
+        std::scoped_lock lock(m_graphicsQueueMutex);
+        VK_APP_CHECK(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame]));
+        VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = &m_swapChain;
+        presentInfo.pImageIndices = &imageIndex;
+        result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+    }
     timePoint_B = steady_clock::now();
     m_vkSubmitPresentTimeMs = std::chrono::duration<double, std::milli>(timePoint_B - timePoint_A).count();
 
