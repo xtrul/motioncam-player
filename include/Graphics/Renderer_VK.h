@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <optional>
+#include <mutex>
 
 #include <nlohmann/json.hpp>
 
@@ -97,6 +98,9 @@ public:
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
 
     uint32_t m_swapChainImageCount = 0; // Needed by Descriptor helpers
+
+    // Mutex to serialize submissions to the graphics queue
+    mutable std::mutex m_queueMutex;
 
 private:
     struct ShaderParamsUBO {
