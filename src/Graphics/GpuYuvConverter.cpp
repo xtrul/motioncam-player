@@ -12,6 +12,8 @@ extern std::string g_AppBasePath;
 GpuYuvConverter::GpuYuvConverter(Renderer_VK* renderer)
     : m_renderer(renderer) {}
 
+static const char* kRawShaderSHA = "890edb64b053f4ba9e4f9abe2d6cdb2c0d599526";
+
 GpuYuvConverter::~GpuYuvConverter() { cleanup(); }
 
 bool GpuYuvConverter::init(int width, int height) {
@@ -20,6 +22,11 @@ bool GpuYuvConverter::init(int width, int height) {
     auto code = VulkanHelpers::readFile(shaderPath.string());
     VkShaderModule module = VulkanHelpers::createShaderModule(m_renderer->m_device_p, code);
     LogProRes("[GPU] Creating RAW->YUV compute pipeline");
+    {
+        std::ostringstream shaMsg;
+        shaMsg << "[GPU] raw_to_yuv422.comp SHA=" << kRawShaderSHA;
+        LogProRes(shaMsg.str());
+    }
     LogProRes("[GPU] init start");
 
     // Create a private command pool for all converter operations
