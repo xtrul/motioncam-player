@@ -252,8 +252,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     LogProRes("[GPU] convertAndReadback invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
-    LogProRes("[GPU] rawSize=" + std::to_string(rawSize) +
-              " outSize=" + std::to_string(outSize));
 
     VkBuffer stagingBuf = VK_NULL_HANDLE;
     VmaAllocation stagingAlloc = VK_NULL_HANDLE;
@@ -370,11 +368,8 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     struct Push { int w; int h; } push{ width, height };
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
-    uint32_t groupX = (width  + 15) / 16;
-    uint32_t groupY = (height + 15) / 16;
-    vkCmdDispatch(cmd, groupX, groupY, 1);
-    LogProRes("[GPU] dispatched compute shader with workgroups " +
-              std::to_string(groupX) + "x" + std::to_string(groupY));
+    vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
+    LogProRes("[GPU] compute dispatched");
 
     VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar3.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
