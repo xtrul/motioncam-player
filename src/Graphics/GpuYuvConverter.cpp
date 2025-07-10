@@ -6,11 +6,6 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
-#include <mutex>
-#define VERBOSE_GPU_YUV 1
-
-static std::mutex g_queueMutex;
-std::mutex gVkSubmitMutex;
 
 extern std::string g_AppBasePath;
 
@@ -255,7 +250,6 @@ void GpuYuvConverter::cleanup() {
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
                                          std::vector<uint16_t>& outPacked) {
     LogProRes("[GPU] convertAndReadback invoked");
-    std::lock_guard<std::mutex> lk(g_queueMutex);
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
@@ -374,11 +368,8 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     struct Push { int w; int h; } push{ width, height };
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
-    uint32_t grpX = (uint32_t)((width + 15) / 16);
-    uint32_t grpY = (uint32_t)((height + 15) / 16);
-    vkCmdDispatch(cmd, grpX, grpY, 1);
+    vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
-    // TODO RenderDoc/validation: verify barriers around compute output
 
     VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar3.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -413,10 +404,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     rbRegion.imageExtent = { static_cast<uint32_t>((width + 1) / 2), static_cast<uint32_t>(height), 1 };
     vkCmdCopyImageToBuffer(cmd, m_yuvImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                            readbackBuf, 1, &rbRegion);
-#if VERBOSE_GPU_YUV
-    printf("[GPU] dispatch(%u,%u,1) \xE2\x86\x92 copy bytes=%zu\n", grpX, grpY,
-           static_cast<size_t>(rbRegion.imageExtent.width) * rbRegion.imageExtent.height * 8u);
-#endif
 
     VkImageMemoryBarrier bar4{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar4.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -442,13 +429,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
         m_renderer->m_graphicsQueue_p, cmd);
 
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
-#if VERBOSE_GPU_YUV
-    {
-        uint16_t* p = static_cast<uint16_t*>(rbAllocInfo.pMappedData);
-        printf("[GPU] Staging[0..7] = %u %u %u %u %u %u %u %u\n",
-               p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-    }
-#endif
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
     LogProRes("[GPU] readback complete");
