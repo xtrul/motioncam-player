@@ -133,8 +133,11 @@ namespace GuiOverlay {
         end_info.pCommandBuffers = &command_buffer;
         vkEndCommandBuffer(command_buffer);
 
-        vkQueueSubmit(appInstance->m_graphicsQueue, 1, &end_info, VK_NULL_HANDLE);
-        vkQueueWaitIdle(appInstance->m_graphicsQueue); // Ensure fonts are uploaded
+        {
+            std::scoped_lock lock(appInstance->m_graphicsQueueMutex);
+            vkQueueSubmit(appInstance->m_graphicsQueue, 1, &end_info, VK_NULL_HANDLE);
+            vkQueueWaitIdle(appInstance->m_graphicsQueue); // Ensure fonts are uploaded
+        }
 
         ImGui_ImplVulkan_DestroyFontsTexture(); // Device Staging Bufs are no longer needed
     }
