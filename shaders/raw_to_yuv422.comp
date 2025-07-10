@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_debug_printf : enable
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
@@ -24,6 +25,11 @@ void main() {
     int x1 = x0 + 1;
     uint y0 = readU16(x0, y) >> 6;
     uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
+#ifdef DEBUG_PATTERN_MODE
+    y0 = uint(gid.x & 1023);
+    y1 = uint(gid.y & 1023);
+#endif
+    debugPrintfEXT("invocation %u %u y=%u", gid.x, gid.y, y0);
     uint u = 512u;
     uint v = 512u;
     imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
