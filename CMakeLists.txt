@@ -33,7 +33,6 @@ if(NOT Vulkan_FOUND)
 endif()
 find_package(Threads REQUIRED)
 find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample)
-find_package(spdlog REQUIRED)
 message(STATUS "FFmpeg_FOUND=${FFmpeg_FOUND} FFMPEG_FOUND=${FFMPEG_FOUND}")
 if(FFMPEG_FOUND OR FFmpeg_FOUND)
     message(STATUS "FFmpeg found via vcpkg, enabling ProRes export")
@@ -149,7 +148,6 @@ set(APP_SOURCES
   src/Graphics/VulkanHelpers.cpp
   src/Graphics/ImageResource.cpp
   src/Graphics/GpuYuvConverter.cpp
-  src/Graphics/GpuFrameCopy.cpp
   src/Graphics/Pipeline.cpp
   src/Graphics/Descriptor.cpp
 
@@ -234,7 +232,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     "${GLFW_LIB_PATH_VC_SPECIFIC}"
     "${SDL2_LIBRARY_DIR}/SDL2.lib"
     ${Vulkan_LIBRARIES}
-    spdlog::spdlog_header_only
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
