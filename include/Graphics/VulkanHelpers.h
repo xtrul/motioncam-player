@@ -4,7 +4,6 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
-#include <mutex>
 #include <iostream> // For std::cerr in VK_CHECK_RENDERER
 #include "Utils/DebugLog.h" // For LogToFile in VK_CHECK_RENDERER
 
@@ -27,9 +26,6 @@
 
 
 namespace VulkanHelpers {
-
-    // Serialises vkQueueSubmit calls from multiple threads
-    extern std::mutex gQueueMutex;
 
     std::vector<char> readFile(const std::string& filename);
     VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code);
