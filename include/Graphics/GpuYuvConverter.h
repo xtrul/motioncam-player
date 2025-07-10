@@ -37,6 +37,8 @@ private:
     VmaAllocation m_rawAlloc{VK_NULL_HANDLE};
     VkImageView m_rawView{VK_NULL_HANDLE};
     VkSampler m_rawSampler{VK_NULL_HANDLE};
+
+    VkQueryPool m_perfQueryPool{VK_NULL_HANDLE};
 };
 
 #endif // GPU_YUV_CONVERTER_H
