@@ -16,8 +16,12 @@ public:
     bool init(int width, int height);
     void cleanup();
 
+    // Convert RAW Bayer data to packed YUV422 on the GPU and copy the
+    // result back to the CPU. The returned buffer contains 2 uint32_t
+    // values for every pair of output pixels as produced by the compute
+    // shader.
     bool convertAndReadback(const uint16_t* raw, int width, int height,
-                            std::vector<uint16_t>& outPacked);
+                            std::vector<uint32_t>& outPacked);
 private:
     Renderer_VK* m_renderer;
 
