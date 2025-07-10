@@ -1480,7 +1480,12 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                        converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                printf("Frame %zu first four GPU words: %u %u %u %u\n", idx,
+                       gpuBuf.size() > 0 ? gpuBuf[0] : 0,
+                       gpuBuf.size() > 1 ? gpuBuf[1] : 0,
+                       gpuBuf.size() > 2 ? gpuBuf[2] : 0,
+                       gpuBuf.size() > 3 ? gpuBuf[3] : 0);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
