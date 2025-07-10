@@ -35,18 +35,6 @@
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
-#ifdef VERBOSE_PRORES_FIX
-static uint32_t crc32(const uint8_t* data, size_t len) {
-    uint32_t crc = 0xFFFFFFFFu;
-    for (size_t i = 0; i < len; ++i) {
-        crc ^= data[i];
-        for (int b = 0; b < 8; ++b)
-            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
-    }
-    return ~crc;
-}
-#endif
-
 namespace fs = std::filesystem;
 
 #ifdef ENABLE_PRORES_EXPORT
@@ -1492,20 +1480,11 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-                        converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
-#ifdef VERBOSE_PRORES_FIX
-                static bool dumpOnce = true;
-                if (dumpOnce) {
-                    printf("[GPU] buf0..3=%u %u %u %u\n", gpuBuf[0], gpuBuf[1], gpuBuf[2], gpuBuf[3]);
-                    dumpOnce = false;
-                }
-#endif
+			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-#ifdef VERBOSE_PRORES_FIX
-                auto unpackStart = std::chrono::high_resolution_clock::now();
-#endif
+
                 /*  ✅  FINAL, CORRECT GPU->planar unpack  */
                 for (int y = 0; y < height; ++y) {
                     auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
@@ -1526,20 +1505,8 @@ void App::exportCurrentClipToProRes() {
                         vRow[x >> 1] = v << 6;
                     }
                 }
-#ifdef VERBOSE_PRORES_FIX
-                {
-                    uint32_t cy = crc32(frame->data[0], 32);
-                    uint32_t cu = crc32(frame->data[1], 32);
-                    uint32_t cv = crc32(frame->data[2], 32);
-                    printf("[CRC] Y=%08x U=%08x V=%08x\n", cy, cu, cv);
-                }
-                auto us = std::chrono::duration_cast<std::chrono::microseconds>(
-                                  std::chrono::high_resolution_clock::now() - unpackStart).count();
-                printf("[CPU] Unpack done in %ld us\n", (long)us);
-#endif
 
                 /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
-#ifdef VERBOSE_PRORES_FIX
                 if (idx == 0) {
                     const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
                     const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
@@ -1549,8 +1516,8 @@ void App::exportCurrentClipToProRes() {
                         << (yDbg[0] >> 6) << "," << (yDbg[1] >> 6) << ","
                         << (uDbg[0] >> 6) << "," << (vDbg[0] >> 6);
                     LogProRes(dbg.str());
+                
                 }
-#endif
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();
