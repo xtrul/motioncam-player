@@ -22,14 +22,9 @@ void main() {
     int y = gid.y;
     if (x0 >= pc.width || y >= pc.height) return;
     int x1 = x0 + 1;
-    uint raw0 = readU16(x0, y);
-    uint raw1 = (x1 < pc.width) ? readU16(x1, y) : raw0;
-    uint y0 = raw0 >> 6;
-    uint y1 = raw1 >> 6;
-    // Approximate chroma values using two CFA samples. This is a very
-    // lightweight approach but avoids the constant mid-grey chroma that
-    // produced a green image when Y was shifted incorrectly.
-    uint u = raw0 >> 6; // use first sample as U
-    uint v = raw1 >> 6; // use second sample as V
+    uint y0 = readU16(x0, y) >> 6;
+    uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
+    uint u = 512u;
+    uint v = 512u;
     imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
 }
