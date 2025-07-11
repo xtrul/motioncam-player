@@ -3,7 +3,9 @@
 layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(binding = 0) uniform usampler2D rawImage;
-layout(binding = 1, rgba16ui) writeonly uniform uimage2D yuvImage;
+layout(binding = 1, r16ui) writeonly uniform uimage2D imgY;
+layout(binding = 2, r16ui) writeonly uniform uimage2D imgU;
+layout(binding = 3, r16ui) writeonly uniform uimage2D imgV;
 
 layout(push_constant) uniform PushConsts {
     int width;
@@ -26,5 +28,8 @@ void main() {
     uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
     uint u = 512u;
     uint v = 512u;
-    imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
+    imageStore(imgY, ivec2(x0, y), uvec4(y0, 0, 0, 0));
+    imageStore(imgY, ivec2(x1, y), uvec4(y1, 0, 0, 0));
+    imageStore(imgU, gid, uvec4(u, 0, 0, 0));
+    imageStore(imgV, gid, uvec4(v, 0, 0, 0));
 }
