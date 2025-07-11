@@ -1,5 +1,6 @@
 #include "Graphics/VulkanHelpers.h"
 #include "Utils/DebugLog.h" // For LogToFile
+#include "Graphics/VkQueueSubmitGuard.h"
 #include <fstream>
 #include <stdexcept> // For std::runtime_error
 
@@ -64,7 +65,7 @@ namespace VulkanHelpers {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+        VK_CHECK_RENDERER(queueSubmitLocked(queue, 1, &submitInfo, VK_NULL_HANDLE));
         VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);

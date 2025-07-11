@@ -29,6 +29,7 @@
 #include <cmath>
 #include <cstdio>
 #include <sstream>
+#include <spdlog/spdlog.h>
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
@@ -1530,6 +1531,14 @@ void App::exportCurrentClipToProRes() {
                 t1 = std::chrono::steady_clock::now();
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             }
+
+            frame->format      = AV_PIX_FMT_YUV422P10LE;
+            frame->color_range = AVCOL_RANGE_MPEG;
+            frame->width       = width;
+            frame->height      = height;
+            spdlog::debug("FFmpeg frame fmt={} linesize[0]={} [1]={} [2]={}",
+                          frame->format, frame->linesize[0],
+                          frame->linesize[1], frame->linesize[2]);
 
             frame->pts = pts;
             pts++;
