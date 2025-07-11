@@ -37,7 +37,7 @@ bool GpuYuvConverter::init(int width, int height) {
     ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     VK_CHECK_RENDERER(vkCreateCommandPool(m_renderer->m_device_p, &ci, nullptr, &m_cmdPool));
 
-    VkDescriptorSetLayoutBinding bindings[4]{};
+    VkDescriptorSetLayoutBinding bindings[2]{};
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[0].descriptorCount = 1;
@@ -46,18 +46,10 @@ bool GpuYuvConverter::init(int width, int height) {
     bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    bindings[2].binding = 2;
-    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    bindings[2].descriptorCount = 1;
-    bindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    bindings[3].binding = 3;
-    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    bindings[3].descriptorCount = 1;
-    bindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutCreateInfo layoutCI{};
     layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutCI.bindingCount = 4;
+    layoutCI.bindingCount = 2;
     layoutCI.pBindings = bindings;
     VK_CHECK_RENDERER(vkCreateDescriptorSetLayout(m_renderer->m_device_p, &layoutCI, nullptr, &m_setLayout));
 
@@ -88,19 +80,15 @@ bool GpuYuvConverter::init(int width, int height) {
 
     vkDestroyShaderModule(m_renderer->m_device_p, module, nullptr);
 
-    VkDescriptorPoolSize poolSizes[4]{};
+    VkDescriptorPoolSize poolSizes[2]{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSizes[0].descriptorCount = 1;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     poolSizes[1].descriptorCount = 1;
-    poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    poolSizes[2].descriptorCount = 1;
-    poolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    poolSizes[3].descriptorCount = 1;
     VkDescriptorPoolCreateInfo poolCI{};
     poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolCI.maxSets = 1;
-    poolCI.poolSizeCount = 4;
+    poolCI.poolSizeCount = 2;
     poolCI.pPoolSizes = poolSizes;
     VK_CHECK_RENDERER(vkCreateDescriptorPool(m_renderer->m_device_p, &poolCI, nullptr, &m_descPool));
 
@@ -113,16 +101,16 @@ bool GpuYuvConverter::init(int width, int height) {
     LogProRes("[GPU] Compute pipeline initialized");
     LogProRes("[GPU] init complete");
 
-    // Create Y plane image
+    // Create YUV image for compute output
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = static_cast<uint32_t>(width);
+    imageInfo.extent.width = static_cast<uint32_t>((width + 1) / 2);
     imageInfo.extent.height = static_cast<uint32_t>(height);
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
-    imageInfo.format = VK_FORMAT_R16_UINT;
+    imageInfo.format = VK_FORMAT_R16G16B16A16_UINT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -132,51 +120,25 @@ bool GpuYuvConverter::init(int width, int height) {
     VmaAllocationCreateInfo allocInfo{};
     allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
-    VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &imageInfo, &allocInfo, &m_yImage, &m_yAlloc, nullptr));
+    VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &imageInfo, &allocInfo, &m_yuvImage, &m_yuvAlloc, nullptr));
 
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = m_yImage;
+    viewInfo.image = m_yuvImage;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R16_UINT;
+    viewInfo.format = VK_FORMAT_R16G16B16A16_UINT;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
-    VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &viewInfo, nullptr, &m_yView));
+    VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &viewInfo, nullptr, &m_yuvView));
 
     ImageResource::transitionImageLayout(
         m_renderer->m_device_p,
         m_cmdPool,
         m_renderer->m_graphicsQueue_p,
-        m_yImage,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_GENERAL);
-
-    // Create U plane image
-    imageInfo.extent.width = static_cast<uint32_t>((width + 1) / 2);
-    imageInfo.format = VK_FORMAT_R16_UINT;
-    VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &imageInfo, &allocInfo, &m_uImage, &m_uAlloc, nullptr));
-    viewInfo.image = m_uImage;
-    VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &viewInfo, nullptr, &m_uView));
-    ImageResource::transitionImageLayout(
-        m_renderer->m_device_p,
-        m_cmdPool,
-        m_renderer->m_graphicsQueue_p,
-        m_uImage,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_GENERAL);
-
-    // Create V plane image
-    VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &imageInfo, &allocInfo, &m_vImage, &m_vAlloc, nullptr));
-    viewInfo.image = m_vImage;
-    VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &viewInfo, nullptr, &m_vView));
-    ImageResource::transitionImageLayout(
-        m_renderer->m_device_p,
-        m_cmdPool,
-        m_renderer->m_graphicsQueue_p,
-        m_vImage,
+        m_yuvImage,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_GENERAL);
 
@@ -254,32 +216,14 @@ void GpuYuvConverter::cleanup() {
         m_rawImage = VK_NULL_HANDLE;
         m_rawAlloc = VK_NULL_HANDLE;
     }
-    if (m_yView != VK_NULL_HANDLE) {
-        vkDestroyImageView(m_renderer->m_device_p, m_yView, nullptr);
-        m_yView = VK_NULL_HANDLE;
+    if (m_yuvView != VK_NULL_HANDLE) {
+        vkDestroyImageView(m_renderer->m_device_p, m_yuvView, nullptr);
+        m_yuvView = VK_NULL_HANDLE;
     }
-    if (m_yImage != VK_NULL_HANDLE) {
-        vmaDestroyImage(m_renderer->m_allocator_p, m_yImage, m_yAlloc);
-        m_yImage = VK_NULL_HANDLE;
-        m_yAlloc = VK_NULL_HANDLE;
-    }
-    if (m_uView != VK_NULL_HANDLE) {
-        vkDestroyImageView(m_renderer->m_device_p, m_uView, nullptr);
-        m_uView = VK_NULL_HANDLE;
-    }
-    if (m_uImage != VK_NULL_HANDLE) {
-        vmaDestroyImage(m_renderer->m_allocator_p, m_uImage, m_uAlloc);
-        m_uImage = VK_NULL_HANDLE;
-        m_uAlloc = VK_NULL_HANDLE;
-    }
-    if (m_vView != VK_NULL_HANDLE) {
-        vkDestroyImageView(m_renderer->m_device_p, m_vView, nullptr);
-        m_vView = VK_NULL_HANDLE;
-    }
-    if (m_vImage != VK_NULL_HANDLE) {
-        vmaDestroyImage(m_renderer->m_allocator_p, m_vImage, m_vAlloc);
-        m_vImage = VK_NULL_HANDLE;
-        m_vAlloc = VK_NULL_HANDLE;
+    if (m_yuvImage != VK_NULL_HANDLE) {
+        vmaDestroyImage(m_renderer->m_allocator_p, m_yuvImage, m_yuvAlloc);
+        m_yuvImage = VK_NULL_HANDLE;
+        m_yuvAlloc = VK_NULL_HANDLE;
     }
     if (m_descPool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(m_renderer->m_device_p, m_descPool, nullptr);
@@ -304,16 +248,10 @@ void GpuYuvConverter::cleanup() {
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         std::vector<uint16_t>& outY,
-                                         std::vector<uint16_t>& outU,
-                                         std::vector<uint16_t>& outV) {
+                                         std::vector<uint16_t>& outPacked) {
     LogProRes("[GPU] convertAndReadback invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
-    VkDeviceSize ySize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
-    VkDeviceSize uvRow = static_cast<VkDeviceSize>((width + 1) / 2) * sizeof(uint16_t);
-    VkDeviceSize uSize = uvRow * height;
-    VkDeviceSize vSize = uSize;
-    VkDeviceSize outSize = ySize + uSize + vSize;
+    VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
 
     VkBuffer stagingBuf = VK_NULL_HANDLE;
     VmaAllocation stagingAlloc = VK_NULL_HANDLE;
@@ -405,17 +343,11 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     inputInfo.imageView = m_rawView;
     inputInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkDescriptorImageInfo outYInfo{};
-    outYInfo.imageView = m_yView;
-    outYInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorImageInfo outUInfo{};
-    outUInfo.imageView = m_uView;
-    outUInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-    VkDescriptorImageInfo outVInfo{};
-    outVInfo.imageView = m_vView;
-    outVInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    VkDescriptorImageInfo outInfo{};
+    outInfo.imageView = m_yuvView;
+    outInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-    VkWriteDescriptorSet writes[4]{};
+    VkWriteDescriptorSet writes[2]{};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[0].dstSet = m_descSet;
     writes[0].dstBinding = 0;
@@ -427,20 +359,8 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     writes[1].dstBinding = 1;
     writes[1].descriptorCount = 1;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    writes[1].pImageInfo = &outYInfo;
-    writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[2].dstSet = m_descSet;
-    writes[2].dstBinding = 2;
-    writes[2].descriptorCount = 1;
-    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    writes[2].pImageInfo = &outUInfo;
-    writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[3].dstSet = m_descSet;
-    writes[3].dstBinding = 3;
-    writes[3].descriptorCount = 1;
-    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    writes[3].pImageInfo = &outVInfo;
-    vkUpdateDescriptorSets(m_renderer->m_device_p, 4, writes, 0, nullptr);
+    writes[1].pImageInfo = &outInfo;
+    vkUpdateDescriptorSets(m_renderer->m_device_p, 2, writes, 0, nullptr);
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
@@ -451,78 +371,66 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
 
-    VkImageMemoryBarrier bars[3]{};
-    for(int i=0;i<3;++i){
-        bars[i].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        bars[i].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        bars[i].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        bars[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bars[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bars[i].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        bars[i].subresourceRange.baseMipLevel = 0;
-        bars[i].subresourceRange.levelCount = 1;
-        bars[i].subresourceRange.baseArrayLayer = 0;
-        bars[i].subresourceRange.layerCount = 1;
-        bars[i].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-        bars[i].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    }
-    bars[0].image = m_yImage;
-    bars[1].image = m_uImage;
-    bars[2].image = m_vImage;
+    VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+    bar3.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    bar3.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    bar3.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bar3.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bar3.image = m_yuvImage;
+    bar3.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    bar3.subresourceRange.baseMipLevel = 0;
+    bar3.subresourceRange.levelCount = 1;
+    bar3.subresourceRange.baseArrayLayer = 0;
+    bar3.subresourceRange.layerCount = 1;
+    bar3.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    bar3.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     vkCmdPipelineBarrier(cmd,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         0,
         0, nullptr,
         0, nullptr,
-        3, bars);
+        1, &bar3);
 
-    VkBufferImageCopy copyY{};
-    copyY.bufferOffset = 0;
-    copyY.bufferRowLength = 0;
-    copyY.bufferImageHeight = 0;
-    copyY.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copyY.imageSubresource.mipLevel = 0;
-    copyY.imageSubresource.baseArrayLayer = 0;
-    copyY.imageSubresource.layerCount = 1;
-    copyY.imageOffset = {0,0,0};
-    copyY.imageExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
-    VkBufferImageCopy copyU = copyY;
-    copyU.bufferOffset = ySize;
-    copyU.imageExtent.width = static_cast<uint32_t>((width + 1) / 2);
-    VkBufferImageCopy copyV = copyU;
-    copyV.bufferOffset = ySize + uSize;
+    VkBufferImageCopy rbRegion{};
+    rbRegion.bufferOffset = 0;
+    rbRegion.bufferRowLength = 0;
+    rbRegion.bufferImageHeight = 0;
+    rbRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    rbRegion.imageSubresource.mipLevel = 0;
+    rbRegion.imageSubresource.baseArrayLayer = 0;
+    rbRegion.imageSubresource.layerCount = 1;
+    rbRegion.imageOffset = {0,0,0};
+    rbRegion.imageExtent = { static_cast<uint32_t>((width + 1) / 2), static_cast<uint32_t>(height), 1 };
+    vkCmdCopyImageToBuffer(cmd, m_yuvImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           readbackBuf, 1, &rbRegion);
 
-    vkCmdCopyImageToBuffer(cmd, m_yImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           readbackBuf, 1, &copyY);
-    vkCmdCopyImageToBuffer(cmd, m_uImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           readbackBuf, 1, &copyU);
-    vkCmdCopyImageToBuffer(cmd, m_vImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           readbackBuf, 1, &copyV);
-
-    for(int i=0;i<3;++i){
-        bars[i].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        bars[i].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        bars[i].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        bars[i].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    }
+    VkImageMemoryBarrier bar4{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+    bar4.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    bar4.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    bar4.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bar4.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bar4.image = m_yuvImage;
+    bar4.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    bar4.subresourceRange.baseMipLevel = 0;
+    bar4.subresourceRange.levelCount = 1;
+    bar4.subresourceRange.baseArrayLayer = 0;
+    bar4.subresourceRange.layerCount = 1;
+    bar4.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    bar4.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
     vkCmdPipelineBarrier(cmd,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
         0,
         0, nullptr,
         0, nullptr,
-        3, bars);
+        1, &bar4);
     VulkanHelpers::endSingleTimeCommands(m_renderer->m_device_p, m_cmdPool,
         m_renderer->m_graphicsQueue_p, cmd);
 
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
-    outY.resize(static_cast<size_t>(ySize / sizeof(uint16_t)));
-    outU.resize(static_cast<size_t>(uSize / sizeof(uint16_t)));
-    outV.resize(static_cast<size_t>(vSize / sizeof(uint16_t)));
-    memcpy(outY.data(), rbAllocInfo.pMappedData, ySize);
-    memcpy(outU.data(), static_cast<uint8_t*>(rbAllocInfo.pMappedData) + ySize, uSize);
-    memcpy(outV.data(), static_cast<uint8_t*>(rbAllocInfo.pMappedData) + ySize + uSize, vSize);
+    outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
+    memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
     LogProRes("[GPU] readback complete");
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);

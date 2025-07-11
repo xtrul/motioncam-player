@@ -1488,9 +1488,7 @@ void App::exportCurrentClipToProRes() {
         AVPacket pkt{};
 
         std::vector<uint8_t> rgbBuf;
-        std::vector<uint16_t> gpuY;
-        std::vector<uint16_t> gpuU;
-        std::vector<uint16_t> gpuV;
+        std::vector<uint16_t> gpuBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
@@ -1503,21 +1501,32 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-
-                converter.convertAndReadback(asU16(raw), width, height,
-                                            gpuY, gpuU, gpuV);
+			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
 
+                /*  ✅  FINAL, CORRECT GPU->planar unpack  */
                 for (int y = 0; y < height; ++y) {
-                    memcpy(frame->data[0] + y * frame->linesize[0],
-                           &gpuY[y * width], width * sizeof(uint16_t));
-                    memcpy(frame->data[1] + y * frame->linesize[1],
-                           &gpuU[y * ((width + 1) / 2)], ((width + 1) / 2) * sizeof(uint16_t));
-                    memcpy(frame->data[2] + y * frame->linesize[2],
-                           &gpuV[y * ((width + 1) / 2)], ((width + 1) / 2) * sizeof(uint16_t));
+                    auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
+                    auto* uRow = reinterpret_cast<uint16_t*>(frame->data[1] + y * frame->linesize[1]);
+                    auto* vRow = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
+
+                    size_t srcBase = static_cast<size_t>(y) * (width / 2) * 4;   /* 4×u16 per 2-pixel group */
+                    for (int x = 0; x < width; x += 2) {
+                        size_t src = srcBase + (x >> 1) * 4;
+                        uint16_t y0 = gpuBuf[src + 0];   /* Y0 */
+                        uint16_t u  = gpuBuf[src + 1];   /* U  */
+                        uint16_t y1 = gpuBuf[src + 2];   /* Y1 */
+                        uint16_t v  = gpuBuf[src + 3];   /* V  */
+
+                        yRow[x    ] = y0 << 6;           /* 10-bit → 16-bit */
+                        yRow[x + 1] = y1 << 6;
+                        uRow[x >> 1] = u << 6;
+                        vRow[x >> 1] = v << 6;
+                    }
                 }
+
                 /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
                 if (idx == 0) {
                     const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
@@ -1528,27 +1537,7 @@ void App::exportCurrentClipToProRes() {
                         << (yDbg[0] >> 6) << "," << (yDbg[1] >> 6) << ","
                         << (uDbg[0] >> 6) << "," << (vDbg[0] >> 6);
                     LogProRes(dbg.str());
-
-                    std::vector<uint8_t> refRgb;
-                    convertRawToRGB24(asU16(raw), cpParams, refRgb, threads);
-                    AVFrame* ref = av_frame_alloc();
-                    ref->format = AV_PIX_FMT_YUV422P10LE;
-                    ref->width = width;
-                    ref->height = height;
-                    av_frame_get_buffer(ref, 32);
-                    const uint8_t* ssrc[1] = { refRgb.data() };
-                    int sstride[1] = { width * 3 };
-                    sws_scale(sws, ssrc, sstride, 0, height, ref->data, ref->linesize);
-                    const uint16_t* yCpu = reinterpret_cast<const uint16_t*>(ref->data[0]);
-                    const uint16_t* uCpu = reinterpret_cast<const uint16_t*>(ref->data[1]);
-                    const uint16_t* vCpu = reinterpret_cast<const uint16_t*>(ref->data[2]);
-                    std::ostringstream dbg2;
-                    dbg2 << "[CPU] AVFrame first: "
-                         << (yCpu[0] >> 6) << "," << (yCpu[1] >> 6) << ","
-                         << (uCpu[0] >> 6) << "," << (vCpu[0] >> 6);
-                    LogProRes(dbg2.str());
-                    av_frame_free(&ref);
-
+                
                 }
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);

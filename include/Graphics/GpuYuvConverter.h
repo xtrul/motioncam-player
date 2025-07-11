@@ -17,9 +17,7 @@ public:
     void cleanup();
 
     bool convertAndReadback(const uint16_t* raw, int width, int height,
-                            std::vector<uint16_t>& outY,
-                            std::vector<uint16_t>& outU,
-                            std::vector<uint16_t>& outV);
+                            std::vector<uint16_t>& outPacked);
 private:
     Renderer_VK* m_renderer;
 
@@ -29,15 +27,9 @@ private:
     VkDescriptorPool m_descPool{VK_NULL_HANDLE};
     VkDescriptorSet m_descSet{VK_NULL_HANDLE};
 
-    VkImage m_yImage{VK_NULL_HANDLE};
-    VmaAllocation m_yAlloc{VK_NULL_HANDLE};
-    VkImageView m_yView{VK_NULL_HANDLE};
-    VkImage m_uImage{VK_NULL_HANDLE};
-    VmaAllocation m_uAlloc{VK_NULL_HANDLE};
-    VkImageView m_uView{VK_NULL_HANDLE};
-    VkImage m_vImage{VK_NULL_HANDLE};
-    VmaAllocation m_vAlloc{VK_NULL_HANDLE};
-    VkImageView m_vView{VK_NULL_HANDLE};
+    VkImage m_yuvImage{VK_NULL_HANDLE};
+    VmaAllocation m_yuvAlloc{VK_NULL_HANDLE};
+    VkImageView m_yuvView{VK_NULL_HANDLE};
 
     VkCommandPool m_cmdPool{VK_NULL_HANDLE};
 
