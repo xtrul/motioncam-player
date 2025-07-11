@@ -148,7 +148,6 @@ set(APP_SOURCES
   src/Graphics/VulkanHelpers.cpp
   src/Graphics/ImageResource.cpp
   src/Graphics/GpuYuvConverter.cpp
-  src/Graphics/ProResGpuCopy.cpp
   src/Graphics/Pipeline.cpp
   src/Graphics/Descriptor.cpp
 
