@@ -74,7 +74,3 @@ runtime DLLs will be copied automatically.
 - The log prints `MODE = GPU (Vulkan hw_frames)` when this path is used.
 - If initialization of Vulkan hardware frames fails it falls back to the CPU path automatically.
 - When GPU processing is active additional `[GPU]` log lines confirm the compute pipeline ran.
-
-### Raw plane dump (debug)
-- Configure with `cmake -DENABLE_RAW_PLANE_DUMP=ON` or add `-DENABLE_RAW_PLANE_DUMP=1` (`/D ENABLE_RAW_PLANE_DUMP=1` on MSVC) to write each frame's Y, U and V planes to `test_422p10.yuv` during ProRes export.
-- Play the file via `ffplay -pixel_format yuv422p10le -video_size WIDTHxHEIGHT test_422p10.yuv` to verify the output.
