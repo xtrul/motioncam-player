@@ -5,7 +5,6 @@
 #include <vector>
 #include <cstdint>
 #include "Utils/vma_usage.h"
-#include "Utils/ColorPipelineCPU.h"
 
 class Renderer_VK;
 
@@ -18,7 +17,6 @@ public:
     void cleanup();
 
     bool convertAndReadback(const uint16_t* raw, int width, int height,
-                            const CPUColorParams& params,
                             std::vector<uint16_t>& outPacked);
 private:
     Renderer_VK* m_renderer;
