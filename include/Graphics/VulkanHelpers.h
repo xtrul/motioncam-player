@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
+#include <mutex>
 #include <iostream> // For std::cerr in VK_CHECK_RENDERER
 #include "Utils/DebugLog.h" // For LogToFile in VK_CHECK_RENDERER
 
@@ -33,6 +34,8 @@ namespace VulkanHelpers {
     // For single-time commands, they need access to device, command pool, and queue.
     // These could be passed as parameters or the functions could be members of a helper class
     // that holds these Vulkan objects. For now, make them free functions requiring device context.
+    extern std::mutex g_queueMutex;
+
     VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
     void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkCommandBuffer commandBuffer);
 
