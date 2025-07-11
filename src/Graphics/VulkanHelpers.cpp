@@ -5,6 +5,9 @@
 
 namespace VulkanHelpers {
 
+    // Global mutex ensuring queue submissions are serialised across threads
+    std::mutex gQueueMutex;
+
     std::vector<char> readFile(const std::string& filename) {
         std::string fullPath = filename;
         LogToFile(std::string("[VulkanHelpers::readFile] Attempting to read shader file: ") + fullPath);
@@ -64,8 +67,11 @@ namespace VulkanHelpers {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
-        VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
+        {
+            std::lock_guard<std::mutex> lock(gQueueMutex);
+            VK_CHECK_RENDERER(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+            VK_CHECK_RENDERER(vkQueueWaitIdle(queue));
+        }
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
