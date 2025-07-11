@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cassert>
 #include <sstream>
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
@@ -37,8 +38,15 @@
 
 namespace fs = std::filesystem;
 
+#ifndef ENABLE_RAW_PLANE_DUMP
+#define ENABLE_RAW_PLANE_DUMP 0
+#endif
+
 #ifdef ENABLE_PRORES_EXPORT
 static bool g_useGpuProRes = false;
+#if ENABLE_RAW_PLANE_DUMP
+static FILE* gRawDump = nullptr;
+#endif
 #endif
 namespace {
     bool writeDngInternal(
@@ -1416,6 +1424,12 @@ void App::exportCurrentClipToProRes() {
             m_proResStatus.active.store(false);
             return;
         }
+#if ENABLE_RAW_PLANE_DUMP
+        if (!gRawDump) {
+            gRawDump = fopen("test_422p10.yuv", "wb");
+            assert(gRawDump && "Cannot open raw dump file");
+        }
+#endif
 
         SwsContext* sws = sws_getContext(width, height, AV_PIX_FMT_RGB24,
                                          width, height, AV_PIX_FMT_YUV422P10LE,
@@ -1530,6 +1544,15 @@ void App::exportCurrentClipToProRes() {
                 t1 = std::chrono::steady_clock::now();
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             }
+
+#if ENABLE_RAW_PLANE_DUMP
+            fwrite(frame->data[0], 1,
+                   frame->linesize[0] * frame->height, gRawDump);
+            fwrite(frame->data[1], 1,
+                   frame->linesize[1] * frame->height, gRawDump);
+            fwrite(frame->data[2], 1,
+                   frame->linesize[2] * frame->height, gRawDump);
+#endif
 
             frame->pts = pts;
             pts++;
@@ -1662,6 +1685,13 @@ void App::exportCurrentClipToProRes() {
 
         auto trailerStart = std::chrono::steady_clock::now();
         av_write_trailer(fmt);
+#if ENABLE_RAW_PLANE_DUMP
+        if (gRawDump) {
+            fflush(gRawDump);
+            fclose(gRawDump);
+            gRawDump = nullptr;
+        }
+#endif
         auto trailerMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - trailerStart).count();
         LogProRes("[ProResExport] Trailer written in " + std::to_string(trailerMs) + "ms");
