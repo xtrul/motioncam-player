@@ -6,7 +6,6 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
-#include <sstream>
 
 extern std::string g_AppBasePath;
 
@@ -16,8 +15,6 @@ GpuYuvConverter::GpuYuvConverter(Renderer_VK* renderer)
 GpuYuvConverter::~GpuYuvConverter() { cleanup(); }
 
 bool GpuYuvConverter::init(int width, int height) {
-    m_width = width;
-    m_height = height;
     namespace fs = std::filesystem;
     fs::path shaderPath = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_yuv422.comp.spv";
     auto code = VulkanHelpers::readFile(shaderPath.string());
@@ -408,22 +405,6 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vkCmdCopyImageToBuffer(cmd, m_yuvImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                            readbackBuf, 1, &rbRegion);
 
-    VkBufferMemoryBarrier bufferBarrier{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
-    bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    bufferBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
-    bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarrier.buffer = readbackBuf;
-    bufferBarrier.offset = 0;
-    bufferBarrier.size = outSize;
-    vkCmdPipelineBarrier(cmd,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_HOST_BIT,
-        0,
-        0, nullptr,
-        1, &bufferBarrier,
-        0, nullptr);
-
     VkImageMemoryBarrier bar4{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     bar4.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     bar4.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -454,53 +435,5 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
     vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
-    return true;
-}
-
-bool GpuYuvConverter::copyFromGpuToFrame(AVFrame* frame) {
-    if (!frame) return false;
-
-    VkImageSubresource sub{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 0 };
-    VkSubresourceLayout layout{};
-    vkGetImageSubresourceLayout(m_renderer->m_device_p, m_yuvImage, &sub, &layout);
-
-    void* dataPtr = nullptr;
-    VK_CHECK_RENDERER(vmaMapMemory(m_renderer->m_allocator_p, m_yuvAlloc, &dataPtr));
-    uint8_t* base = static_cast<uint8_t*>(dataPtr) + layout.offset;
-
-    for (int y = 0; y < m_height; ++y) {
-        const uint8_t* srcRow = base + y * layout.rowPitch;
-        auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
-        auto* uRow = reinterpret_cast<uint16_t*>(frame->data[1] + y * frame->linesize[1]);
-        auto* vRow = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
-        for (int x = 0; x < m_width; x += 2) {
-            size_t offset = static_cast<size_t>(x) * 5 / 2;
-            uint32_t m1 = *reinterpret_cast<const uint32_t*>(srcRow + offset);
-            uint8_t  m2 = *(srcRow + offset + 4);
-            uint16_t y0 = m1 & 0x3FFu;
-            uint16_t u  = (m1 >> 10) & 0x3FFu;
-            uint16_t y1 = (m1 >> 20) | ((m2 & 0x0Fu) << 12);
-            uint16_t v  = (m2 >> 4) & 0x3FFu;
-
-            yRow[x]     = y0;
-            yRow[x + 1] = y1;
-            uRow[x >> 1] = u;
-            vRow[x >> 1] = v;
-        }
-    }
-
-    static bool logged = false;
-    if (!logged) {
-        logged = true;
-        const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
-        const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
-        const uint16_t* vDbg = reinterpret_cast<const uint16_t*>(frame->data[2]);
-        std::ostringstream oss;
-        oss << "First macropixel Y=" << yDbg[0] << " U=" << uDbg[0]
-            << " Y1=" << yDbg[1] << " V=" << vDbg[0];
-        LogProRes(oss.str());
-    }
-
-    vmaUnmapMemory(m_renderer->m_allocator_p, m_yuvAlloc);
     return true;
 }

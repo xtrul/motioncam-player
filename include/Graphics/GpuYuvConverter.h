@@ -5,7 +5,6 @@
 #include <vector>
 #include <cstdint>
 #include "Utils/vma_usage.h"
-#include "ffmpeg_headers.hpp"
 
 class Renderer_VK;
 
@@ -19,14 +18,8 @@ public:
 
     bool convertAndReadback(const uint16_t* raw, int width, int height,
                             std::vector<uint16_t>& outPacked);
-
-    // Map the GPU YUV image directly into an AVFrame using proper row pitch
-    bool copyFromGpuToFrame(AVFrame* frame);
 private:
     Renderer_VK* m_renderer;
-
-    int m_width = 0;
-    int m_height = 0;
 
     VkPipeline m_pipeline{VK_NULL_HANDLE};
     VkPipelineLayout m_pipelineLayout{VK_NULL_HANDLE};
