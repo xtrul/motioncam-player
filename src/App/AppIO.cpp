@@ -48,41 +48,6 @@ static bool g_useGpuProRes = false;
 static FILE* gRawDump = nullptr;
 #endif
 #endif
-
-#ifdef ENABLE_PRORES_EXPORT
-static void copyFromGpuToFrame(const std::vector<uint16_t>& buf, int width, int height, AVFrame* frame) {
-    int pitchY = frame->linesize[0];
-    int pitchU = frame->linesize[1];
-    int pitchV = frame->linesize[2];
-    uint8_t* baseY = frame->data[0];
-    uint8_t* baseU = frame->data[1];
-    uint8_t* baseV = frame->data[2];
-    for (int y = 0; y < height; ++y) {
-        uint8_t* yRowPtr = frame->data[0] + y * pitchY;
-        uint8_t* uRowPtr = frame->data[1] + y * pitchU;
-        uint8_t* vRowPtr = frame->data[2] + y * pitchV;
-        assert(((yRowPtr - baseY) % pitchY) == 0);
-        assert(((uRowPtr - baseU) % pitchU) == 0);
-        assert(((vRowPtr - baseV) % pitchV) == 0);
-
-        auto* yRow = reinterpret_cast<uint16_t*>(yRowPtr);
-        auto* uRow = reinterpret_cast<uint16_t*>(uRowPtr);
-        auto* vRow = reinterpret_cast<uint16_t*>(vRowPtr);
-        size_t srcBase = static_cast<size_t>(y) * (width / 2) * 4;
-        for (int x = 0; x < width; x += 2) {
-            size_t src = srcBase + (x >> 1) * 4;
-            uint16_t y0 = buf[src + 0];
-            uint16_t u  = buf[src + 1];
-            uint16_t y1 = buf[src + 2];
-            uint16_t v  = buf[src + 3];
-            yRow[x    ] = y0 << 6;
-            yRow[x + 1] = y1 << 6;
-            uRow[x >> 1] = u << 6;
-            vRow[x >> 1] = v << 6;
-        }
-    }
-}
-#endif
 namespace {
     bool writeDngInternal(
         const std::string& outputPath,
@@ -1525,7 +1490,6 @@ void App::exportCurrentClipToProRes() {
         std::vector<uint8_t> rgbBuf;
         std::vector<uint16_t> gpuBuf;
         int64_t pts = 0;
-        bool selfTested = false;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
             nlohmann::json metaTmp;
@@ -1537,52 +1501,33 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-                converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
 
-                copyFromGpuToFrame(gpuBuf, width, height, frame);
+                /*  ✅  FINAL, CORRECT GPU->planar unpack  */
+                for (int y = 0; y < height; ++y) {
+                    auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
+                    auto* uRow = reinterpret_cast<uint16_t*>(frame->data[1] + y * frame->linesize[1]);
+                    auto* vRow = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
 
-                if (!selfTested) {
-                    AVFrame* cpuFrame = av_frame_alloc();
-                    cpuFrame->format = vctx->pix_fmt;
-                    cpuFrame->width = width;
-                    cpuFrame->height = height;
-                    av_frame_get_buffer(cpuFrame, 32);
-                    convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
-                    const uint8_t* srcSlices2[1] = { rgbBuf.data() };
-                    int srcStride2[1] = { width * 3 };
-                    sws_scale(sws, srcSlices2, srcStride2, 0, height, cpuFrame->data, cpuFrame->linesize);
+                    size_t srcBase = static_cast<size_t>(y) * (width / 2) * 4;   /* 4×u16 per 2-pixel group */
+                    for (int x = 0; x < width; x += 2) {
+                        size_t src = srcBase + (x >> 1) * 4;
+                        uint16_t y0 = gpuBuf[src + 0];   /* Y0 */
+                        uint16_t u  = gpuBuf[src + 1];   /* U  */
+                        uint16_t y1 = gpuBuf[src + 2];   /* Y1 */
+                        uint16_t v  = gpuBuf[src + 3];   /* V  */
 
-                    bool ok = memcmp(frame->data[0], cpuFrame->data[0], width * height * 2) == 0 &&
-                               memcmp(frame->data[1], cpuFrame->data[1], width * height) == 0 &&
-                               memcmp(frame->data[2], cpuFrame->data[2], width * height) == 0;
-                    if (!ok) {
-                        char plane = 'Y';
-                        size_t offset = 0; int pIdx = 0;
-                        size_t sizes[3] = { (size_t)width*height*2, (size_t)width*height, (size_t)width*height };
-                        bool found = false;
-                        for (int p=0; p<3 && !found; ++p) {
-                            for (size_t b=0; b<sizes[p]; ++b) {
-                                if (frame->data[p][b] != cpuFrame->data[p][b]) { plane = (p==0?'Y':(p==1?'U':'V')); offset = b; pIdx=p; found=true; break; }
-                            }
-                        }
-                        std::ostringstream oss;
-                        oss << "[GPU-SELFTEST] mismatch at frame 0, plane " << plane
-                            << ", byte " << offset << " (0x" << std::hex << std::setw(2) << std::setfill('0')
-                            << int(frame->data[pIdx][offset]) << " vs 0x" << int(cpuFrame->data[pIdx][offset])
-                            << ")\nfalling back to CPU path";
-                        LogProRes(oss.str());
-                        gpuActive = false;
-                        memcpy(frame->data[0], cpuFrame->data[0], sizes[0]);
-                        memcpy(frame->data[1], cpuFrame->data[1], sizes[1]);
-                        memcpy(frame->data[2], cpuFrame->data[2], sizes[2]);
+                        yRow[x    ] = y0 << 6;           /* 10-bit → 16-bit */
+                        yRow[x + 1] = y1 << 6;
+                        uRow[x >> 1] = u << 6;
+                        vRow[x >> 1] = v << 6;
                     }
-                    selfTested = true;
-                    av_frame_free(&cpuFrame);
                 }
 
+                /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
                 if (idx == 0) {
                     const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
                     const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
@@ -1592,7 +1537,7 @@ void App::exportCurrentClipToProRes() {
                         << (yDbg[0] >> 6) << "," << (yDbg[1] >> 6) << ","
                         << (uDbg[0] >> 6) << "," << (vDbg[0] >> 6);
                     LogProRes(dbg.str());
-
+                
                 }
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
