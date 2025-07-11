@@ -6,6 +6,7 @@
 #include "Graphics/Renderer_VK.h"
 #include "Utils/DebugLog.h"
 #include "Gui/GuiOverlay.h"
+#include "Graphics/VulkanHelpers.h"
 
 #include <chrono>
 #include <thread>
@@ -472,7 +473,10 @@ void App::drawFrame() {
     submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[m_currentFrame];
 
     timePoint_A = steady_clock::now();
-    VK_APP_CHECK(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame]));
+    {
+        std::lock_guard<std::mutex> lock(VulkanHelpers::g_queueMutex);
+        VK_APP_CHECK(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFences[m_currentFrame]));
+    }
 
     VkPresentInfoKHR presentInfo{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
     presentInfo.waitSemaphoreCount = 1;
