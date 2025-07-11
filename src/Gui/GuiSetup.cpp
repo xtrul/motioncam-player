@@ -5,10 +5,9 @@
 #define NOMINMAX
 #endif
 
-#include "Gui/GuiOverlay.h"
+#include "Gui/GuiOverlay.h" 
 #include "Gui/GuiStyles.h"
 #include "App/App.h" // For App instance type and Vulkan members
-#include "Graphics/VulkanHelpers.h"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -134,11 +133,8 @@ namespace GuiOverlay {
         end_info.pCommandBuffers = &command_buffer;
         vkEndCommandBuffer(command_buffer);
 
-        {
-            std::lock_guard<std::mutex> lock(VulkanHelpers::g_queueMutex);
-            vkQueueSubmit(appInstance->m_graphicsQueue, 1, &end_info, VK_NULL_HANDLE);
-            vkQueueWaitIdle(appInstance->m_graphicsQueue); // Ensure fonts are uploaded
-        }
+        vkQueueSubmit(appInstance->m_graphicsQueue, 1, &end_info, VK_NULL_HANDLE);
+        vkQueueWaitIdle(appInstance->m_graphicsQueue); // Ensure fonts are uploaded
 
         ImGui_ImplVulkan_DestroyFontsTexture(); // Device Staging Bufs are no longer needed
     }
