@@ -56,7 +56,7 @@ bool GpuYuvConverter::init(int width, int height) {
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = sizeof(int) * 2;
+    pcRange.size = sizeof(int) * 2 + sizeof(float) * 2;
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -248,7 +248,9 @@ void GpuYuvConverter::cleanup() {
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         std::vector<uint16_t>& outPacked) {
+                                         float gainR, float gainB,
+                                         std::vector<uint16_t>& outPacked,
+                                         size_t& rowPitch) {
     LogProRes("[GPU] convertAndReadback invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
@@ -365,7 +367,7 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
 
-    struct Push { int w; int h; } push{ width, height };
+    struct Push { int w; int h; float gainR; float gainB; } push{ width, height, gainR, gainB };
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
@@ -431,6 +433,7 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
     outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
     memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
+    rowPitch = static_cast<size_t>(width) * 4; // bytes per row in packed buffer
     LogProRes("[GPU] readback complete");
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
