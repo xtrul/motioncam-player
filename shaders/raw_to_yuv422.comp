@@ -3,8 +3,7 @@
 layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(binding = 0) uniform usampler2D rawImage;
-// Packed 4x10-bit macropixels -> two dwords
-layout(binding = 1, rg32ui) writeonly uniform uimage2D yuvImage;
+layout(binding = 1, rgba16ui) writeonly uniform uimage2D yuvImage;
 
 layout(push_constant) uniform PushConsts {
     int width;
@@ -25,9 +24,7 @@ void main() {
     int x1 = x0 + 1;
     uint y0 = readU16(x0, y) >> 6;
     uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
-    uint u  = 512u;
-    uint v  = 512u;
-    uint p0 = (y0 & 0x3FFu) | ((u & 0x3FFu) << 10) | ((y1 & 0x3FFu) << 20);
-    uint p1 = (v & 0x3FFu);
-    imageStore(yuvImage, gid, uvec2(p0, p1));
+    uint u = 512u;
+    uint v = 512u;
+    imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
 }

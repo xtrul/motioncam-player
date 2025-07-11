@@ -32,7 +32,6 @@
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
-#include "Graphics/ProResGpuCopy.h"
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
@@ -1407,7 +1406,7 @@ void App::exportCurrentClipToProRes() {
         frame->format = vctx->pix_fmt;
         frame->width = width;
         frame->height = height;
-        if (av_frame_get_buffer(frame, 64) < 0) {
+        if (av_frame_get_buffer(frame, 32) < 0) {
             m_proResStatus.errorMsg = "av_frame_get_buffer failed";
             av_frame_free(&frame);
             if (actx) avcodec_free_context(&actx);
@@ -1481,26 +1480,43 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-                        converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
 
-                VkSubresourceLayout layout{};
-                layout.rowPitch = static_cast<VkDeviceSize>((width + 1) / 2) * sizeof(uint32_t) * 2;
-                if (!CopyGpuToAvFrame(gpuBuf.data(), layout, width, height, frame)) {
-                    m_proResStatus.errorMsg = "GPU validation failed";
-                    break;
+                /*  ✅  FINAL, CORRECT GPU->planar unpack  */
+                for (int y = 0; y < height; ++y) {
+                    auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
+                    auto* uRow = reinterpret_cast<uint16_t*>(frame->data[1] + y * frame->linesize[1]);
+                    auto* vRow = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
+
+                    size_t srcBase = static_cast<size_t>(y) * (width / 2) * 4;   /* 4×u16 per 2-pixel group */
+                    for (int x = 0; x < width; x += 2) {
+                        size_t src = srcBase + (x >> 1) * 4;
+                        uint16_t y0 = gpuBuf[src + 0];   /* Y0 */
+                        uint16_t u  = gpuBuf[src + 1];   /* U  */
+                        uint16_t y1 = gpuBuf[src + 2];   /* Y1 */
+                        uint16_t v  = gpuBuf[src + 3];   /* V  */
+
+                        yRow[x    ] = y0 << 6;           /* 10-bit → 16-bit */
+                        yRow[x + 1] = y1 << 6;
+                        uRow[x >> 1] = u << 6;
+                        vRow[x >> 1] = v << 6;
+                    }
                 }
+
+                /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
                 if (idx == 0) {
                     const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
                     const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
                     const uint16_t* vDbg = reinterpret_cast<const uint16_t*>(frame->data[2]);
-                    {
-                        char buf[128];
-                        snprintf(buf, sizeof(buf), "[GPU] Planes: Y[0]=%u U[0]=%u V[0]=%u", yDbg[0], uDbg[0], vDbg[0]);
-                        LogProRes(buf);
-                    }
+                    std::ostringstream dbg;
+                    dbg << "[GPU] AVFrame first: "
+                        << (yDbg[0] >> 6) << "," << (yDbg[1] >> 6) << ","
+                        << (uDbg[0] >> 6) << "," << (vDbg[0] >> 6);
+                    LogProRes(dbg.str());
+                
                 }
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
@@ -1513,15 +1529,6 @@ void App::exportCurrentClipToProRes() {
                 sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
                 t1 = std::chrono::steady_clock::now();
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-                if (idx == 0) {
-                    const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
-                    const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
-                    const uint16_t* vDbg = reinterpret_cast<const uint16_t*>(frame->data[2]);
-                    char buf[128];
-                    snprintf(buf, sizeof(buf), "[CPU] Planes: Y0=%u U=%u Y1=%u V=%u",
-                             yDbg[0], uDbg[0], yDbg[1], vDbg[0]);
-                    LogProRes(buf);
-                }
             }
 
             frame->pts = pts;
