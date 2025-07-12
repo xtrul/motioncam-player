@@ -461,13 +461,10 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         memcpy(dstU, srcU, width);
         memcpy(dstV, srcV, width);
         if(y==0){
-#ifdef DEBUG_YUV_VALIDATE
             uint16_t y0 = *reinterpret_cast<const uint16_t*>(dstY);
-            uint16_t y1 = *reinterpret_cast<const uint16_t*>(dstY + 2);
             uint16_t u0 = *reinterpret_cast<const uint16_t*>(dstU);
             uint16_t v0 = *reinterpret_cast<const uint16_t*>(dstV);
-            std::ostringstream oss; oss << "[GPU-CHECK] (0,0) Y0=" << y0 << " U=" << u0 << " Y1=" << y1 << " V=" << v0; LogProRes(oss.str());
-#endif
+            std::ostringstream oss; oss << "[GPU-CHECK] first macropixel  Y=" << y0 << "  U=" << u0 << "  V=" << v0; LogProRes(oss.str());
         }
     }
 
