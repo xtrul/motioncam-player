@@ -8,196 +8,130 @@ layout(binding = 2, r16ui) writeonly uniform uimage2D uPlane;
 layout(binding = 3, r16ui) writeonly uniform uimage2D vPlane;
 
 layout(push_constant) uniform ColorParams {
-  int black;
-  int white;
-  vec3 asShotNeutral;
-  mat3 colorMatrix;
-  int cfaType;
-}
-pc;
+    int black;
+    int white;
+    vec3 asShotNeutral;
+    mat3 colorMatrix;
+    int cfaType;
+} pc;
 
-float invRange() { return 1.0 / max(float(pc.white - pc.black), 1.0); }
+float invRange() {
+    return 1.0 / max(float(pc.white - pc.black), 1.0);
+}
 
 uint readU16(int x, int y) {
-  ivec2 sz = textureSize(rawImage, 0);
-  x = clamp(x, 0, sz.x - 1);
-  y = clamp(y, 0, sz.y - 1);
-  return texelFetch(rawImage, ivec2(x, y), 0).r;
+    ivec2 sz = textureSize(rawImage, 0);
+    x = clamp(x, 0, sz.x - 1);
+    y = clamp(y, 0, sz.y - 1);
+    return texelFetch(rawImage, ivec2(x, y), 0).r;
 }
 
 float linFromRaw(uint v) {
-  float t = (float(v) - float(pc.black)) * invRange();
-  return clamp(t, 0.0, 1.0);
+    float t = (float(v) - float(pc.black)) * invRange();
+    return clamp(t, 0.0, 1.0);
 }
 
-float lin(int x, int y) { return linFromRaw(readU16(x, y)); }
-float interpG(int x, int y) {
-  return 0.25 * (lin(x + 1, y) + lin(x - 1, y) + lin(x, y + 1) + lin(x, y - 1));
-}
-float interpH(int x, int y) { return 0.5 * (lin(x + 1, y) + lin(x - 1, y)); }
-float interpV(int x, int y) { return 0.5 * (lin(x, y + 1) + lin(x, y - 1)); }
-float interpD(int x, int y) {
-  return 0.25 * (lin(x + 1, y + 1) + lin(x - 1, y + 1) + lin(x + 1, y - 1) +
-                 lin(x - 1, y - 1));
-}
+float lin(int x,int y){ return linFromRaw(readU16(x,y)); }
+float interpG(int x,int y){ return 0.25*(lin(x+1,y)+lin(x-1,y)+lin(x,y+1)+lin(x,y-1)); }
+float interpH(int x,int y){ return 0.5*(lin(x+1,y)+lin(x-1,y)); }
+float interpV(int x,int y){ return 0.5*(lin(x,y+1)+lin(x,y-1)); }
+float interpD(int x,int y){ return 0.25*(lin(x+1,y+1)+lin(x-1,y+1)+lin(x+1,y-1)+lin(x-1,y-1)); }
 
-vec3 demosaic(int x, int y) {
-  bool ye = (y & 1) == 0;
-  bool xe = (x & 1) == 0;
-  float r = 0.0, g = 0.0, b = 0.0;
-  switch (pc.cfaType) {
-  case 0: // BGGR
-    if (ye) {
-      if (xe) {
-        b = lin(x, y);
-        g = interpG(x, y);
-        r = interpD(x, y);
-      } else {
-        g = lin(x, y);
-        r = interpV(x, y);
-        b = interpH(x, y);
-      }
-    } else {
-      if (xe) {
-        g = lin(x, y);
-        r = interpH(x, y);
-        b = interpV(x, y);
-      } else {
-        r = lin(x, y);
-        g = interpG(x, y);
-        b = interpD(x, y);
-      }
+vec3 demosaic(int x,int y){
+    bool ye = (y & 1) == 0;
+    bool xe = (x & 1) == 0;
+    float r=0.0,g=0.0,b=0.0;
+    switch(pc.cfaType){
+        case 0: // BGGR
+            if(ye){
+                if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+                else   { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
+            }else{
+                if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
+                else   { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+            }
+            break;
+        case 1: // RGGB
+            if(ye){
+                if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+                else   { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
+            }else{
+                if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
+                else   { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+            }
+            break;
+        case 2: // GBRG
+            if(ye){
+                if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
+                else   { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+            }else{
+                if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+                else   { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
+            }
+            break;
+        default: // GRBG
+            if(ye){
+                if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
+                else   { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+            }else{
+                if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+                else   { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
+            }
+            break;
     }
-    break;
-  case 1: // RGGB
-    if (ye) {
-      if (xe) {
-        r = lin(x, y);
-        g = interpG(x, y);
-        b = interpD(x, y);
-      } else {
-        g = lin(x, y);
-        r = interpH(x, y);
-        b = interpV(x, y);
-      }
-    } else {
-      if (xe) {
-        g = lin(x, y);
-        r = interpV(x, y);
-        b = interpH(x, y);
-      } else {
-        b = lin(x, y);
-        g = interpG(x, y);
-        r = interpD(x, y);
-      }
-    }
-    break;
-  case 2: // GBRG
-    if (ye) {
-      if (xe) {
-        g = lin(x, y);
-        r = interpV(x, y);
-        b = interpH(x, y);
-      } else {
-        b = lin(x, y);
-        g = interpG(x, y);
-        r = interpD(x, y);
-      }
-    } else {
-      if (xe) {
-        r = lin(x, y);
-        g = interpG(x, y);
-        b = interpD(x, y);
-      } else {
-        g = lin(x, y);
-        r = interpH(x, y);
-        b = interpV(x, y);
-      }
-    }
-    break;
-  default: // GRBG
-    if (ye) {
-      if (xe) {
-        g = lin(x, y);
-        r = interpH(x, y);
-        b = interpV(x, y);
-      } else {
-        r = lin(x, y);
-        g = interpG(x, y);
-        b = interpD(x, y);
-      }
-    } else {
-      if (xe) {
-        b = lin(x, y);
-        g = interpG(x, y);
-        r = interpD(x, y);
-      } else {
-        g = lin(x, y);
-        r = interpV(x, y);
-        b = interpH(x, y);
-      }
-    }
-    break;
-  }
-  return vec3(r, g, b);
+    return vec3(r,g,b);
 }
 
-float srgb_eotf(float v) {
-  v = clamp(v, 0.0, 1.0);
-  return (v <= 0.0031308) ? v * 12.92 : 1.055 * pow(v, 1.0 / 2.4) - 0.055;
+float srgb_eotf(float v){
+    v = clamp(v,0.0,1.0);
+    return (v <= 0.0031308) ? v*12.92 : 1.055*pow(v,1.0/2.4) - 0.055;
 }
 
-vec3 processPixel(int x, int y) {
-  vec3 rgb = demosaic(x, y);
-  float gR = (pc.asShotNeutral.y > 1e-6 && pc.asShotNeutral.x > 1e-6)
-                 ? pc.asShotNeutral.y / pc.asShotNeutral.x
-                 : 1.0;
-  float gB = (pc.asShotNeutral.y > 1e-6 && pc.asShotNeutral.z > 1e-6)
-                 ? pc.asShotNeutral.y / pc.asShotNeutral.z
-                 : 1.0;
-  vec3 wb = rgb * vec3(gR, 1.0, gB);
-  vec3 cc = clamp(pc.colorMatrix * wb, 0.0, 1.0);
-  cc = vec3(srgb_eotf(cc.r), srgb_eotf(cc.g), srgb_eotf(cc.b));
-  return cc;
+vec3 processPixel(int x,int y){
+    vec3 rgb = demosaic(x,y);
+    float gR = (pc.asShotNeutral.y > 1e-6 && pc.asShotNeutral.x > 1e-6)
+               ? pc.asShotNeutral.y / pc.asShotNeutral.x : 1.0;
+    float gB = (pc.asShotNeutral.y > 1e-6 && pc.asShotNeutral.z > 1e-6)
+               ? pc.asShotNeutral.y / pc.asShotNeutral.z : 1.0;
+    vec3 wb = rgb * vec3(gR,1.0,gB);
+    vec3 cc = clamp(pc.colorMatrix * wb, 0.0, 1.0);
+    cc = vec3(srgb_eotf(cc.r), srgb_eotf(cc.g), srgb_eotf(cc.b));
+    return cc;
 }
 
-vec3 rgbToYUV(vec3 rgb) {
-  float Y = dot(rgb, vec3(0.299, 0.587, 0.114));
-  float U = dot(rgb, vec3(-0.169, -0.331, 0.500)) + 0.5;
-  float V = dot(rgb, vec3(0.500, -0.419, -0.081)) + 0.5;
-  return vec3(Y, U, V);
+vec3 rgbToYUV(vec3 rgb){
+    float Y = dot(rgb, vec3(0.299,0.587,0.114));
+    float U = dot(rgb, vec3(-0.169, -0.331, 0.500)) + 0.5;
+    float V = dot(rgb, vec3(0.500, -0.419, -0.081)) + 0.5;
+    return vec3(Y,U,V);
 }
 
-void main() {
-  ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
-  int x0 = gid.x * 2;
-  int y = gid.y;
-  ivec2 sz = textureSize(rawImage, 0);
-  if (x0 >= sz.x || y >= sz.y)
-    return;
-  int x1 = min(x0 + 1, sz.x - 1);
+void main(){
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    int x0 = gid.x * 2;
+    int y  = gid.y;
+    ivec2 sz = textureSize(rawImage,0);
+    if(x0 >= sz.x || y >= sz.y) return;
+    int x1 = min(x0 + 1, sz.x-1);
 
-  vec3 rgb0 = processPixel(x0, y);
-  vec3 rgb1 = processPixel(x1, y);
+    vec3 rgb0 = processPixel(x0,y);
+    vec3 rgb1 = processPixel(x1,y);
 
-  vec3 yuv0 = rgbToYUV(rgb0);
-  vec3 yuv1 = rgbToYUV(rgb1);
+    vec3 yuv0 = rgbToYUV(rgb0);
+    vec3 yuv1 = rgbToYUV(rgb1);
 
-  const float kYRange = 940.0;
-  const float kUVRange = 896.0;
+    float Y0 = yuv0.x;
+    float Y1 = yuv1.x;
+    float U = (yuv0.y + yuv1.y) * 0.5;
+    float V = (yuv0.z + yuv1.z) * 0.5;
 
-  float Y0 = yuv0.x;
-  float Y1 = yuv1.x;
-  float U = (yuv0.y + yuv1.y) * 0.5;
-  float V = (yuv0.z + yuv1.z) * 0.5;
+    uint y0 = uint(clamp(round(Y0*1023.0),0.0,1023.0));
+    uint y1 = uint(clamp(round(Y1*1023.0),0.0,1023.0));
+    uint uVal = uint(clamp(round(U*1023.0),0.0,1023.0));
+    uint vVal = uint(clamp(round(V*1023.0),0.0,1023.0));
 
-  uint y0 = clamp(int(round(Y0 * kYRange)) + 64, 0, 1023);
-  uint y1 = clamp(int(round(Y1 * kYRange)) + 64, 0, 1023);
-  uint uVal = clamp(int(round((U + 0.5) * kUVRange)) + 512, 0, 1023);
-  uint vVal = clamp(int(round((V + 0.5) * kUVRange)) + 512, 0, 1023);
-
-  imageStore(yPlane, ivec2(x0, y), uvec4(y0, 0, 0, 0));
-  imageStore(yPlane, ivec2(x1, y), uvec4(y1, 0, 0, 0));
-  imageStore(uPlane, ivec2(x0 / 2, y), uvec4(uVal, 0, 0, 0));
-  imageStore(vPlane, ivec2(x0 / 2, y), uvec4(vVal, 0, 0, 0));
+    imageStore(yPlane, ivec2(x0,y), uvec4(y0,0,0,0));
+    imageStore(yPlane, ivec2(x1,y), uvec4(y1,0,0,0));
+    imageStore(uPlane, ivec2(x0/2,y), uvec4(uVal,0,0,0));
+    imageStore(vPlane, ivec2(x0/2,y), uvec4(vVal,0,0,0));
 }
