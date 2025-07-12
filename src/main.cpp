@@ -46,11 +46,6 @@ namespace DebugLogHelper {
 
 namespace fs = std::filesystem;
 
-#ifdef ENABLE_PRORES_EXPORT
-extern bool g_gpuAsyncExport;
-extern bool g_useGpuProRes;
-#endif
-
 // Global variable to store the application's base path
 std::string g_AppBasePath;
 
@@ -276,17 +271,6 @@ int main(int argc, char* argv[]) {
         LogToFile("[main] No command line argument provided. Starting without file.");
     }
 
-    std::string outMov;
-    bool gpuExport = false;
-    for (int i = 2; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "-o" && i + 1 < argc) { outMov = argv[++i]; }
-        else if (arg == "-gpu") { gpuExport = true; }
-#ifdef ENABLE_PRORES_EXPORT
-        else if (arg == "-gpuAsyncExport") { g_gpuAsyncExport = true; }
-#endif
-    }
-
     if (!inPath.empty() && (!fs::exists(inPath) || !fs::is_regular_file(inPath))) {
         std::string errorMsg = "[main] Input file not found or not a regular file: " + inPath;
         LogToFile(errorMsg);
@@ -309,13 +293,6 @@ int main(int argc, char* argv[]) {
     LogToFile(std::string("[main] Initializing App with file: ") + inPath);
     try {
         App app(inPath);
-#ifdef ENABLE_PRORES_EXPORT
-        if (!outMov.empty()) {
-            g_useGpuProRes = gpuExport;
-            app.exportCurrentClipToProRes(outMov);
-            return 0;
-        }
-#endif
         LogToFile("[main] App object created. Calling app.run()...");
         if (!app.run()) {
             LogToFile("[main] App::run() returned false. Application will exit.");
