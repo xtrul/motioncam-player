@@ -19,7 +19,7 @@ public:
     void cleanup();
 
     bool convertToFrame(const uint16_t* raw, int width, int height, AVFrame* frame,
-                        const GpuColorParams& params, int frameIndex);
+                        const GpuColorParams& params);
 private:
     Renderer_VK* m_renderer;
 
