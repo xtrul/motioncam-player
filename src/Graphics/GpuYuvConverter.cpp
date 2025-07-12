@@ -473,11 +473,20 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         }
     }
 
-    uint16_t y0 = *reinterpret_cast<const uint16_t*>(frame->data[0]);
-    uint16_t y1 = *reinterpret_cast<const uint16_t*>(frame->data[0] + 2);
-    uint16_t u0 = *reinterpret_cast<const uint16_t*>(frame->data[1]);
-    uint16_t v0 = *reinterpret_cast<const uint16_t*>(frame->data[2]);
-    std::ostringstream oss; oss << "[GPU-CHECK] first macropixel Y0=" << y0 << " U=" << u0 << " Y1=" << y1 << " V=" << v0; LogProRes(oss.str());
+    static bool dumpDone = false;
+    if(!dumpDone){
+        std::ostringstream dump;
+        dump << "[GPU-CHECK] first 16 macropixels";
+        for(int i=0;i<16;++i){
+            uint16_t yy0 = *reinterpret_cast<const uint16_t*>(frame->data[0] + i*4);
+            uint16_t yy1 = *reinterpret_cast<const uint16_t*>(frame->data[0] + i*4 + 2);
+            uint16_t uu  = *reinterpret_cast<const uint16_t*>(frame->data[1] + i*2);
+            uint16_t vv  = *reinterpret_cast<const uint16_t*>(frame->data[2] + i*2);
+            dump << " [" << i << ":" << yy0 << "," << uu << "," << yy1 << "," << vv << "]";
+        }
+        LogProRes(dump.str());
+        dumpDone = true;
+    }
 
     LogProRes("[GPU] readback complete");
 
