@@ -38,7 +38,9 @@
 namespace fs = std::filesystem;
 
 #ifdef ENABLE_PRORES_EXPORT
-static bool g_useGpuProRes = false;
+bool g_useGpuProRes = false;
+bool g_gpuAsyncExport = false;
+PerfStat gPerf;
 #endif
 namespace {
     bool writeDngInternal(
@@ -1178,13 +1180,13 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToProRes() {
+void App::exportCurrentClipToProRes(const std::string& outPath) {
     if (m_proResStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = openSaveMovDialog();
+    std::string outputPath = outPath.empty() ? openSaveMovDialog() : outPath;
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
         outputPath += ".mov";
@@ -1269,6 +1271,7 @@ void App::exportCurrentClipToProRes() {
             m_proResStatus.active.store(false);
             return;
         }
+        fmt->flags &= ~AVFMT_FLAG_FLUSH_PACKETS;
         auto allocMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - allocStart).count();
         LogProRes("[ProResExport] Output context created in " + std::to_string(allocMs) + "ms");
@@ -1297,13 +1300,12 @@ void App::exportCurrentClipToProRes() {
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
-        unsigned threads = std::thread::hardware_concurrency();
-        if (threads == 0) threads = 1;
-        vctx->thread_count = 0; // let FFmpeg decide based on HW
-        vctx->thread_type = FF_THREAD_FRAME;
+        unsigned threads = std::max(4u, std::thread::hardware_concurrency());
+        vctx->thread_count = threads;
+        vctx->thread_type = FF_THREAD_SLICE | FF_THREAD_FRAME;
         LogProRes(std::string("[ProResExport] Detected CPU threads: ") +
                   std::to_string(threads));
-        LogProRes(std::string("[ProResExport] Thread type: FRAME"));
+        LogProRes(std::string("[ProResExport] Thread type: SLICE|FRAME"));
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
@@ -1397,6 +1399,7 @@ void App::exportCurrentClipToProRes() {
 
         auto encodeStart = std::chrono::steady_clock::now();
         LogProRes("[ProResExport] Encode loop starting");
+        gPerf = {};
         long long readUS = 0;
         long long rgbUS = 0;
         long long scaleUS = 0;
@@ -1481,7 +1484,9 @@ void App::exportCurrentClipToProRes() {
         AVPacket pkt{};
 
         std::vector<uint8_t> rgbBuf;
+        size_t pendingFlush = 0;
         int64_t pts = 0;
+        int prevSlot = -1;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
             nlohmann::json metaTmp;
@@ -1492,9 +1497,18 @@ void App::exportCurrentClipToProRes() {
             readUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
 
             t0 = t1;
+            int slot = -1;
             if (gpuActive) {
-                if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                converter.convertToFrame(asU16(raw), width, height, frame, gpuParams);
+                if (g_gpuAsyncExport) {
+                    slot = converter.beginFrame(asU16(raw), gpuParams);
+                    if (prevSlot >= 0) {
+                        if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
+                        converter.endFrame(prevSlot, frame);
+                    }
+                } else {
+                    if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
+                    converter.convertToFrame(asU16(raw), width, height, frame, gpuParams);
+                }
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             } else {
@@ -1510,6 +1524,10 @@ void App::exportCurrentClipToProRes() {
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             }
 
+            if (gpuActive && g_gpuAsyncExport) {
+                if (prevSlot < 0) { prevSlot = slot; continue; }
+            }
+
             frame->pts = pts;
             pts++;
 
@@ -1520,12 +1538,16 @@ void App::exportCurrentClipToProRes() {
                 pkt.duration = 1;
                 pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
                 pkt.dts = pkt.pts;
+                auto ioStart = std::chrono::steady_clock::now();
                 if (av_interleaved_write_frame(fmt, &pkt) < 0) { m_proResStatus.errorMsg = "write_frame failed"; av_packet_unref(&pkt); break; }
+                gPerf.ioMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - ioStart).count();
+                pendingFlush += pkt.size;
+                if (pendingFlush >= 128 * 1024 * 1024) { avio_flush(fmt->pb); pendingFlush = 0; }
                 av_packet_unref(&pkt);
                 ++framesEncoded;
             }
             t1 = std::chrono::steady_clock::now();
-            encodeUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+            gPerf.encMs += std::chrono::duration<double, std::milli>(t1 - t0).count();
             m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
             if ((idx + 1) % 50 == 0) {
                 auto now = std::chrono::steady_clock::now();
@@ -1534,6 +1556,33 @@ void App::exportCurrentClipToProRes() {
                 prog << "[ProResExport] Encoded frame " << (idx + 1) << "/" << frames.size()
                      << " elapsed=" << ms << "ms";
                 LogProRes(prog.str());
+            }
+
+            if (gpuActive && g_gpuAsyncExport) prevSlot = slot;
+        }
+
+        if (gpuActive && g_gpuAsyncExport && prevSlot >= 0) {
+            if (av_frame_make_writable(frame) >= 0) {
+                converter.endFrame(prevSlot, frame);
+                frame->pts = pts++;
+                auto t0 = std::chrono::high_resolution_clock::now();
+                if (avcodec_send_frame(vctx, frame) >= 0) {
+                    while (avcodec_receive_packet(vctx, &pkt) == 0) {
+                        pkt.stream_index = vstream->index;
+                        pkt.duration = 1;
+                        pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
+                        pkt.dts = pkt.pts;
+                        auto ioStart = std::chrono::high_resolution_clock::now();
+                        av_interleaved_write_frame(fmt, &pkt);
+                        gPerf.ioMs += std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - ioStart).count();
+                        pendingFlush += pkt.size;
+                        if (pendingFlush >= 128 * 1024 * 1024) { avio_flush(fmt->pb); pendingFlush = 0; }
+                        av_packet_unref(&pkt);
+                        ++framesEncoded;
+                    }
+                }
+                auto t1 = std::chrono::high_resolution_clock::now();
+                gPerf.encMs += std::chrono::duration<double, std::milli>(t1 - t0).count();
             }
         }
 
@@ -1609,6 +1658,14 @@ void App::exportCurrentClipToProRes() {
             LogProRes(finfo.str());
         }
         {
+            std::ostringstream perf;
+            perf << "[PERF] gpu=" << std::fixed << std::setprecision(2) << gPerf.gpuMs
+                 << "ms enc=" << gPerf.encMs << "ms io=" << gPerf.ioMs << "ms";
+            LogProRes(perf.str());
+            double secs = totalMs / 1000.0;
+            LogProRes("[PERF] avg " + std::to_string(gPerf.frames / secs) + "fps");
+        }
+        {
             std::ostringstream summary;
             summary << "[ProResExport] Timing breakdown ms: read="
                     << (readUS / 1000) << " rgb=" << (rgbUS / 1000)
@@ -1639,6 +1696,7 @@ void App::exportCurrentClipToProRes() {
             LogProRes(pct.str());
         }
 
+        avio_flush(fmt->pb);
         auto trailerStart = std::chrono::steady_clock::now();
         av_write_trailer(fmt);
         auto trailerMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1663,7 +1721,7 @@ void App::exportCurrentClipToProRes() {
     });
 }
 #else
-void App::exportCurrentClipToProRes() {
+void App::exportCurrentClipToProRes(const std::string&) {
     showActionMessage("FFmpeg support not built");
 }
 #endif
@@ -1672,7 +1730,7 @@ void App::convertCurrentClipToProRes() {
 #ifdef ENABLE_PRORES_EXPORT
     LogProRes("[App] convertCurrentClipToProRes invoked");
     g_useGpuProRes = true;
-    exportCurrentClipToProRes();
+    exportCurrentClipToProRes("");
 #else
     showActionMessage("FFmpeg support not built");
 #endif
