@@ -18,7 +18,7 @@ layout(push_constant) uniform PushConsts {
 } pc;
 
 const float kYmul = 876.0;
-const float kCmul = 896.0;
+const float kUVRange = 896.0; // 224*4
 const float kYoff = 64.0;
 const float kCoff = 512.0;
 const mat3 kRGB2YUV = mat3(
@@ -123,16 +123,16 @@ void main(){
     vec3 yuv1 = kRGB2YUV * rgb1;
 
     float Y0 = yuv0.x * kYmul + kYoff;
-    float U0 = yuv0.y * kCmul + kCoff;
-    float V0 = yuv0.z * kCmul + kCoff;
     float Y1 = yuv1.x * kYmul + kYoff;
-    float U1 = yuv1.y * kCmul + kCoff;
-    float V1 = yuv1.z * kCmul + kCoff;
+    float U = (yuv0.y + yuv1.y) * 0.5;
+    float V = (yuv0.z + yuv1.z) * 0.5;
 
     uint y0 = uint(clamp(round(Y0),0.0,1023.0));
     uint y1 = uint(clamp(round(Y1),0.0,1023.0));
-    uint uVal = uint(clamp(round((U0+U1)*0.5),0.0,1023.0));
-    uint vVal = uint(clamp(round((V0+V1)*0.5),0.0,1023.0));
+    int uTmp = clamp(int(round((U + 0.5) * kUVRange)) + int(kCoff), 0, 1023);
+    int vTmp = clamp(int(round((V + 0.5) * kUVRange)) + int(kCoff), 0, 1023);
+    uint uVal = uint(uTmp);
+    uint vVal = uint(vTmp);
 
     imageStore(yPlane, ivec2(x0,y), uvec4(y0,0,0,0));
     imageStore(yPlane, ivec2(x1,y), uvec4(y1,0,0,0));
