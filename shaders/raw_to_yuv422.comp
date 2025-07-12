@@ -7,12 +7,14 @@ layout(binding = 1, r16ui) writeonly uniform uimage2D yPlane;
 layout(binding = 2, r16ui) writeonly uniform uimage2D uPlane;
 layout(binding = 3, r16ui) writeonly uniform uimage2D vPlane;
 
-layout(push_constant, std430) uniform PushConsts {
-    ivec4 ci;       // width,height,rowPitch,unused
-    vec3 wb;
-    vec3 cm0;
-    vec3 cm1;
-    vec3 cm2;
+layout(push_constant) uniform PushConsts {
+    int width;
+    int height;
+    int black;
+    int white;
+    int cfaType;
+    vec3 asShotNeutral;
+    float colorMatrix[9];
 } pc;
 
 const float kYmul = 876.0;
@@ -31,13 +33,14 @@ float srgb_eotf(float v){
 }
 
 uint readU16(int x,int y){
-    x = clamp(x,0,pc.ci.x-1);
-    y = clamp(y,0,pc.ci.y-1);
+    x = clamp(x,0,pc.width-1);
+    y = clamp(y,0,pc.height-1);
     return texelFetch(rawImage, ivec2(x,y),0).r;
 }
 
 float linearise(uint v){
-    return clamp(float(v) / 1023.0, 0.0, 1.0);
+    float t = (float(v) - float(pc.black)) / float(pc.white - pc.black);
+    return clamp(t,0.0,1.0);
 }
 
 float interpG(int x,int y){return 0.25*(linearise(readU16(x+1,y))+linearise(readU16(x-1,y))+linearise(readU16(x,y+1))+linearise(readU16(x,y-1)));}
@@ -49,7 +52,7 @@ vec3 demosaic(int x,int y){
     bool ye = (y&1)==0;
     bool xe = (x&1)==0;
     float r=0.0,g=0.0,b=0.0;
-    int cfa = 0;
+    int cfa = pc.cfaType;
     if(cfa==0){
         if(ye){
             if(xe){ b=linearise(readU16(x,y)); g=interpG(x,y); r=interpD(x,y); }
@@ -90,22 +93,22 @@ void main(){
     ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
     int x0 = gid.x * 2;
     int y = gid.y;
-    if(x0 >= pc.ci.x || y >= pc.ci.y) return;
-    int x1 = min(x0+1, pc.ci.x-1);
+    if(x0 >= pc.width || y >= pc.height) return;
+    int x1 = min(x0+1, pc.width-1);
 
     vec3 rgb0 = demosaic(x0,y);
     vec3 rgb1 = demosaic(x1,y);
 
-    float gainR = (pc.wb.y > 1e-6 && pc.wb.x > 1e-6) ? pc.wb.y / pc.wb.x : 1.0;
-    float gainB = (pc.wb.y > 1e-6 && pc.wb.z > 1e-6) ? pc.wb.y / pc.wb.z : 1.0;
+    float gainR = (pc.asShotNeutral.y > 1e-6 && pc.asShotNeutral.x > 1e-6) ? pc.asShotNeutral.y / pc.asShotNeutral.x : 1.0;
+    float gainB = (pc.asShotNeutral.y > 1e-6 && pc.asShotNeutral.z > 1e-6) ? pc.asShotNeutral.y / pc.asShotNeutral.z : 1.0;
 
     rgb0 = vec3(rgb0.r * gainR, rgb0.g, rgb0.b * gainB);
     rgb1 = vec3(rgb1.r * gainR, rgb1.g, rgb1.b * gainB);
 
     mat3 ccm = mat3(
-        pc.cm0,
-        pc.cm1,
-        pc.cm2
+        pc.colorMatrix[0], pc.colorMatrix[3], pc.colorMatrix[6],
+        pc.colorMatrix[1], pc.colorMatrix[4], pc.colorMatrix[7],
+        pc.colorMatrix[2], pc.colorMatrix[5], pc.colorMatrix[8]
     );
     rgb0 = ccm * rgb0;
     rgb1 = ccm * rgb1;
