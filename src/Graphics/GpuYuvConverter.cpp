@@ -1,6 +1,5 @@
 #include "Graphics/GpuYuvConverter.h"
 #include "Graphics/GpuColorParams.h"
-#include "Graphics/ColorPC.h"
 #include "Graphics/Renderer_VK.h"
 #include "Graphics/VulkanHelpers.h"
 #include "Graphics/ImageResource.h"
@@ -61,7 +60,7 @@ bool GpuYuvConverter::init(int width, int height) {
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = sizeof(ConvertInfo) + sizeof(ColorPC); // 64 bytes
+    pcRange.size = sizeof(int) * 5 + sizeof(float) * 12;
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -260,8 +259,7 @@ void GpuYuvConverter::cleanup() {
 
 bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
                                      AVFrame* frame,
-                                     const GpuColorParams& params,
-                                     int frameIndex) {
+                                     const GpuColorParams& params) {
     LogProRes("[GPU] convertToFrame invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize ySize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
@@ -385,25 +383,22 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
 
-    struct PCBlock {
-        ConvertInfo ci;
-        ColorPC cp;
-    } pc{};
-    pc.ci.width = width;
-    pc.ci.height = height;
-    pc.ci.rowPitch = frame->linesize[0];
-    for(int i=0;i<3;++i) pc.cp.wb[i] = params.asShotNeutral[i];
-    for(int i=0;i<9;++i) pc.cp.colorMat[i] = params.colorMatrix[i];
-
-    {
-        std::ostringstream oss;
-        oss << "[GPU] push wb=" << pc.cp.wb[0] << "," << pc.cp.wb[1] << "," << pc.cp.wb[2]
-            << " cm00=" << pc.cp.colorMat[0];
-        LogProRes(oss.str());
-    }
-
-    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT,
-                       0, sizeof(PCBlock), &pc);
+    struct Push {
+        int w;
+        int h;
+        int black;
+        int white;
+        int cfa;
+        float asn[3];
+        float ccm[9];
+    } push{};
+    push.w = width; push.h = height;
+    push.black = params.black;
+    push.white = params.white;
+    push.cfa = params.cfaType;
+    for(int i=0;i<3;++i) push.asn[i] = params.asShotNeutral[i];
+    for(int i=0;i<9;++i) push.ccm[i] = params.colorMatrix[i];
+    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
@@ -489,12 +484,13 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
                    reinterpret_cast<const uint8_t*>(rbAllocInfo[2].pMappedData) + y*srcPitchC,
                    srcPitchC);
 
-    if(frameIndex == 0){
-        const uint16_t* y = reinterpret_cast<const uint16_t*>(frame->data[0]);
-        const uint16_t* u = reinterpret_cast<const uint16_t*>(frame->data[1]);
-        const uint16_t* v = reinterpret_cast<const uint16_t*>(frame->data[2]);
+    uint16_t y0 = *reinterpret_cast<const uint16_t*>(frame->data[0]);
+    uint16_t u0 = *reinterpret_cast<const uint16_t*>(frame->data[1]);
+    uint16_t y1 = *reinterpret_cast<const uint16_t*>(frame->data[0] + 2);
+    uint16_t v0 = *reinterpret_cast<const uint16_t*>(frame->data[2]);
+    {
         std::ostringstream oss;
-        oss << "[GPU-CHECK] Y[0]=" << y[0] << ", U[0]=" << u[0] << ", V[0]=" << v[0];
+        oss << "[GPU-CHECK] first macropixel  Y0=" << y0 << " U=" << u0 << " Y1=" << y1 << " V=" << v0;
         LogProRes(oss.str());
     }
 
