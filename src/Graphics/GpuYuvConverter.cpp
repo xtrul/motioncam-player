@@ -258,7 +258,7 @@ void GpuYuvConverter::cleanup() {
 
 bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
                                      AVFrame* frame,
-                                     const float wbGains[3], const float colourMatrix[9]) {
+                                     const float wbGains[3], const float rgb2yuv[9]) {
     LogProRes("[GPU] convertToFrame invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize ySize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
@@ -389,7 +389,7 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     } push{};
     push.w = width; push.h = height;
     for(int i=0;i<3;++i) push.gains[i] = wbGains[i];
-    for(int i=0;i<9;++i) push.mtx[i] = colourMatrix[i];
+    for(int i=0;i<9;++i) push.mtx[i] = rgb2yuv[i];
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
@@ -450,27 +450,22 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc[i], 0, size);
     }
 
-    size_t rowPitchY = width * 2;
-    size_t rowPitchC = (width / 2) * 2;
     for(int y=0;y<height;++y){
-        const uint8_t* srcY = reinterpret_cast<const uint8_t*>(rbAllocInfo[0].pMappedData) + y*rowPitchY;
-        const uint8_t* srcU = reinterpret_cast<const uint8_t*>(rbAllocInfo[1].pMappedData) + y*rowPitchC;
-        const uint8_t* srcV = reinterpret_cast<const uint8_t*>(rbAllocInfo[2].pMappedData) + y*rowPitchC;
+        const uint8_t* srcY = reinterpret_cast<const uint8_t*>(rbAllocInfo[0].pMappedData) + y*width*2;
         uint8_t* dstY = frame->data[0] + y*frame->linesize[0];
+        memcpy(dstY, srcY, width*2);
+        const uint8_t* srcU = reinterpret_cast<const uint8_t*>(rbAllocInfo[1].pMappedData) + y*width;
+        const uint8_t* srcV = reinterpret_cast<const uint8_t*>(rbAllocInfo[2].pMappedData) + y*width;
         uint8_t* dstU = frame->data[1] + y*frame->linesize[1];
         uint8_t* dstV = frame->data[2] + y*frame->linesize[2];
-        memcpy(dstY, srcY, rowPitchY);
-        memcpy(dstU, srcU, rowPitchC);
-        memcpy(dstV, srcV, rowPitchC);
-#ifdef DEBUG_YUV_VALIDATE
+        memcpy(dstU, srcU, width);
+        memcpy(dstV, srcV, width);
         if(y==0){
             uint16_t y0 = *reinterpret_cast<const uint16_t*>(dstY);
-            uint16_t y1 = *reinterpret_cast<const uint16_t*>(dstY + 2);
             uint16_t u0 = *reinterpret_cast<const uint16_t*>(dstU);
             uint16_t v0 = *reinterpret_cast<const uint16_t*>(dstV);
-            std::ostringstream oss; oss << "[GPU-CHECK] (0,0) Y0=" << y0 << " U=" << u0 << " Y1=" << y1 << " V=" << v0; LogProRes(oss.str());
+            std::ostringstream oss; oss << "[GPU-CHECK] first macropixel  Y=" << y0 << "  U=" << u0 << "  V=" << v0; LogProRes(oss.str());
         }
-#endif
     }
 
     LogProRes("[GPU] readback complete");
