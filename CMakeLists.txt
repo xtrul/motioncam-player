@@ -320,3 +320,18 @@ message(STATUS "  Target Executable: MotionCam Player")
 message(STATUS "  Output Directory:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}")
 message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/MotionCam Player${CMAKE_EXECUTABLE_SUFFIX}")
 message(STATUS "---------------------------------------------------------------------")
+
+# Minimal test to validate GPU copy path
+add_executable(GpuCopyTest tests/GpuCopyTest.cpp)
+target_include_directories(GpuCopyTest PRIVATE
+    "${PROJECT_SOURCE_DIR}/include"
+    ${FFMPEG_INCLUDE_DIRS}
+    ${Vulkan_INCLUDE_DIRS}
+)
+if(TARGET FFMPEG::avcodec)
+    target_link_libraries(GpuCopyTest PRIVATE
+        FFMPEG::avcodec FFMPEG::avformat FFMPEG::avutil FFMPEG::swscale
+    )
+else()
+    target_link_libraries(GpuCopyTest PRIVATE ${FFMPEG_LIBRARIES})
+endif()
