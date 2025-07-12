@@ -1489,19 +1489,7 @@ void App::exportCurrentClipToProRes() {
             t0 = t1;
             if (gpuActive) {
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                converter.convertToFrame(asU16(raw), width, height, frame, wb, rgb2yuv,
-                                        (float)cpParams.blackLevel, (float)cpParams.whiteLevel);
-#ifdef DEBUG_YUV_VALIDATE
-                if(idx==0){
-                    uint16_t y0 = *reinterpret_cast<uint16_t*>(frame->data[0]);
-                    uint16_t y1 = *reinterpret_cast<uint16_t*>(frame->data[0] + 2);
-                    uint16_t u0 = *reinterpret_cast<uint16_t*>(frame->data[1]);
-                    uint16_t v0 = *reinterpret_cast<uint16_t*>(frame->data[2]);
-                    char buf[128];
-                    snprintf(buf, sizeof(buf), "[GPU-CHECK] (0,0) Y0=%u U=%u Y1=%u V=%u", y0,u0,y1,v0);
-                    LogProRes(buf);
-                }
-#endif
+                converter.convertToFrame(asU16(raw), width, height, frame, wb, rgb2yuv);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             } else {
@@ -1513,17 +1501,6 @@ void App::exportCurrentClipToProRes() {
                 int srcStride[1] = { width*3 };
                 t0 = std::chrono::steady_clock::now();
                 sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
-#ifdef DEBUG_YUV_VALIDATE
-                if(idx==0){
-                    uint16_t y0 = *reinterpret_cast<uint16_t*>(frame->data[0]);
-                    uint16_t y1 = *reinterpret_cast<uint16_t*>(frame->data[0] + 2);
-                    uint16_t u0 = *reinterpret_cast<uint16_t*>(frame->data[1]);
-                    uint16_t v0 = *reinterpret_cast<uint16_t*>(frame->data[2]);
-                    char buf[128];
-                    snprintf(buf, sizeof(buf), "[CPU-CHECK] (0,0) Y0=%u U=%u Y1=%u V=%u", y0,u0,y1,v0);
-                    LogProRes(buf);
-                }
-#endif
                 t1 = std::chrono::steady_clock::now();
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             }

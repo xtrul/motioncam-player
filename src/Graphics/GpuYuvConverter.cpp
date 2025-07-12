@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <chrono>
 #include <sstream>
-#include <cstdio>
 
 extern std::string g_AppBasePath;
 
@@ -60,7 +59,7 @@ bool GpuYuvConverter::init(int width, int height) {
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = sizeof(int) * 2 + sizeof(float) * 3 + sizeof(float) * 9 + sizeof(float) * 2;
+    pcRange.size = sizeof(int) * 2 + sizeof(float) * 3 + sizeof(float) * 9;
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -259,8 +258,7 @@ void GpuYuvConverter::cleanup() {
 
 bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
                                      AVFrame* frame,
-                                     const float wbGains[3], const float rgb2yuv[9],
-                                     float blackLevel, float whiteLevel) {
+                                     const float wbGains[3], const float rgb2yuv[9]) {
     LogProRes("[GPU] convertToFrame invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize ySize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
@@ -388,14 +386,10 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         int w; int h;
         float gains[3];
         float mtx[9];
-        float black;
-        float white;
     } push{};
     push.w = width; push.h = height;
     for(int i=0;i<3;++i) push.gains[i] = wbGains[i];
     for(int i=0;i<9;++i) push.mtx[i] = rgb2yuv[i];
-    push.black = blackLevel;
-    push.white = whiteLevel;
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
@@ -467,15 +461,10 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         memcpy(dstU, srcU, width);
         memcpy(dstV, srcV, width);
         if(y==0){
-#ifdef DEBUG_YUV_VALIDATE
             uint16_t y0 = *reinterpret_cast<const uint16_t*>(dstY);
-            uint16_t y1 = *reinterpret_cast<const uint16_t*>(dstY + 2);
             uint16_t u0 = *reinterpret_cast<const uint16_t*>(dstU);
             uint16_t v0 = *reinterpret_cast<const uint16_t*>(dstV);
-            char buf[128];
-            snprintf(buf, sizeof(buf), "[GPU-CHECK] (0,0) Y0=%u U=%u Y1=%u V=%u", y0, u0, y1, v0);
-            LogProRes(buf);
-#endif
+            std::ostringstream oss; oss << "[GPU-CHECK] first macropixel  Y=" << y0 << "  U=" << u0 << "  V=" << v0; LogProRes(oss.str());
         }
     }
 
