@@ -12,4 +12,13 @@ struct GpuColorParams {
     unsigned int white{1023};
 };
 
+struct PerfStat {
+    double gpuMs = 0;
+    double encMs = 0;
+    double ioMs  = 0;
+    uint32_t frames = 0;
+};
+
+extern PerfStat gPerf;
+
 #endif // GPU_COLOR_PARAMS_H

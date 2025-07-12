@@ -20,6 +20,11 @@ public:
 
     bool convertToFrame(const uint16_t* raw, int width, int height, AVFrame* frame,
                         const GpuColorParams& params);
+
+    int  beginFrame(const uint16_t* raw, const GpuColorParams& params);
+    bool endFrame(int slotIndex, AVFrame* frame);
+
+    static constexpr int kBuffers = 4;
 private:
     Renderer_VK* m_renderer;
 
@@ -38,6 +43,24 @@ private:
     VkImage m_rawImage{VK_NULL_HANDLE};
     VmaAllocation m_rawAlloc{VK_NULL_HANDLE};
     VkImageView m_rawView{VK_NULL_HANDLE};
+
+    struct Slot {
+        VkBuffer stagingBuf{VK_NULL_HANDLE};
+        VmaAllocation stagingAlloc{VK_NULL_HANDLE};
+        void* stagingMap{nullptr};
+        VkBuffer readbackBuf{VK_NULL_HANDLE};
+        VmaAllocation readbackAlloc{VK_NULL_HANDLE};
+        void* readbackMap{nullptr};
+        VkFence fence{VK_NULL_HANDLE};
+        VkCommandBuffer cmd{VK_NULL_HANDLE};
+    };
+
+    std::vector<Slot> m_slots;
+    int m_curSlot = 0;
+    int m_width = 0;
+    int m_height = 0;
+    VkDeviceSize m_rawSize = 0;
+    VkDeviceSize m_outSize = 0;
 };
 
 #endif // GPU_YUV_CONVERTER_H
