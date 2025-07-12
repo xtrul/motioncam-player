@@ -58,7 +58,7 @@ bool GpuYuvConverter::init(int width, int height) {
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = 72;
+    pcRange.size = 64;
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -348,7 +348,6 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
 
     struct Push {
         uint32_t width, height, cfaType, fullSwing;
-        uint32_t black, white;
         float wbR, wbG, wbB;
         float colMat[9];
     } push{};
@@ -356,8 +355,6 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     push.height = height;
     push.cfaType = params.cfaType;
     push.fullSwing = params.fullSwing;
-    push.black = params.black;
-    push.white = params.white;
     push.wbR = params.wbR;
     push.wbG = params.wbG;
     push.wbB = params.wbB;

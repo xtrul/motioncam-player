@@ -14,19 +14,12 @@ layout(push_constant, scalar) uniform PC {
     uint   width, height;        // RAW dimensions
     uint   cfaType;              // 0=BGGR 1=RGGB 2=GBRG 3=GRBG
     uint   fullSwing;            // 0=studio 64-940  1=full 0-1023
-    uint   black;                // black level
-    uint   white;                // white level
     float  wbR, wbG, wbB;        // white-balance gains
     mat3   colMat;               // sensor→BT.709 matrix
 } pc;
 
 // ---------- helper macros ----------
-#define READ_RAW(xx,yy) float(imageLoad(rawImg, ivec2(int(xx), int(yy))).r)
-
-float linSample(uint x, uint y) {
-    float v = READ_RAW(x, y);
-    return clamp((v - float(pc.black)) / float(pc.white - pc.black), 0.0, 1.0);
-}
+#define RAW(xx,yy) ( float(imageLoad(rawImg, ivec2(int(xx), int(yy))).r) / 1023.0 )
 
 // ---------- functions ----------
 vec3 bayerToRGB(uint x, uint y)
@@ -42,23 +35,23 @@ vec3 bayerToRGB(uint x, uint y)
         case 0u:
             if (ye) {
                 if (xe) {                               // B G
-                    b = linSample(x,y);
-                    g = (linSample(x-1,y)+linSample(x+1,y)+linSample(x,y-1)+linSample(x,y+1))*0.25;
-                    r = (linSample(x-1,y-1)+linSample(x+1,y-1)+linSample(x-1,y+1)+linSample(x+1,y+1))*0.25;
+                    b = RAW(x,y);
+                    g = (RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25;
+                    r = (RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25;
                 } else {                                // G R
-                    g = linSample(x,y);
-                    b = (linSample(x-1,y)+linSample(x+1,y))*0.5;
-                    r = (linSample(x,y-1)+linSample(x,y+1))*0.5;
+                    g = RAW(x,y);
+                    b = (RAW(x-1,y)+RAW(x+1,y))*0.5;
+                    r = (RAW(x,y-1)+RAW(x,y+1))*0.5;
                 }
             } else {
                 if (xe) {                               // G B
-                    g = linSample(x,y);
-                    b = (linSample(x,y-1)+linSample(x,y+1))*0.5;
-                    r = (linSample(x-1,y)+linSample(x+1,y))*0.5;
+                    g = RAW(x,y);
+                    b = (RAW(x,y-1)+RAW(x,y+1))*0.5;
+                    r = (RAW(x-1,y)+RAW(x+1,y))*0.5;
                 } else {                                // R G
-                    r = linSample(x,y);
-                    g = (linSample(x-1,y)+linSample(x+1,y)+linSample(x,y-1)+linSample(x,y+1))*0.25;
-                    b = (linSample(x-1,y-1)+linSample(x+1,y-1)+linSample(x-1,y+1)+linSample(x+1,y+1))*0.25;
+                    r = RAW(x,y);
+                    g = (RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25;
+                    b = (RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25;
                 }
             }
             break;
@@ -67,23 +60,23 @@ vec3 bayerToRGB(uint x, uint y)
         case 1u:
             if (ye) {
                 if (xe) {                               // R G
-                    r = linSample(x,y);
-                    g = (linSample(x-1,y)+linSample(x+1,y)+linSample(x,y-1)+linSample(x,y+1))*0.25;
-                    b = (linSample(x-1,y-1)+linSample(x+1,y-1)+linSample(x-1,y+1)+linSample(x+1,y+1))*0.25;
+                    r = RAW(x,y);
+                    g = (RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25;
+                    b = (RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25;
                 } else {                                // G B
-                    g = linSample(x,y);
-                    r = (linSample(x-1,y)+linSample(x+1,y))*0.5;
-                    b = (linSample(x,y-1)+linSample(x,y+1))*0.5;
+                    g = RAW(x,y);
+                    r = (RAW(x-1,y)+RAW(x+1,y))*0.5;
+                    b = (RAW(x,y-1)+RAW(x,y+1))*0.5;
                 }
             } else {
                 if (xe) {                               // G R
-                    g = linSample(x,y);
-                    r = (linSample(x,y-1)+linSample(x,y+1))*0.5;
-                    b = (linSample(x-1,y)+linSample(x+1,y))*0.5;
+                    g = RAW(x,y);
+                    r = (RAW(x,y-1)+RAW(x,y+1))*0.5;
+                    b = (RAW(x-1,y)+RAW(x+1,y))*0.5;
                 } else {                                // B G
-                    b = linSample(x,y);
-                    g = (linSample(x-1,y)+linSample(x+1,y)+linSample(x,y-1)+linSample(x,y+1))*0.25;
-                    r = (linSample(x-1,y-1)+linSample(x+1,y-1)+linSample(x-1,y+1)+linSample(x+1,y+1))*0.25;
+                    b = RAW(x,y);
+                    g = (RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25;
+                    r = (RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25;
                 }
             }
             break;
@@ -94,20 +87,13 @@ vec3 bayerToRGB(uint x, uint y)
             break;
     }
 
-vec3 rgb = vec3(r, g, b);
+    vec3 rgb = vec3(r, g, b);
 
     // white balance
     rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);
 
     // colour matrix
     rgb = pc.colMat * rgb;
-
-    // convert sensor linear to display linear (sRGB EOTF)
-    rgb = vec3(
-        (rgb.r <= 0.04045) ? rgb.r / 12.92 : pow((rgb.r + 0.055) / 1.055, 2.4),
-        (rgb.g <= 0.04045) ? rgb.g / 12.92 : pow((rgb.g + 0.055) / 1.055, 2.4),
-        (rgb.b <= 0.04045) ? rgb.b / 12.92 : pow((rgb.b + 0.055) / 1.055, 2.4)
-    );
 
     return clamp(rgb, 0.0, 1.0);
 }
@@ -122,27 +108,25 @@ uvec4 packYUV(vec3 rgb0, vec3 rgb1)
     float y0 = dot(rgb0, vec3(kr.x, kg.x, kb.x));
     float y1 = dot(rgb1, vec3(kr.x, kg.x, kb.x));
 
-    float cb = (rgb0.b - y0) * 0.5389 + (rgb1.b - y1) * 0.5389;
-    float cr = (rgb0.r - y0) * 0.6350 + (rgb1.r - y1) * 0.6350;
-    cb = cb * 0.5 + 0.5;
-    cr = cr * 0.5 + 0.5;
+    float u  = 0.5389 * ((rgb0.b + rgb1.b) - (y0 + y1));
+    float v  = 0.6350 * ((rgb0.r + rgb1.r) - (y0 + y1));
 
     if (pc.fullSwing == 0u) {          // studio swing
         y0 = y0 * 876.0 + 64.0;
         y1 = y1 * 876.0 + 64.0;
-        cb  = (cb * 2.0 - 1.0) * 448.0 + 512.0;
-        cr  = (cr * 2.0 - 1.0) * 448.0 + 512.0;
+        u  = u  * 448.0 + 512.0;
+        v  = v  * 448.0 + 512.0;
     } else {                           // full swing
         y0 *= 1023.0;
         y1 *= 1023.0;
-        cb   = (cb * 2.0 - 1.0) * 511.5 + 512.0;
-        cr   = (cr * 2.0 - 1.0) * 511.5 + 512.0;
+        u   = u * 511.5 + 512.0;
+        v   = v * 511.5 + 512.0;
     }
 
     return uvec4(uint(y0 + 0.5),
-                 uint(cb  + 0.5),
+                 uint(u  + 0.5),
                  uint(y1 + 0.5),
-                 uint(cr  + 0.5));
+                 uint(v  + 0.5));
 }
 
 // ---------- work-group size ----------
@@ -169,10 +153,6 @@ void main()
 #ifdef GL_EXT_debug_print
     if (gid.x == 0u && gid.y == 0u) {
         debugPrintfEXT("GPU first macro-pixel: Y0=%u U=%u Y1=%u V=%u\n",
-                       macropixel.x, macropixel.y, macropixel.z, macropixel.w);
-    }
-    if (gid.x==500u && gid.y==500u) {
-        debugPrintfEXT("MP500 y0=%u u=%u y1=%u v=%u\n",
                        macropixel.x, macropixel.y, macropixel.z, macropixel.w);
     }
 #endif
