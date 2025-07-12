@@ -1489,15 +1489,7 @@ void App::exportCurrentClipToProRes() {
             t0 = t1;
             if (gpuActive) {
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                GpuColorParams gp{};
-                gp.width = width;
-                gp.height = height;
-                gp.black = m_staticBlack;
-                gp.white = m_staticWhite;
-                for(int i=0;i<3 && i<asn_json.size();++i) gp.asShotNeutral[i] = (float)asn_json[i];
-                for(int i=0;i<9;++i) gp.colorMatrix[i] = cpParams.ccm[i];
-                gp.cfaType = m_cfaTypeFromMetadata;
-                converter.convertToFrame(asU16(raw), gp, frame);
+                converter.convertToFrame(asU16(raw), width, height, frame, wb, rgb2yuv);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             } else {
