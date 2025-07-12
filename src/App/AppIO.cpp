@@ -1442,14 +1442,16 @@ void App::exportCurrentClipToProRes() {
         }
         cpParams.saturation = 1.0f;
 
-        float wb[3] = { cpParams.gainR, cpParams.gainG, cpParams.gainB };
-        const float rgb2yuvBase[9] = {
-            0.183f, 0.614f, 0.062f,
-           -0.101f,-0.339f, 0.439f,
-            0.439f,-0.399f,-0.040f
-        };
-        float rgb2yuv[9];
-        for(int i=0;i<9;++i) rgb2yuv[i] = rgb2yuvBase[i];
+        GpuColorParams gpuParams{};
+        gpuParams.black = static_cast<int>(cpParams.blackLevel);
+        gpuParams.white = static_cast<int>(cpParams.whiteLevel);
+        if(asn_json.size() >= 3){
+            gpuParams.asShotNeutral[0] = static_cast<float>(asn_json[0]);
+            gpuParams.asShotNeutral[1] = static_cast<float>(asn_json[1]);
+            gpuParams.asShotNeutral[2] = static_cast<float>(asn_json[2]);
+        }
+        for(int i=0;i<9;++i) gpuParams.colorMatrix[i] = cpParams.ccm[i];
+        gpuParams.cfaType = cpParams.cfaType;
 
         {
             std::ostringstream oss;
@@ -1489,7 +1491,7 @@ void App::exportCurrentClipToProRes() {
             t0 = t1;
             if (gpuActive) {
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                converter.convertToFrame(asU16(raw), width, height, frame, wb, rgb2yuv);
+                converter.convertToFrame(asU16(raw), width, height, frame, gpuParams);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             } else {
