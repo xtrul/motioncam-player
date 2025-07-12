@@ -160,7 +160,6 @@ void LogFFmpegStatus() {
         LogProRes("[FFmpeg] Some FFmpeg DLLs could not be loaded; export may fail.");
     }
 #   else
-    av_register_all();
     int version = avcodec_version();
     LogToFile(std::string("[FFmpeg] avcodec version ") + std::to_string(version));
     LogProRes(std::string("[FFmpeg] avcodec version ") + std::to_string(version));
