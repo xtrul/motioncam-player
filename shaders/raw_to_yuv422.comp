@@ -1,185 +1,136 @@
 #version 460
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
-#extension GL_EXT_shader_16bit_storage                   : require
-#extension GL_KHR_shader_subgroup_basic                  : enable
-#extension GL_EXT_scalar_block_layout                   : require
-#extension GL_EXT_debug_print                           : enable   // for debugPrintfEXT
+#extension GL_EXT_shader_16bit_storage               : require
+#extension GL_KHR_shader_subgroup_basic              : enable
+#extension GL_EXT_scalar_block_layout               : require
 
-// ---------- bindings ----------
-layout(set = 0, binding = 0, r16ui   ) readonly  uniform uimage2D rawImg;   // 16-bit Bayer
-layout(set = 0, binding = 1, rgba32ui) writeonly uniform uimage2D yuvImg;   // Y0 U Y1 V macropixels
+// --- bindings ----------------------------------------------
+layout(set = 0, binding = 0, r16ui   ) readonly  uniform uimage2D  rawImg;   // 16‑bit Bayer
+layout(set = 0, binding = 1, rgba32ui) writeonly uniform uimage2D  yuvImg;   // 32‑bit macropixel  Y0 U Y1 V (10‑bit each, LSB‑aligned)
 
-// ---------- push constants ----------
+// --- push constants ----------------------------------------
 layout(push_constant, scalar) uniform PC {
-    uint   width, height;        // RAW dimensions
-    uint   cfaType;              // 0=BGGR 1=RGGB 2=GBRG 3=GRBG
-    uint   fullSwing;            // 0=studio 64-940  1=full 0-1023
-    float  wbR, wbG, wbB;        // white-balance gains
-    mat3   colMat;               // sensor→BT.709 matrix
-    uint   black;                // black level
-    uint   white;                // white level
+    uint   width, height;          // RAW dimensions
+    uint   cfaType;                // 0 BGGR | 1 RGGB | 2 GBRG | 3 GRBG
+    uint   fullSwing;              // 0 = studio (64‑940) | 1 = full (0‑1023)
+    float  wbR, wbG, wbB;          // white‑balance gains
+    mat3   colMat;                 // sensor → BT.709 matrix
+    uint   black, white;           // raw black/white levels (inclusive)
 } pc;
 
-// ---------- helper macros ----------
-#define READ_RAW(xx,yy) uint(imageLoad(rawImg, ivec2(int(xx), int(yy))).r)
+// -----------------------------------------------------------
+uint readRaw(uint x, uint y) { return imageLoad(rawImg, ivec2(x, y)).r; }
 
-float linFromRaw(uint v)
-{
-    return clamp((float(v) - float(pc.black)) /
-                 float(pc.white - pc.black), 0.0, 1.0);
+float normRaw(uint r){
+    return clamp(float(r) - float(pc.black), 0.0, float(pc.white - pc.black))
+         / float(pc.white - pc.black);
 }
 
-#define RAW(xx,yy) linFromRaw(READ_RAW(xx,yy))
+#define RAW(xx,yy) normRaw(readRaw(xx,yy))
 
-float toDisplay(float x)
-{
-    return (x <= 0.04045) ? x/12.92
-                          : pow((x+0.055)/1.055, 2.4);
-}
-
-// ---------- functions ----------
+// -----------------------------------------------------------
 vec3 bayerToRGB(uint x, uint y)
 {
-    // ── simple bilinear demosaic ───────────────────────────
     bool xe = (x & 1u) == 0u;
     bool ye = (y & 1u) == 0u;
-    float r, g, b;
+    float r = 0.0, g = 0.0, b = 0.0;
 
-    switch (pc.cfaType)
+    switch(pc.cfaType)
     {
-        // 0 = BGGR
-        case 0u:
-            if (ye) {
-                if (xe) {                               // B G
-                    b = RAW(x,y);
-                    g = (RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25;
-                    r = (RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25;
-                } else {                                // G R
-                    g = RAW(x,y);
-                    b = (RAW(x-1,y)+RAW(x+1,y))*0.5;
-                    r = (RAW(x,y-1)+RAW(x,y+1))*0.5;
-                }
-            } else {
-                if (xe) {                               // G B
-                    g = RAW(x,y);
-                    b = (RAW(x,y-1)+RAW(x,y+1))*0.5;
-                    r = (RAW(x-1,y)+RAW(x+1,y))*0.5;
-                } else {                                // R G
-                    r = RAW(x,y);
-                    g = (RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25;
-                    b = (RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25;
-                }
-            }
-            break;
-
-        // 1 = RGGB
-        case 1u:
-            if (ye) {
-                if (xe) {                               // R G
-                    r = RAW(x,y);
-                    g = (RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25;
-                    b = (RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25;
-                } else {                                // G B
-                    g = RAW(x,y);
-                    r = (RAW(x-1,y)+RAW(x+1,y))*0.5;
-                    b = (RAW(x,y-1)+RAW(x,y+1))*0.5;
-                }
-            } else {
-                if (xe) {                               // G R
-                    g = RAW(x,y);
-                    r = (RAW(x,y-1)+RAW(x,y+1))*0.5;
-                    b = (RAW(x-1,y)+RAW(x+1,y))*0.5;
-                } else {                                // B G
-                    b = RAW(x,y);
-                    g = (RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25;
-                    r = (RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25;
-                }
-            }
-            break;
-
-        // TODO: 2 = GBRG, 3 = GRBG if your camera uses them
-        default:
-            r = g = b = 0.0;
-            break;
+    // BGGR --------------------------------------------------
+    case 0u:
+        if(ye){
+            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+        }else{
+            if(xe){ g=RAW(x,y); b=(RAW(x,y-1)+RAW(x,y+1))*0.5; r=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
+            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+        }
+        break;
+    // RGGB --------------------------------------------------
+    case 1u:
+        if(ye){
+            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+        }else{
+            if(xe){ g=RAW(x,y); r=(RAW(x,y-1)+RAW(x,y+1))*0.5; b=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
+            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+        }
+        break;
+    // GBRG --------------------------------------------------
+    case 2u:
+        if(ye){
+            if(xe){ g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+        }else{
+            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+        }
+        break;
+    // GRBG --------------------------------------------------
+    case 3u:
+        if(ye){
+            if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+        }else{
+            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+        }
+        break;
     }
 
-    vec3 rgb = vec3(r, g, b);
-
-    // white balance
-    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);
-
-    // colour matrix
-    rgb = pc.colMat * rgb;
-
-    rgb = clamp(rgb, 0.0, 1.0);
-
-    rgb = vec3(toDisplay(rgb.r), toDisplay(rgb.g), toDisplay(rgb.b));
-
-    return rgb;
+    vec3 rgb = vec3(r,g,b);
+    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);           // white balance
+    rgb  = pc.colMat * rgb;                        // sensor → BT.709
+    return clamp(rgb, 0.0, 1.0);
 }
 
-uvec4 packYUV(vec3 rgb0, vec3 rgb1)
-{
-    // BT.709 coefficients
-    const vec3 kr = vec3(0.2126);
-    const vec3 kg = vec3(0.7152);
-    const vec3 kb = vec3(0.0722);
+// sRGB OETF (linear → encoded)
+vec3 encodeSRGB(vec3 v){
+    vec3 lo = v * 12.92;
+    vec3 hi = 1.055 * pow(v, vec3(1.0/2.4)) - 0.055;
+    return mix(hi, lo, lessThanEqual(v, vec3(0.0031308)));
+}
 
-    float y0 = dot(rgb0, vec3(kr.x, kg.x, kb.x));
-    float y1 = dot(rgb1, vec3(kr.x, kg.x, kb.x));
+const vec3 kBT709   = vec3(0.2126, 0.7152, 0.0722);
+const float kUscale = 0.5389;
+const float kVscale = 0.6350;
 
-    float cb = (rgb0.b - y0) * 0.5389 + (rgb1.b - y1) * 0.5389;
-    float cr = (rgb0.r - y0) * 0.6350 + (rgb1.r - y1) * 0.6350;
-    cb = cb * 0.5 + 0.5;
-    cr = cr * 0.5 + 0.5;
+uvec4 packYUV(vec3 a, vec3 b){
+    float y0 = dot(a, kBT709);
+    float y1 = dot(b, kBT709);
+    float u  = kUscale * ((a.b + b.b) - (y0 + y1));
+    float v  = kVscale * ((a.r + b.r) - (y0 + y1));
 
-    if (pc.fullSwing == 0u) {          // studio swing
+    if(pc.fullSwing == 0u){          // studio swing
         y0 = y0 * 876.0 + 64.0;
         y1 = y1 * 876.0 + 64.0;
-        cb = cb * 896.0 + 64.0;
-        cr = cr * 896.0 + 64.0;
-    } else {                           // full swing
+        u  = u  * 448.0 + 512.0;
+        v  = v  * 448.0 + 512.0;
+    }else{                            // full swing
         y0 *= 1023.0;
         y1 *= 1023.0;
-        cb *= 1023.0;
-        cr *= 1023.0;
+        u   = u * 511.5 + 512.0;
+        v   = v * 511.5 + 512.0;
     }
 
-    return uvec4(uint(y0 + 0.5),
-                 uint(cb + 0.5),
-                 uint(y1 + 0.5),
-                 uint(cr + 0.5));
+    return uvec4(uint(y0 + 0.5), uint(u + 0.5), uint(y1 + 0.5), uint(v + 0.5));
 }
 
-// ---------- work-group size ----------
 layout(local_size_x = 32, local_size_y = 16, local_size_z = 1) in;
-
-// ---------- main ----------
-void main()
-{
-    uvec2 gid = gl_GlobalInvocationID.xy;   // one invocation = 2 horizontally-adjacent pixels
-    uint  x0  = gid.x * 2u;
-    uint  y   = gid.y;
-
-    if (x0 >= pc.width || y >= pc.height)
-        return;
-
+void main(){
+    uvec2 gid = gl_GlobalInvocationID.xy;
+    uint x0 = gid.x * 2u;
+    if(x0 >= pc.width || gid.y >= pc.height) return;
     uint x1 = min(x0 + 1u, pc.width - 1u);
 
-    vec3 rgb0 = bayerToRGB(x0, y);
-    vec3 rgb1 = bayerToRGB(x1, y);
+    vec3 rgb0 = encodeSRGB(bayerToRGB(x0, gid.y));
+    vec3 rgb1 = encodeSRGB(bayerToRGB(x1, gid.y));
 
-    uvec4 macropixel = packYUV(rgb0, rgb1);
-    imageStore(yuvImg, ivec2(gid), macropixel);
+    imageStore(yuvImg, ivec2(gid), packYUV(rgb0, rgb1));
 
-#ifdef GL_EXT_debug_print
-    if (gid.x == 0u && gid.y == 0u) {
-        debugPrintfEXT("GPU first macro-pixel: Y0=%u U=%u Y1=%u V=%u\n",
-                       macropixel.x, macropixel.y, macropixel.z, macropixel.w);
-    }
-    if (gid.x == 500u && gid.y == 500u) {
-        debugPrintfEXT("MP500 y0=%u u=%u y1=%u v=%u\n",
-                       macropixel.x, macropixel.y, macropixel.z, macropixel.w);
-    }
+#ifdef DEBUG_FIRST_MACRO
+    if(gid.x == 0u && gid.y == 0u)
+        debugPrintfEXT("MP y0=%u u=%u y1=%u v=%u\n", packYUV(rgb0, rgb1).x, packYUV(rgb0, rgb1).y, packYUV(rgb0, rgb1).z, packYUV(rgb0, rgb1).w);
 #endif
 }
