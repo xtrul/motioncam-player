@@ -7,79 +7,135 @@ layout(binding = 1, r16ui) writeonly uniform uimage2D yPlane;
 layout(binding = 2, r16ui) writeonly uniform uimage2D uPlane;
 layout(binding = 3, r16ui) writeonly uniform uimage2D vPlane;
 
-struct ConvertInfo {
+layout(push_constant) uniform PushConsts {
     int width;
     int height;
-    int rowPitch;
-    int _pad;
-};
-
-struct ColorPC {
-    vec3 wb;
-    float colorMat[9];
-};
-
-layout(push_constant) uniform PushConsts {
-    ConvertInfo ci;
-    ColorPC     cp;
+    int black;
+    int white;
+    int cfaType;
+    vec3 asShotNeutral;
+    float colorMatrix[9];
 } pc;
 
+const float kYmul = 876.0;
+const float kCmul = 896.0;
+const float kYoff = 64.0;
+const float kCoff = 512.0;
+const mat3 kRGB2YUV = mat3(
+    0.183,  0.614,  0.062,
+   -0.101, -0.339,  0.439,
+    0.439, -0.399, -0.040
+);
+
+float srgb_eotf(float v){
+    v = clamp(v,0.0,1.0);
+    return (v <= 0.0031308) ? v*12.92 : 1.055*pow(v,1.0/2.4) - 0.055;
+}
+
 uint readU16(int x,int y){
-    x = clamp(x,0,pc.ci.width-1);
-    y = clamp(y,0,pc.ci.height-1);
+    x = clamp(x,0,pc.width-1);
+    y = clamp(y,0,pc.height-1);
     return texelFetch(rawImage, ivec2(x,y),0).r;
 }
 
-vec3 lin2rgb(int x,int y){
-    bool ye = (y & 1) == 0;
-    bool xe = (x & 1) == 0;
-    float val = float(readU16(x,y)) / 1023.0;
-    if(ye){
-        if(xe) return vec3(0.0,0.0,val);      // B
-        else   return vec3(0.0,val,0.0);      // G
-    }else{
-        if(xe) return vec3(0.0,val,0.0);      // G
-        else   return vec3(val,0.0,0.0);      // R
-    }
+float linearise(uint v){
+    float t = (float(v) - float(pc.black)) / float(pc.white - pc.black);
+    return clamp(t,0.0,1.0);
 }
 
-vec3 rgb2yuv(vec3 rgb){
-    const mat3 M = mat3( 0.2126,  0.7152,  0.0722,
-                        -0.1146, -0.3854,  0.5000,
-                         0.5000, -0.4542, -0.0458);
-    vec3 yuv = M * rgb;
-    yuv.x = clamp(yuv.x * 1023.0, 0.0, 1023.0);
-    yuv.yz = yuv.yz * 1023.0 + vec2(512.0);
-    return yuv;
+float interpG(int x,int y){return 0.25*(linearise(readU16(x+1,y))+linearise(readU16(x-1,y))+linearise(readU16(x,y+1))+linearise(readU16(x,y-1)));}
+float interpH(int x,int y){return 0.5*(linearise(readU16(x+1,y))+linearise(readU16(x-1,y)));}
+float interpV(int x,int y){return 0.5*(linearise(readU16(x,y+1))+linearise(readU16(x,y-1)));}
+float interpD(int x,int y){return 0.25*(linearise(readU16(x+1,y+1))+linearise(readU16(x-1,y+1))+linearise(readU16(x+1,y-1))+linearise(readU16(x-1,y-1)));}
+
+vec3 demosaic(int x,int y){
+    bool ye = (y&1)==0;
+    bool xe = (x&1)==0;
+    float r=0.0,g=0.0,b=0.0;
+    int cfa = pc.cfaType;
+    if(cfa==0){
+        if(ye){
+            if(xe){ b=linearise(readU16(x,y)); g=interpG(x,y); r=interpD(x,y); }
+            else { g=linearise(readU16(x,y)); r=interpV(x,y); b=interpH(x,y); }
+        }else{
+            if(xe){ g=linearise(readU16(x,y)); r=interpH(x,y); b=interpV(x,y); }
+            else { r=linearise(readU16(x,y)); g=interpG(x,y); b=interpD(x,y); }
+        }
+    }else if(cfa==1){
+        if(ye){
+            if(xe){ r=linearise(readU16(x,y)); g=interpG(x,y); b=interpD(x,y); }
+            else { g=linearise(readU16(x,y)); r=interpH(x,y); b=interpV(x,y); }
+        }else{
+            if(xe){ g=linearise(readU16(x,y)); r=interpV(x,y); b=interpH(x,y); }
+            else { b=linearise(readU16(x,y)); g=interpG(x,y); r=interpD(x,y); }
+        }
+    }else if(cfa==2){
+        if(ye){
+            if(xe){ g=linearise(readU16(x,y)); r=interpV(x,y); b=interpH(x,y); }
+            else { b=linearise(readU16(x,y)); g=interpG(x,y); r=interpD(x,y); }
+        }else{
+            if(xe){ r=linearise(readU16(x,y)); g=interpG(x,y); b=interpD(x,y); }
+            else { g=linearise(readU16(x,y)); r=interpH(x,y); b=interpV(x,y); }
+        }
+    }else{
+        if(ye){
+            if(xe){ g=linearise(readU16(x,y)); r=interpH(x,y); b=interpV(x,y); }
+            else { r=linearise(readU16(x,y)); g=interpG(x,y); b=interpD(x,y); }
+        }else{
+            if(xe){ b=linearise(readU16(x,y)); g=interpG(x,y); r=interpD(x,y); }
+            else { g=linearise(readU16(x,y)); r=interpV(x,y); b=interpH(x,y); }
+        }
+    }
+    return vec3(r,g,b);
 }
 
 void main(){
     ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
     int x0 = gid.x * 2;
-    int y  = gid.y;
-    if(x0 >= pc.ci.width || y >= pc.ci.height) return;
+    int y = gid.y;
+    if(x0 >= pc.width || y >= pc.height) return;
+    int x1 = min(x0+1, pc.width-1);
 
-    vec3 rgb0 = lin2rgb(x0,   y);
-    vec3 rgb1 = lin2rgb(x0+1, y);
+    vec3 rgb0 = demosaic(x0,y);
+    vec3 rgb1 = demosaic(x1,y);
 
-    mat3 C = mat3(
-        pc.cp.colorMat[0], pc.cp.colorMat[3], pc.cp.colorMat[6],
-        pc.cp.colorMat[1], pc.cp.colorMat[4], pc.cp.colorMat[7],
-        pc.cp.colorMat[2], pc.cp.colorMat[5], pc.cp.colorMat[8]
+    float gainR = (pc.asShotNeutral.y > 1e-6 && pc.asShotNeutral.x > 1e-6) ? pc.asShotNeutral.y / pc.asShotNeutral.x : 1.0;
+    float gainB = (pc.asShotNeutral.y > 1e-6 && pc.asShotNeutral.z > 1e-6) ? pc.asShotNeutral.y / pc.asShotNeutral.z : 1.0;
+
+    rgb0 = vec3(rgb0.r * gainR, rgb0.g, rgb0.b * gainB);
+    rgb1 = vec3(rgb1.r * gainR, rgb1.g, rgb1.b * gainB);
+
+    mat3 ccm = mat3(
+        pc.colorMatrix[0], pc.colorMatrix[3], pc.colorMatrix[6],
+        pc.colorMatrix[1], pc.colorMatrix[4], pc.colorMatrix[7],
+        pc.colorMatrix[2], pc.colorMatrix[5], pc.colorMatrix[8]
     );
-    rgb0 = C * (rgb0 * pc.cp.wb);
-    rgb1 = C * (rgb1 * pc.cp.wb);
+    rgb0 = ccm * rgb0;
+    rgb1 = ccm * rgb1;
 
-    vec3 yuv0 = rgb2yuv(rgb0);
-    vec3 yuv1 = rgb2yuv(rgb1);
+    rgb0 = clamp(rgb0,0.0,1.0);
+    rgb1 = clamp(rgb1,0.0,1.0);
 
-    uint y0 = uint(yuv0.x);
-    uint y1 = uint(yuv1.x);
-    uint u0 = uint(yuv0.y);
-    uint v0 = uint(yuv0.z);
+    rgb0 = vec3(srgb_eotf(rgb0.r), srgb_eotf(rgb0.g), srgb_eotf(rgb0.b));
+    rgb1 = vec3(srgb_eotf(rgb1.r), srgb_eotf(rgb1.g), srgb_eotf(rgb1.b));
+
+    vec3 yuv0 = kRGB2YUV * rgb0;
+    vec3 yuv1 = kRGB2YUV * rgb1;
+
+    float Y0 = yuv0.x * kYmul + kYoff;
+    float U0 = yuv0.y * kCmul + kCoff;
+    float V0 = yuv0.z * kCmul + kCoff;
+    float Y1 = yuv1.x * kYmul + kYoff;
+    float U1 = yuv1.y * kCmul + kCoff;
+    float V1 = yuv1.z * kCmul + kCoff;
+
+    uint y0 = uint(clamp(round(Y0),0.0,1023.0));
+    uint y1 = uint(clamp(round(Y1),0.0,1023.0));
+    uint uVal = uint(clamp(round((U0+U1)*0.5),0.0,1023.0));
+    uint vVal = uint(clamp(round((V0+V1)*0.5),0.0,1023.0));
 
     imageStore(yPlane, ivec2(x0,y), uvec4(y0,0,0,0));
-    imageStore(yPlane, ivec2(x0+1,y), uvec4(y1,0,0,0));
-    imageStore(uPlane, ivec2(x0/2,y), uvec4(u0,0,0,0));
-    imageStore(vPlane, ivec2(x0/2,y), uvec4(v0,0,0,0));
+    imageStore(yPlane, ivec2(x1,y), uvec4(y1,0,0,0));
+    imageStore(uPlane, ivec2(x0/2,y), uvec4(uVal,0,0,0));
+    imageStore(vPlane, ivec2(x0/2,y), uvec4(vVal,0,0,0));
 }

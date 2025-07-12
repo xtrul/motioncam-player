@@ -60,7 +60,7 @@ bool GpuYuvConverter::init(int width, int height) {
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = sizeof(ConvertInfo) + sizeof(ColorPC);
+    pcRange.size = sizeof(int) * 5 + sizeof(float) * 12;
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -383,21 +383,22 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
 
-    ConvertInfo ci{};
-    ci.width = width;
-    ci.height = height;
-    ci.rowPitch = width * 2;
-
-    ColorPC pc{};
-    for(int i=0;i<3;++i) pc.wb[i] = params.asShotNeutral[i];
-    for(int i=0;i<9;++i) pc.colorMat[i] = params.colorMatrix[i];
-
-    struct PushAll { ConvertInfo ci; ColorPC pc; } push{};
-    push.ci = ci;
-    push.pc = pc;
-    LogProRes("[GPU] push wb=" + std::to_string(push.pc.wb[0]) + "," + std::to_string(push.pc.wb[1]) + "," + std::to_string(push.pc.wb[2]) +
-               " cm00=" + std::to_string(push.pc.colorMat[0]));
-    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushAll), &push);
+    struct Push {
+        int w;
+        int h;
+        int black;
+        int white;
+        int cfa;
+        float asn[3];
+        float ccm[9];
+    } push{};
+    push.w = width; push.h = height;
+    push.black = params.black;
+    push.white = params.white;
+    push.cfa = params.cfaType;
+    for(int i=0;i<3;++i) push.asn[i] = params.asShotNeutral[i];
+    for(int i=0;i<9;++i) push.ccm[i] = params.colorMatrix[i];
+    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
