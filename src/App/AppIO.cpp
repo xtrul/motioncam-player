@@ -1443,13 +1443,13 @@ void App::exportCurrentClipToProRes() {
         cpParams.saturation = 1.0f;
 
         float wb[3] = { cpParams.gainR, cpParams.gainG, cpParams.gainB };
-        const float rgb2yuvBase[9] = {
+        const float colourBase[9] = {
             0.183f, 0.614f, 0.062f,
            -0.101f,-0.339f, 0.439f,
             0.439f,-0.399f,-0.040f
         };
-        float rgb2yuv[9];
-        for(int i=0;i<9;++i) rgb2yuv[i] = rgb2yuvBase[i];
+        float colourMatrix[9];
+        for(int i=0;i<9;++i) colourMatrix[i] = colourBase[i];
 
         {
             std::ostringstream oss;
@@ -1489,7 +1489,7 @@ void App::exportCurrentClipToProRes() {
             t0 = t1;
             if (gpuActive) {
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                converter.convertToFrame(asU16(raw), width, height, frame, wb, rgb2yuv);
+                converter.convertToFrame(asU16(raw), width, height, frame, wb, colourMatrix);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             } else {
@@ -1503,6 +1503,15 @@ void App::exportCurrentClipToProRes() {
                 sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
                 t1 = std::chrono::steady_clock::now();
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+#ifdef DEBUG_YUV_VALIDATE
+                if(idx==0){
+                    uint16_t y0 = *reinterpret_cast<const uint16_t*>(frame->data[0]);
+                    uint16_t y1 = *reinterpret_cast<const uint16_t*>(frame->data[0] + 2);
+                    uint16_t u0 = *reinterpret_cast<const uint16_t*>(frame->data[1]);
+                    uint16_t v0 = *reinterpret_cast<const uint16_t*>(frame->data[2]);
+                    std::ostringstream oss; oss << "[CPU-CHECK] (0,0) Y0=" << y0 << " U=" << u0 << " Y1=" << y1 << " V=" << v0; LogProRes(oss.str());
+                }
+#endif
             }
 
             frame->pts = pts;

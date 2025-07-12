@@ -18,7 +18,7 @@ public:
     void cleanup();
 
     bool convertToFrame(const uint16_t* raw, int width, int height, AVFrame* frame,
-                        const float wbGains[3], const float rgb2yuv[9]);
+                        const float wbGains[3], const float colourMatrix[9]);
 private:
     Renderer_VK* m_renderer;
 
