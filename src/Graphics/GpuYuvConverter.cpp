@@ -3,25 +3,11 @@
 #include "Graphics/VulkanHelpers.h"
 #include "Graphics/ImageResource.h"
 #include "Utils/DebugLog.h"
-#include "Utils/ColorPipelineCPU.h"
 #include <vector>
 #include <filesystem>
 #include <chrono>
 
 extern std::string g_AppBasePath;
-
-struct PushConsts {
-    int width;
-    int height;
-    int cfaType;
-    float blackLevel;
-    float invRange;
-    float gainR;
-    float gainG;
-    float gainB;
-    float ccm[12]; // 3x4 to match std430 alignment of mat3
-    float saturation;
-};
 
 GpuYuvConverter::GpuYuvConverter(Renderer_VK* renderer)
     : m_renderer(renderer) {}
@@ -70,7 +56,7 @@ bool GpuYuvConverter::init(int width, int height) {
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = sizeof(PushConsts);
+    pcRange.size = sizeof(int) * 2;
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -262,7 +248,6 @@ void GpuYuvConverter::cleanup() {
 }
 
 bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         const CPUColorParams& params,
                                          std::vector<uint16_t>& outPacked) {
     LogProRes("[GPU] convertAndReadback invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
@@ -380,27 +365,8 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
 
-    PushConsts pc{};
-    pc.width = width;
-    pc.height = height;
-    pc.cfaType = params.cfaType;
-    pc.blackLevel = static_cast<float>(params.blackLevel);
-    pc.invRange = (params.whiteLevel - params.blackLevel != 0.0) ?
-                   static_cast<float>(1.0 / (params.whiteLevel - params.blackLevel)) : 1.0f;
-    pc.gainR = params.gainR;
-    pc.gainG = params.gainG;
-    pc.gainB = params.gainB;
-    for (int c = 0; c < 3; ++c) {
-        for (int r = 0; r < 3; ++r) {
-            // GLSL matrices are column-major; transpose the row-major CPU
-            // matrix when packing push constants
-            pc.ccm[c*4 + r] = params.ccm[r*3 + c];
-        }
-        pc.ccm[c*4 + 3] = 0.0f; // padding per column
-    }
-    pc.saturation = params.saturation;
-    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT,
-                       0, sizeof(PushConsts), &pc);
+    struct Push { int w; int h; } push{ width, height };
+    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");

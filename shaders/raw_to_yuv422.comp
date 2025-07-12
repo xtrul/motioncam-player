@@ -8,19 +8,7 @@ layout(binding = 1, rgba16ui) writeonly uniform uimage2D yuvImage;
 layout(push_constant) uniform PushConsts {
     int width;
     int height;
-    int cfaType;
-    float blackLevel;
-    float invRange;
-    float gainR;
-    float gainG;
-    float gainB;
-    mat3 ccm;
-    float saturation;
 } pc;
-
-float linFromRaw(uint v) {
-    return clamp((float(v) - pc.blackLevel) * pc.invRange, 0.0, 1.0);
-}
 
 uint readU16(int x, int y) {
     x = clamp(x, 0, pc.width - 1);
@@ -28,54 +16,15 @@ uint readU16(int x, int y) {
     return texelFetch(rawImage, ivec2(x, y), 0).r;
 }
 
-float lin(int x,int y){ return linFromRaw(readU16(x,y)); }
-float interpG(int x,int y){ return 0.25*(lin(x+1,y)+lin(x-1,y)+lin(x,y+1)+lin(x,y-1)); }
-float interpH(int x,int y){ return 0.5*(lin(x+1,y)+lin(x-1,y)); }
-float interpV(int x,int y){ return 0.5*(lin(x,y+1)+lin(x,y-1)); }
-float interpD(int x,int y){ return 0.25*(lin(x+1,y+1)+lin(x-1,y+1)+lin(x+1,y-1)+lin(x-1,y-1)); }
-
-float srgb_eotf(float v){ v = clamp(v,0.0,1.0); return (v<=0.0031308)? v*12.92 : 1.055*pow(v,1.0/2.4)-0.055; }
-
-vec3 processPixel(int x,int y){
-    bool ye = (y%2)==0;
-    bool xe = (x%2)==0;
-    float r=0.0,g=0.0,b=0.0;
-    if(pc.cfaType==0){
-        if(ye){ if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); } else { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); } }
-        else{ if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); } else { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); } }
-    }else if(pc.cfaType==1){
-        if(ye){ if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); } else { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); } }
-        else{ if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); } else { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); } }
-    }else if(pc.cfaType==2){
-        if(ye){ if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); } else { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); } }
-        else{ if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); } else { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); } }
-    }else{
-        if(ye){ if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); } else { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); } }
-        else{ if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); } else { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); } }
-    }
-    vec3 wb = clamp(vec3(r,g,b) * vec3(pc.gainR, pc.gainG, pc.gainB), 0.0, 1.0);
-    vec3 cc = clamp(pc.ccm * wb, 0.0, 1.0);
-    float lum = dot(cc, vec3(0.2126,0.7152,0.0722));
-    vec3 sat = mix(vec3(lum), cc, pc.saturation);
-    return vec3(srgb_eotf(sat.r), srgb_eotf(sat.g), srgb_eotf(sat.b));
-}
-
-void main(){
+void main() {
     ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
     int x0 = gid.x * 2;
     int y = gid.y;
-    if(x0 >= pc.width || y >= pc.height) return;
+    if (x0 >= pc.width || y >= pc.height) return;
     int x1 = x0 + 1;
-    vec3 rgb0 = processPixel(x0, y);
-    vec3 rgb1 = (x1 < pc.width) ? processPixel(x1, y) : rgb0;
-    float y0 = clamp(0.2126*rgb0.r + 0.7152*rgb0.g + 0.0722*rgb0.b, 0.0, 1.0);
-    float y1 = clamp(0.2126*rgb1.r + 0.7152*rgb1.g + 0.0722*rgb1.b, 0.0, 1.0);
-    vec3 avg = 0.5*(rgb0 + rgb1);
-    float u = clamp((avg.b - (0.2126*avg.r + 0.7152*avg.g + 0.0722*avg.b))/1.8556 + 0.5, 0.0, 1.0);
-    float v = clamp((avg.r - (0.2126*avg.r + 0.7152*avg.g + 0.0722*avg.b))/1.5748 + 0.5, 0.0, 1.0);
-    uint Y0 = uint(y0 * 1023.0 + 0.5);
-    uint Y1 = uint(y1 * 1023.0 + 0.5);
-    uint U = uint(u * 1023.0 + 0.5);
-    uint V = uint(v * 1023.0 + 0.5);
-    imageStore(yuvImage, gid, uvec4(Y0, U, Y1, V));
+    uint y0 = readU16(x0, y) >> 6;
+    uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
+    uint u = 512u;
+    uint v = 512u;
+    imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
 }
