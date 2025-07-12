@@ -1435,6 +1435,8 @@ void App::exportCurrentClipToProRes() {
         GpuColorParams gpuParams{};
         gpuParams.cfaType = m_cfaTypeFromMetadata;
         gpuParams.fullSwing = 0;
+        gpuParams.black = static_cast<unsigned int>(m_staticBlack);
+        gpuParams.white = static_cast<unsigned int>(m_staticWhite);
 
         auto asn_json = meta.value("asShotNeutral", std::vector<double>{1.0,1.0,1.0});
         if (asn_json.size() >= 3) {

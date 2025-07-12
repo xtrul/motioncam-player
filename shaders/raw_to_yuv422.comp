@@ -16,10 +16,26 @@ layout(push_constant, scalar) uniform PC {
     uint   fullSwing;            // 0=studio 64-940  1=full 0-1023
     float  wbR, wbG, wbB;        // white-balance gains
     mat3   colMat;               // sensor→BT.709 matrix
+    uint   black;                // black level
+    uint   white;                // white level
 } pc;
 
 // ---------- helper macros ----------
-#define RAW(xx,yy) ( float(imageLoad(rawImg, ivec2(int(xx), int(yy))).r) / 1023.0 )
+#define READ_RAW(xx,yy) uint(imageLoad(rawImg, ivec2(int(xx), int(yy))).r)
+
+float linFromRaw(uint v)
+{
+    return clamp((float(v) - float(pc.black)) /
+                 float(pc.white - pc.black), 0.0, 1.0);
+}
+
+#define RAW(xx,yy) linFromRaw(READ_RAW(xx,yy))
+
+float toDisplay(float x)
+{
+    return (x <= 0.04045) ? x/12.92
+                          : pow((x+0.055)/1.055, 2.4);
+}
 
 // ---------- functions ----------
 vec3 bayerToRGB(uint x, uint y)
@@ -95,7 +111,11 @@ vec3 bayerToRGB(uint x, uint y)
     // colour matrix
     rgb = pc.colMat * rgb;
 
-    return clamp(rgb, 0.0, 1.0);
+    rgb = clamp(rgb, 0.0, 1.0);
+
+    rgb = vec3(toDisplay(rgb.r), toDisplay(rgb.g), toDisplay(rgb.b));
+
+    return rgb;
 }
 
 uvec4 packYUV(vec3 rgb0, vec3 rgb1)
@@ -108,25 +128,27 @@ uvec4 packYUV(vec3 rgb0, vec3 rgb1)
     float y0 = dot(rgb0, vec3(kr.x, kg.x, kb.x));
     float y1 = dot(rgb1, vec3(kr.x, kg.x, kb.x));
 
-    float u  = 0.5389 * ((rgb0.b + rgb1.b) - (y0 + y1));
-    float v  = 0.6350 * ((rgb0.r + rgb1.r) - (y0 + y1));
+    float cb = (rgb0.b - y0) * 0.5389 + (rgb1.b - y1) * 0.5389;
+    float cr = (rgb0.r - y0) * 0.6350 + (rgb1.r - y1) * 0.6350;
+    cb = cb * 0.5 + 0.5;
+    cr = cr * 0.5 + 0.5;
 
     if (pc.fullSwing == 0u) {          // studio swing
         y0 = y0 * 876.0 + 64.0;
         y1 = y1 * 876.0 + 64.0;
-        u  = u  * 448.0 + 512.0;
-        v  = v  * 448.0 + 512.0;
+        cb = cb * 896.0 + 64.0;
+        cr = cr * 896.0 + 64.0;
     } else {                           // full swing
         y0 *= 1023.0;
         y1 *= 1023.0;
-        u   = u * 511.5 + 512.0;
-        v   = v * 511.5 + 512.0;
+        cb *= 1023.0;
+        cr *= 1023.0;
     }
 
     return uvec4(uint(y0 + 0.5),
-                 uint(u  + 0.5),
+                 uint(cb + 0.5),
                  uint(y1 + 0.5),
-                 uint(v  + 0.5));
+                 uint(cr + 0.5));
 }
 
 // ---------- work-group size ----------
@@ -153,6 +175,10 @@ void main()
 #ifdef GL_EXT_debug_print
     if (gid.x == 0u && gid.y == 0u) {
         debugPrintfEXT("GPU first macro-pixel: Y0=%u U=%u Y1=%u V=%u\n",
+                       macropixel.x, macropixel.y, macropixel.z, macropixel.w);
+    }
+    if (gid.x == 500u && gid.y == 500u) {
+        debugPrintfEXT("MP500 y0=%u u=%u y1=%u v=%u\n",
                        macropixel.x, macropixel.y, macropixel.z, macropixel.w);
     }
 #endif
