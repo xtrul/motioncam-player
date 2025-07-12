@@ -23,6 +23,10 @@
 #include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <array>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 #include <fstream>
 #include <numeric>
 #include <algorithm>
@@ -33,13 +37,14 @@
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
 #endif
+#include "App/ProResExport.h"
 #include "Utils/ColorPipelineCPU.h"
 
 namespace fs = std::filesystem;
 
-#ifdef ENABLE_PRORES_EXPORT
-static bool g_useGpuProRes = false;
-#endif
+bool g_useGpuProRes = false;
+bool g_gpuAsyncExport = false;
+
 namespace {
     bool writeDngInternal(
         const std::string& outputPath,
@@ -1212,6 +1217,7 @@ void App::exportCurrentClipToProRes() {
     bool useGpu = g_useGpuProRes;
     m_proResThread = std::thread([this, outputPath, useGpu]() {
         av_log_set_level(AV_LOG_ERROR);
+        gPerf = {};
         LogProRes("[ProResExport] Thread started");
         LogProRes(std::string("[ProResExport] MODE = ") + (useGpu ? "GPU (Vulkan hw_frames)" : "CPU (swscale)"));
 
@@ -1482,6 +1488,57 @@ void App::exportCurrentClipToProRes() {
 
         std::vector<uint8_t> rgbBuf;
         int64_t pts = 0;
+
+        const bool asyncGpu = gpuActive && g_gpuAsyncExport;
+        std::array<AVFrame*, GpuYuvConverter::kAsyncBuffers> asyncFrames{};
+        std::array<int64_t, GpuYuvConverter::kAsyncBuffers> slotPts{};
+        if(asyncGpu){
+            for(int i=0;i<GpuYuvConverter::kAsyncBuffers;++i){
+                asyncFrames[i] = av_frame_alloc();
+                asyncFrames[i]->format = AV_PIX_FMT_YUV422P10LE;
+                asyncFrames[i]->width = width;
+                asyncFrames[i]->height = height;
+                av_frame_get_buffer(asyncFrames[i], 0);
+            }
+        }
+        std::mutex qMutex;
+        std::condition_variable qCv;
+        std::queue<int> q;
+        bool done=false;
+        std::thread worker;
+        if(asyncGpu){
+            worker = std::thread([&](){
+                while(true){
+                    std::unique_lock<std::mutex> lk(qMutex);
+                    qCv.wait(lk,[&]{ return !q.empty() || done; });
+                    if(q.empty() && done) break;
+                    int s = q.front(); q.pop(); lk.unlock();
+                    AVFrame* f = asyncFrames[s];
+                    auto t0 = std::chrono::steady_clock::now();
+                    converter.completeAsync(s,f);
+                    auto t1 = std::chrono::steady_clock::now();
+                    gPerf.gpuMs += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()/1000.0;
+                    f->pts = slotPts[s];
+                    t0 = std::chrono::steady_clock::now();
+                    if(avcodec_send_frame(vctx,f)>=0){
+                        while(avcodec_receive_packet(vctx,&pkt)==0){
+                            pkt.stream_index = vstream->index;
+                            pkt.duration = 1;
+                            pkt.pts = av_rescale_q(pkt.pts,vctx->time_base,vstream->time_base);
+                            pkt.dts = pkt.pts;
+                            auto ioStart = std::chrono::steady_clock::now();
+                            av_interleaved_write_frame(fmt,&pkt);
+                            auto ioEnd = std::chrono::steady_clock::now();
+                            gPerf.ioMs += std::chrono::duration_cast<std::chrono::microseconds>(ioEnd-ioStart).count()/1000.0;
+                            av_packet_unref(&pkt); gPerf.frames++; ++framesEncoded;
+                        }
+                    }
+                    auto t2 = std::chrono::steady_clock::now();
+                    gPerf.encMs += std::chrono::duration_cast<std::chrono::microseconds>(t2 - t0).count()/1000.0;
+                }
+            });
+        }
+
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
             nlohmann::json metaTmp;
@@ -1493,10 +1550,23 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-                if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                converter.convertToFrame(asU16(raw), width, height, frame, gpuParams);
-                t1 = std::chrono::steady_clock::now();
-                rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                if(asyncGpu){
+                    int slot=0;
+                    converter.beginAsync(asU16(raw), gpuParams, slot);
+                    slotPts[slot]=pts;
+                    {
+                        std::lock_guard<std::mutex> lk(qMutex);
+                        q.push(slot);
+                    }
+                    qCv.notify_one();
+                    t1 = std::chrono::steady_clock::now();
+                    rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                } else {
+                    if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
+                    converter.convertToFrame(asU16(raw), width, height, frame, gpuParams);
+                    t1 = std::chrono::steady_clock::now();
+                    rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                }
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();
@@ -1510,23 +1580,30 @@ void App::exportCurrentClipToProRes() {
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             }
 
-            frame->pts = pts;
-            pts++;
-
-            t0 = std::chrono::steady_clock::now();
-            if (avcodec_send_frame(vctx, frame) < 0) { m_proResStatus.errorMsg = "send_frame failed"; break; }
-            while (avcodec_receive_packet(vctx, &pkt) == 0) {
-                pkt.stream_index = vstream->index;
-                pkt.duration = 1;
-                pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
-                pkt.dts = pkt.pts;
-                if (av_interleaved_write_frame(fmt, &pkt) < 0) { m_proResStatus.errorMsg = "write_frame failed"; av_packet_unref(&pkt); break; }
-                av_packet_unref(&pkt);
-                ++framesEncoded;
+            if(!asyncGpu){
+                frame->pts = pts;
+                pts++;
+                t0 = std::chrono::steady_clock::now();
+                if (avcodec_send_frame(vctx, frame) < 0) { m_proResStatus.errorMsg = "send_frame failed"; break; }
+                while (avcodec_receive_packet(vctx, &pkt) == 0) {
+                    pkt.stream_index = vstream->index;
+                    pkt.duration = 1;
+                    pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
+                    pkt.dts = pkt.pts;
+                    auto ioStart = std::chrono::steady_clock::now();
+                    if (av_interleaved_write_frame(fmt, &pkt) < 0) { m_proResStatus.errorMsg = "write_frame failed"; av_packet_unref(&pkt); break; }
+                    auto ioEnd = std::chrono::steady_clock::now();
+                    gPerf.ioMs += std::chrono::duration_cast<std::chrono::microseconds>(ioEnd-ioStart).count()/1000.0;
+                    av_packet_unref(&pkt);
+                    ++framesEncoded; gPerf.frames++;
+                }
+                t1 = std::chrono::steady_clock::now();
+                gPerf.encMs += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()/1000.0;
+                m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
+            } else {
+                pts++;
+                m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
             }
-            t1 = std::chrono::steady_clock::now();
-            encodeUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-            m_proResStatus.currentFrame.store(static_cast<int>(idx + 1));
             if ((idx + 1) % 50 == 0) {
                 auto now = std::chrono::steady_clock::now();
                 auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - encodeStart).count();
@@ -1535,6 +1612,14 @@ void App::exportCurrentClipToProRes() {
                      << " elapsed=" << ms << "ms";
                 LogProRes(prog.str());
             }
+        }
+
+        if(asyncGpu){
+            {
+                std::lock_guard<std::mutex> lk(qMutex); done = true; }
+            qCv.notify_all();
+            worker.join();
+            for(auto* f: asyncFrames) av_frame_free(&f);
         }
 
         // Encode audio
@@ -1649,6 +1734,19 @@ void App::exportCurrentClipToProRes() {
         if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
         avcodec_free_context(&vctx);
         avformat_free_context(fmt);
+        if(!asyncGpu) av_frame_free(&frame);
+
+        if(gPerf.frames>0){
+            std::ostringstream pmsg;
+            pmsg << "[PERF] gpu=" << std::fixed << std::setprecision(2) << (gPerf.gpuMs/gPerf.frames)
+                 << "ms enc=" << (gPerf.encMs/gPerf.frames)
+                 << "ms io=" << (gPerf.ioMs/gPerf.frames) << "ms";
+            LogProRes(pmsg.str());
+            double totalSec = (encodeEnd - encodeStart).count()/1000.0/1000.0;
+            std::ostringstream fps;
+            fps << "[PERF] avg " << std::fixed << std::setprecision(1) << (gPerf.frames/totalSec) << "fps";
+            LogProRes(fps.str());
+        }
 
         if (m_proResStatus.errorMsg.empty()) {
             showActionMessage("Export Finished");
