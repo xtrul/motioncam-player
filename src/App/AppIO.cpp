@@ -1442,6 +1442,15 @@ void App::exportCurrentClipToProRes() {
         }
         cpParams.saturation = 1.0f;
 
+        float wb[3] = { cpParams.gainR, cpParams.gainG, cpParams.gainB };
+        const float rgb2yuvBase[9] = {
+            0.183f, 0.614f, 0.062f,
+           -0.101f,-0.339f, 0.439f,
+            0.439f,-0.399f,-0.040f
+        };
+        float rgb2yuv[9];
+        for(int i=0;i<9;++i) rgb2yuv[i] = rgb2yuvBase[i];
+
         {
             std::ostringstream oss;
             oss << "[ProResExport] Metadata: black=" << cpParams.blackLevel
@@ -1467,7 +1476,6 @@ void App::exportCurrentClipToProRes() {
         AVPacket pkt{};
 
         std::vector<uint8_t> rgbBuf;
-        std::vector<uint16_t> gpuBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
             RawBytes raw;
@@ -1480,44 +1488,10 @@ void App::exportCurrentClipToProRes() {
 
             t0 = t1;
             if (gpuActive) {
-			converter.convertAndReadback(asU16(raw), width, height, gpuBuf);
+                if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
+                converter.convertToFrame(asU16(raw), width, height, frame, wb, rgb2yuv);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-                if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-
-                /*  ✅  FINAL, CORRECT GPU->planar unpack  */
-                for (int y = 0; y < height; ++y) {
-                    auto* yRow = reinterpret_cast<uint16_t*>(frame->data[0] + y * frame->linesize[0]);
-                    auto* uRow = reinterpret_cast<uint16_t*>(frame->data[1] + y * frame->linesize[1]);
-                    auto* vRow = reinterpret_cast<uint16_t*>(frame->data[2] + y * frame->linesize[2]);
-
-                    size_t srcBase = static_cast<size_t>(y) * (width / 2) * 4;   /* 4×u16 per 2-pixel group */
-                    for (int x = 0; x < width; x += 2) {
-                        size_t src = srcBase + (x >> 1) * 4;
-                        uint16_t y0 = gpuBuf[src + 0];   /* Y0 */
-                        uint16_t u  = gpuBuf[src + 1];   /* U  */
-                        uint16_t y1 = gpuBuf[src + 2];   /* Y1 */
-                        uint16_t v  = gpuBuf[src + 3];   /* V  */
-
-                        yRow[x    ] = y0 << 6;           /* 10-bit → 16-bit */
-                        yRow[x + 1] = y1 << 6;
-                        uRow[x >> 1] = u << 6;
-                        vRow[x >> 1] = v << 6;
-                    }
-                }
-
-                /*  one-time sanity log without yPlane/uPlane/vPlane symbols  */
-                if (idx == 0) {
-                    const uint16_t* yDbg = reinterpret_cast<const uint16_t*>(frame->data[0]);
-                    const uint16_t* uDbg = reinterpret_cast<const uint16_t*>(frame->data[1]);
-                    const uint16_t* vDbg = reinterpret_cast<const uint16_t*>(frame->data[2]);
-                    std::ostringstream dbg;
-                    dbg << "[GPU] AVFrame first: "
-                        << (yDbg[0] >> 6) << "," << (yDbg[1] >> 6) << ","
-                        << (uDbg[0] >> 6) << "," << (vDbg[0] >> 6);
-                    LogProRes(dbg.str());
-                
-                }
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();

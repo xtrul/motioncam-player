@@ -3,12 +3,26 @@
 layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(binding = 0) uniform usampler2D rawImage;
-layout(binding = 1, rgba16ui) writeonly uniform uimage2D yuvImage;
+layout(binding = 1, r16ui) writeonly uniform uimage2D yPlane;
+layout(binding = 2, r16ui) writeonly uniform uimage2D uPlane;
+layout(binding = 3, r16ui) writeonly uniform uimage2D vPlane;
 
 layout(push_constant) uniform PushConsts {
     int width;
     int height;
+    vec3 wbGains;
+    mat3 rgb2yuv;
 } pc;
+
+const float kYmul = 876.0;
+const float kCmul = 896.0;
+const float kYoff = 64.0;
+const float kCoff = 512.0;
+const mat3 kRGB2YUV = mat3(
+    0.183,  0.614,  0.062,
+   -0.101, -0.339,  0.439,
+    0.439, -0.399, -0.040
+);
 
 uint readU16(int x, int y) {
     x = clamp(x, 0, pc.width - 1);
@@ -16,15 +30,61 @@ uint readU16(int x, int y) {
     return texelFetch(rawImage, ivec2(x, y), 0).r;
 }
 
+vec3 demosaic(int x, int y) {
+    bool ye = (y & 1) == 0;
+    bool xe = (x & 1) == 0;
+    float r = 0.0, g = 0.0, b = 0.0;
+    if (ye) {
+        if (xe) { // B
+            b = float(readU16(x, y));
+            g = 0.25 * (float(readU16(x+1,y)) + float(readU16(x-1,y)) + float(readU16(x,y+1)) + float(readU16(x,y-1)));
+            r = 0.25 * (float(readU16(x+1,y+1)) + float(readU16(x-1,y+1)) + float(readU16(x+1,y-1)) + float(readU16(x-1,y-1)));
+        } else { // G
+            g = float(readU16(x,y));
+            r = 0.5 * (float(readU16(x+1,y)) + float(readU16(x-1,y)));
+            b = 0.5 * (float(readU16(x,y+1)) + float(readU16(x,y-1)));
+        }
+    } else {
+        if (xe) { // G
+            g = float(readU16(x,y));
+            r = 0.5 * (float(readU16(x,y+1)) + float(readU16(x,y-1)));
+            b = 0.5 * (float(readU16(x+1,y)) + float(readU16(x-1,y)));
+        } else { // R
+            r = float(readU16(x,y));
+            g = 0.25 * (float(readU16(x+1,y)) + float(readU16(x-1,y)) + float(readU16(x,y+1)) + float(readU16(x,y-1)));
+            b = 0.25 * (float(readU16(x+1,y+1)) + float(readU16(x-1,y+1)) + float(readU16(x+1,y-1)) + float(readU16(x-1,y-1)));
+        }
+    }
+    return vec3(r,g,b) * pc.wbGains / 1023.0; // assume 10-bit raw
+}
+
 void main() {
     ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
     int x0 = gid.x * 2;
     int y = gid.y;
     if (x0 >= pc.width || y >= pc.height) return;
-    int x1 = x0 + 1;
-    uint y0 = readU16(x0, y) >> 6;
-    uint y1 = (x1 < pc.width) ? (readU16(x1, y) >> 6) : y0;
-    uint u = 512u;
-    uint v = 512u;
-    imageStore(yuvImage, gid, uvec4(y0, u, y1, v));
+    int x1 = min(x0 + 1, pc.width - 1);
+
+    vec3 rgb0 = demosaic(x0, y);
+    vec3 rgb1 = demosaic(x1, y);
+
+    vec3 yuv0 = (pc.rgb2yuv * rgb0) * kRGB2YUV;
+    vec3 yuv1 = (pc.rgb2yuv * rgb1) * kRGB2YUV;
+
+    float Y0 = yuv0.x * kYmul + kYoff;
+    float U0 = yuv0.y * kCmul + kCoff;
+    float V0 = yuv0.z * kCmul + kCoff;
+    float Y1 = yuv1.x * kYmul + kYoff;
+    float U1 = yuv1.y * kCmul + kCoff;
+    float V1 = yuv1.z * kCmul + kCoff;
+
+    uint y0 = uint(clamp(round(Y0), 0.0, 1023.0)) << 6;
+    uint y1 = uint(clamp(round(Y1), 0.0, 1023.0)) << 6;
+    uint uVal = uint(clamp(round((U0+U1)*0.5), 0.0, 1023.0)) << 6;
+    uint vVal = uint(clamp(round((V0+V1)*0.5), 0.0, 1023.0)) << 6;
+
+    imageStore(yPlane, ivec2(x0, y), uvec4(y0,0,0,0));
+    imageStore(yPlane, ivec2(x1, y), uvec4(y1,0,0,0));
+    imageStore(uPlane, ivec2(x0/2, y), uvec4(uVal,0,0,0));
+    imageStore(vPlane, ivec2(x0/2, y), uvec4(vVal,0,0,0));
 }

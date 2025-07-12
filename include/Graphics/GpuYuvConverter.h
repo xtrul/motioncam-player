@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <cstdint>
+#include <libavutil/frame.h>
 #include "Utils/vma_usage.h"
 
 class Renderer_VK;
@@ -16,8 +17,8 @@ public:
     bool init(int width, int height);
     void cleanup();
 
-    bool convertAndReadback(const uint16_t* raw, int width, int height,
-                            std::vector<uint16_t>& outPacked);
+    bool convertToFrame(const uint16_t* raw, int width, int height, AVFrame* frame,
+                        const float wbGains[3], const float rgb2yuv[9]);
 private:
     Renderer_VK* m_renderer;
 
@@ -27,9 +28,9 @@ private:
     VkDescriptorPool m_descPool{VK_NULL_HANDLE};
     VkDescriptorSet m_descSet{VK_NULL_HANDLE};
 
-    VkImage m_yuvImage{VK_NULL_HANDLE};
-    VmaAllocation m_yuvAlloc{VK_NULL_HANDLE};
-    VkImageView m_yuvView{VK_NULL_HANDLE};
+    VkImage m_planeImages[3]{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VmaAllocation m_planeAllocs[3]{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VkImageView m_planeViews[3]{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
 
     VkCommandPool m_cmdPool{VK_NULL_HANDLE};
 
