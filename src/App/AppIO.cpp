@@ -1431,25 +1431,29 @@ void App::exportCurrentClipToProRes() {
         cpParams.cfaType = m_cfaTypeFromMetadata;
         cpParams.blackLevel = m_staticBlack;
         cpParams.whiteLevel = m_staticWhite;
+
+        GpuColorParams gpuParams{};
+        gpuParams.black = m_staticBlack;
+        gpuParams.white = m_staticWhite;
+        gpuParams.cfaType = m_cfaTypeFromMetadata;
+
         auto asn_json = meta.value("asShotNeutral", std::vector<double>{1.0,1.0,1.0});
         if (asn_json.size() >= 3) {
             cpParams.gainR = (asn_json[1] > 1e-6 && asn_json[0] > 1e-6) ? (float)(asn_json[1]/asn_json[0]) : 1.0f;
             cpParams.gainB = (asn_json[1] > 1e-6 && asn_json[2] > 1e-6) ? (float)(asn_json[1]/asn_json[2]) : 1.0f;
+            gpuParams.asShotNeutral[0] = static_cast<float>(asn_json[0]);
+            gpuParams.asShotNeutral[1] = static_cast<float>(asn_json[1]);
+            gpuParams.asShotNeutral[2] = static_cast<float>(asn_json[2]);
         }
         auto ccm_json = meta.value("ColorMatrix2", meta.value("ColorMatrix", std::vector<float>{1,0,0,0,1,0,0,0,1}));
         if (ccm_json.size() == 9) {
-            for(int i=0;i<9;++i) cpParams.ccm[i] = ccm_json[i];
+            for(int i=0;i<9;++i){
+                cpParams.ccm[i] = ccm_json[i];
+                gpuParams.colorMatrix[i] = ccm_json[i];
+            }
         }
         cpParams.saturation = 1.0f;
 
-        float wb[3] = { cpParams.gainR, cpParams.gainG, cpParams.gainB };
-        const float rgb2yuvBase[9] = {
-            0.183f, 0.614f, 0.062f,
-           -0.101f,-0.339f, 0.439f,
-            0.439f,-0.399f,-0.040f
-        };
-        float rgb2yuv[9];
-        for(int i=0;i<9;++i) rgb2yuv[i] = rgb2yuvBase[i];
 
         {
             std::ostringstream oss;
@@ -1489,7 +1493,7 @@ void App::exportCurrentClipToProRes() {
             t0 = t1;
             if (gpuActive) {
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                converter.convertToFrame(asU16(raw), width, height, frame, wb, rgb2yuv);
+                converter.convertToFrame(asU16(raw), width, height, frame, gpuParams);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             } else {
