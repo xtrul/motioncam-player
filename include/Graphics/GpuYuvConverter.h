@@ -9,6 +9,16 @@
 
 class Renderer_VK;
 
+struct GpuColorParams {
+    int width{0};
+    int height{0};
+    int black{0};
+    int white{1023};
+    float asShotNeutral[3]{1.0f,1.0f,1.0f};
+    float colorMatrix[9]{1,0,0,0,1,0,0,0,1};
+    int cfaType{0};
+};
+
 class GpuYuvConverter {
 public:
     explicit GpuYuvConverter(Renderer_VK* renderer);
@@ -17,8 +27,8 @@ public:
     bool init(int width, int height);
     void cleanup();
 
-    bool convertToFrame(const uint16_t* raw, int width, int height, AVFrame* frame,
-                        const float wbGains[3], const float rgb2yuv[9]);
+    bool convertToFrame(const uint16_t* raw, const GpuColorParams& params,
+                        AVFrame* frame);
 private:
     Renderer_VK* m_renderer;
 

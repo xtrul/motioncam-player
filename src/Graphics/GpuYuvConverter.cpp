@@ -59,7 +59,7 @@ bool GpuYuvConverter::init(int width, int height) {
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = sizeof(int) * 2 + sizeof(float) * 3 + sizeof(float) * 9;
+    pcRange.size = sizeof(GpuColorParams);
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -256,10 +256,11 @@ void GpuYuvConverter::cleanup() {
     }
 }
 
-bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
-                                     AVFrame* frame,
-                                     const float wbGains[3], const float rgb2yuv[9]) {
+bool GpuYuvConverter::convertToFrame(const uint16_t* raw, const GpuColorParams& params,
+                                     AVFrame* frame) {
     LogProRes("[GPU] convertToFrame invoked");
+    int width = params.width;
+    int height = params.height;
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize ySize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize cSize = static_cast<VkDeviceSize>((width / 2)) * height * sizeof(uint16_t);
@@ -382,17 +383,11 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
 
-    struct Push {
-        int w; int h;
-        float gains[3];
-        float mtx[9];
-    } push{};
-    push.w = width; push.h = height;
-    for(int i=0;i<3;++i) push.gains[i] = wbGains[i];
-    for(int i=0;i<9;++i) push.mtx[i] = rgb2yuv[i];
-    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
+    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                       sizeof(GpuColorParams), &params);
 
-    vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
+    vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16),
+                   (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
 
     for(int i=0;i<3;++i){
@@ -450,23 +445,37 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc[i], 0, size);
     }
 
-    for(int y=0;y<height;++y){
-        const uint8_t* srcY = reinterpret_cast<const uint8_t*>(rbAllocInfo[0].pMappedData) + y*width*2;
-        uint8_t* dstY = frame->data[0] + y*frame->linesize[0];
-        memcpy(dstY, srcY, width*2);
-        const uint8_t* srcU = reinterpret_cast<const uint8_t*>(rbAllocInfo[1].pMappedData) + y*width;
-        const uint8_t* srcV = reinterpret_cast<const uint8_t*>(rbAllocInfo[2].pMappedData) + y*width;
-        uint8_t* dstU = frame->data[1] + y*frame->linesize[1];
-        uint8_t* dstV = frame->data[2] + y*frame->linesize[2];
-        memcpy(dstU, srcU, width);
-        memcpy(dstV, srcV, width);
-        if(y==0){
-            uint16_t y0 = *reinterpret_cast<const uint16_t*>(dstY);
-            uint16_t u0 = *reinterpret_cast<const uint16_t*>(dstU);
-            uint16_t v0 = *reinterpret_cast<const uint16_t*>(dstV);
-            std::ostringstream oss; oss << "[GPU-CHECK] first macropixel  Y=" << y0 << "  U=" << u0 << "  V=" << v0; LogProRes(oss.str());
+    size_t srcPitchY = width * 2;
+    size_t srcPitchC = width;
+    if(frame->linesize[0] == (int)srcPitchY){
+        memcpy(frame->data[0], rbAllocInfo[0].pMappedData, ySize);
+    }else{
+        for(int y=0;y<height;++y){
+            memcpy(frame->data[0] + y*frame->linesize[0],
+                   reinterpret_cast<const uint8_t*>(rbAllocInfo[0].pMappedData) + y*srcPitchY,
+                   srcPitchY);
         }
     }
+    for(int plane=1; plane<=2; ++plane){
+        if(frame->linesize[plane] == (int)srcPitchC){
+            memcpy(frame->data[plane], rbAllocInfo[plane].pMappedData, cSize);
+        }else{
+            for(int y=0;y<height;++y){
+                memcpy(frame->data[plane] + y*frame->linesize[plane],
+                       reinterpret_cast<const uint8_t*>(rbAllocInfo[plane].pMappedData) + y*srcPitchC,
+                       srcPitchC);
+            }
+        }
+    }
+
+    const uint16_t* yptr = reinterpret_cast<const uint16_t*>(frame->data[0]);
+    const uint16_t* uptr = reinterpret_cast<const uint16_t*>(frame->data[1]);
+    const uint16_t* vptr = reinterpret_cast<const uint16_t*>(frame->data[2]);
+    uint16_t y0 = yptr[0];
+    uint16_t y1 = yptr[1];
+    uint16_t u0 = uptr[0];
+    uint16_t v0 = vptr[0];
+    std::ostringstream oss; oss << "[GPU-CHECK] first macropixel  Y0=" << y0 << "  U=" << u0 << "  Y1=" << y1 << "  V=" << v0; LogProRes(oss.str());
 
     LogProRes("[GPU] readback complete");
 
