@@ -106,6 +106,9 @@ vec3 rgbToYUV(vec3 rgb){
     return vec3(Y,U,V);
 }
 
+const float kYRange  = 940.0;   // 235×4
+const float kUVRange = 896.0;   // 224×4
+
 void main(){
     ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
     int x0 = gid.x * 2;
@@ -125,10 +128,10 @@ void main(){
     float U = (yuv0.y + yuv1.y) * 0.5;
     float V = (yuv0.z + yuv1.z) * 0.5;
 
-    uint y0 = uint(clamp(round(Y0*1023.0),0.0,1023.0));
-    uint y1 = uint(clamp(round(Y1*1023.0),0.0,1023.0));
-    uint uVal = uint(clamp(round(U*1023.0),0.0,1023.0));
-    uint vVal = uint(clamp(round(V*1023.0),0.0,1023.0));
+    uint y0 = uint(clamp(int(round(Y0 * kYRange))  + 64,  0, 1023));
+    uint y1 = uint(clamp(int(round(Y1 * kYRange))  + 64,  0, 1023));
+    uint uVal = uint(clamp(int(round(U * kUVRange)) + 512, 0, 1023));
+    uint vVal = uint(clamp(int(round(V * kUVRange)) + 512, 0, 1023));
 
     imageStore(yPlane, ivec2(x0,y), uvec4(y0,0,0,0));
     imageStore(yPlane, ivec2(x1,y), uvec4(y1,0,0,0));
