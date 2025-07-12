@@ -1433,24 +1433,23 @@ void App::exportCurrentClipToProRes() {
         cpParams.whiteLevel = m_staticWhite;
 
         GpuColorParams gpuParams{};
-        gpuParams.black = m_staticBlack;
-        gpuParams.white = m_staticWhite;
         gpuParams.cfaType = m_cfaTypeFromMetadata;
+        gpuParams.fullSwing = 0;
 
         auto asn_json = meta.value("asShotNeutral", std::vector<double>{1.0,1.0,1.0});
         if (asn_json.size() >= 3) {
             cpParams.gainR = (asn_json[1] > 1e-6 && asn_json[0] > 1e-6) ? (float)(asn_json[1]/asn_json[0]) : 1.0f;
             cpParams.gainB = (asn_json[1] > 1e-6 && asn_json[2] > 1e-6) ? (float)(asn_json[1]/asn_json[2]) : 1.0f;
-            gpuParams.asShotNeutral[0] = static_cast<float>(asn_json[0]);
-            gpuParams.asShotNeutral[1] = static_cast<float>(asn_json[1]);
-            gpuParams.asShotNeutral[2] = static_cast<float>(asn_json[2]);
+            gpuParams.wbR = cpParams.gainR;
+            gpuParams.wbG = 1.0f;
+            gpuParams.wbB = cpParams.gainB;
         }
         auto ccm_json = meta.value("ColorMatrix2", meta.value("ColorMatrix", std::vector<float>{1,0,0,0,1,0,0,0,1}));
         if (ccm_json.size() == 9) {
             for(int i=0;i<9;++i){
                 cpParams.ccm[i] = ccm_json[i];
                 gpuParams.colorMatrix[i] = ccm_json[i];
-            }
+        }
         }
         cpParams.saturation = 1.0f;
 
