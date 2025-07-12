@@ -1503,17 +1503,6 @@ void App::exportCurrentClipToProRes() {
                 sws_scale(sws, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
                 t1 = std::chrono::steady_clock::now();
                 scaleUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
-#ifdef DEBUG_YUV_VALIDATE
-                if(idx == 0){
-                    uint16_t y0 = *reinterpret_cast<const uint16_t*>(frame->data[0]);
-                    uint16_t y1 = *reinterpret_cast<const uint16_t*>(frame->data[0] + 2);
-                    uint16_t u0 = *reinterpret_cast<const uint16_t*>(frame->data[1]);
-                    uint16_t v0 = *reinterpret_cast<const uint16_t*>(frame->data[2]);
-                    std::ostringstream oss;
-                    oss << "[CPU-CHECK] (0,0) Y0=" << y0 << " U=" << u0 << " Y1=" << y1 << " V=" << v0;
-                    LogProRes(oss.str());
-                }
-#endif
             }
 
             frame->pts = pts;

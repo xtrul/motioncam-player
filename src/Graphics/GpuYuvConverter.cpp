@@ -450,28 +450,23 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc[i], 0, size);
     }
 
-    struct RBInfo { const uint8_t* data; size_t rowPitch; } rbInfo[3];
-    rbInfo[0] = { reinterpret_cast<const uint8_t*>(rbAllocInfo[0].pMappedData), size_t(width)*2 };
-    rbInfo[1] = { reinterpret_cast<const uint8_t*>(rbAllocInfo[1].pMappedData), size_t(width) };
-    rbInfo[2] = { reinterpret_cast<const uint8_t*>(rbAllocInfo[2].pMappedData), size_t(width) };
-
-    for(int y=0; y<height; ++y){
-        memcpy(frame->data[0] + y*frame->linesize[0], rbInfo[0].data + y*rbInfo[0].rowPitch, rbInfo[0].rowPitch);
-        memcpy(frame->data[1] + y*frame->linesize[1], rbInfo[1].data + y*rbInfo[1].rowPitch, rbInfo[1].rowPitch);
-        memcpy(frame->data[2] + y*frame->linesize[2], rbInfo[2].data + y*rbInfo[2].rowPitch, rbInfo[2].rowPitch);
+    for(int y=0;y<height;++y){
+        const uint8_t* srcY = reinterpret_cast<const uint8_t*>(rbAllocInfo[0].pMappedData) + y*width*2;
+        uint8_t* dstY = frame->data[0] + y*frame->linesize[0];
+        memcpy(dstY, srcY, width*2);
+        const uint8_t* srcU = reinterpret_cast<const uint8_t*>(rbAllocInfo[1].pMappedData) + y*width;
+        const uint8_t* srcV = reinterpret_cast<const uint8_t*>(rbAllocInfo[2].pMappedData) + y*width;
+        uint8_t* dstU = frame->data[1] + y*frame->linesize[1];
+        uint8_t* dstV = frame->data[2] + y*frame->linesize[2];
+        memcpy(dstU, srcU, width);
+        memcpy(dstV, srcV, width);
+        if(y==0){
+            uint16_t y0 = *reinterpret_cast<const uint16_t*>(dstY);
+            uint16_t u0 = *reinterpret_cast<const uint16_t*>(dstU);
+            uint16_t v0 = *reinterpret_cast<const uint16_t*>(dstV);
+            std::ostringstream oss; oss << "[GPU-CHECK] first macropixel  Y=" << y0 << "  U=" << u0 << "  V=" << v0; LogProRes(oss.str());
+        }
     }
-
-#ifdef DEBUG_YUV_VALIDATE
-    {
-        uint16_t y0 = *reinterpret_cast<const uint16_t*>(frame->data[0]);
-        uint16_t y1 = *reinterpret_cast<const uint16_t*>(frame->data[0] + 2);
-        uint16_t u0 = *reinterpret_cast<const uint16_t*>(frame->data[1]);
-        uint16_t v0 = *reinterpret_cast<const uint16_t*>(frame->data[2]);
-        std::ostringstream oss;
-        oss << "[GPU-CHECK] (0,0) Y0=" << y0 << " U=" << u0 << " Y1=" << y1 << " V=" << v0;
-        LogProRes(oss.str());
-    }
-#endif
 
     LogProRes("[GPU] readback complete");
 
