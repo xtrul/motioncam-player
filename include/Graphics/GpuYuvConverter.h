@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <libavutil/frame.h>
 #include "Utils/vma_usage.h"
-#include "Graphics/GpuColorParams.h"
 
 class Renderer_VK;
 
@@ -19,7 +18,7 @@ public:
     void cleanup();
 
     bool convertToFrame(const uint16_t* raw, int width, int height, AVFrame* frame,
-                        const GpuColorParams& params);
+                        const float wbGains[3], const float rgb2yuv[9]);
 private:
     Renderer_VK* m_renderer;
 
