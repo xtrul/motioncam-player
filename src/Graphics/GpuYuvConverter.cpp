@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <sstream>
 
 extern std::string g_AppBasePath;
 
@@ -459,6 +460,12 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         uint8_t* dstV = frame->data[2] + y*frame->linesize[2];
         memcpy(dstU, srcU, width);
         memcpy(dstV, srcV, width);
+        if(y==0){
+            uint16_t y0 = *reinterpret_cast<const uint16_t*>(dstY);
+            uint16_t u0 = *reinterpret_cast<const uint16_t*>(dstU);
+            uint16_t v0 = *reinterpret_cast<const uint16_t*>(dstV);
+            std::ostringstream oss; oss << "[GPU-CHECK] first macropixel  Y=" << y0 << "  U=" << u0 << "  V=" << v0; LogProRes(oss.str());
+        }
     }
 
     LogProRes("[GPU] readback complete");
