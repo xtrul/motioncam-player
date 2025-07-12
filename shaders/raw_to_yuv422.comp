@@ -101,8 +101,8 @@ vec3 processPixel(int x,int y){
 
 vec3 rgbToYUV(vec3 rgb){
     float Y = dot(rgb, vec3(0.299,0.587,0.114));
-    float U = dot(rgb, vec3(-0.169, -0.331, 0.500));
-    float V = dot(rgb, vec3(0.500, -0.419, -0.081));
+    float U = dot(rgb, vec3(-0.169, -0.331, 0.500)) + 0.5;
+    float V = dot(rgb, vec3(0.500, -0.419, -0.081)) + 0.5;
     return vec3(Y,U,V);
 }
 
@@ -125,15 +125,10 @@ void main(){
     float U = (yuv0.y + yuv1.y) * 0.5;
     float V = (yuv0.z + yuv1.z) * 0.5;
 
-    const float kYRange  = 940.0;
-    const float kUVRange = 896.0;
-
-    uint y0 = clamp(int(round(Y0 * kYRange)) + 64, 0, 1023);
-    uint y1 = clamp(int(round(Y1 * kYRange)) + 64, 0, 1023);
-    uint uVal = clamp(int(round((U + 0.5) * kUVRange)) + 512, 0, 1023);
-    uint vVal = clamp(int(round((V + 0.5) * kUVRange)) + 512, 0, 1023);
-
-    y0 <<= 6; y1 <<= 6; uVal <<= 6; vVal <<= 6;
+    uint y0 = uint(clamp(round(Y0*1023.0),0.0,1023.0));
+    uint y1 = uint(clamp(round(Y1*1023.0),0.0,1023.0));
+    uint uVal = uint(clamp(round(U*1023.0),0.0,1023.0));
+    uint vVal = uint(clamp(round(V*1023.0),0.0,1023.0));
 
     imageStore(yPlane, ivec2(x0,y), uvec4(y0,0,0,0));
     imageStore(yPlane, ivec2(x1,y), uvec4(y1,0,0,0));
