@@ -74,3 +74,7 @@ runtime DLLs will be copied automatically.
 - The log prints `MODE = GPU (Vulkan hw_frames)` when this path is used.
 - If initialization of Vulkan hardware frames fails it falls back to the CPU path automatically.
 - When GPU processing is active additional `[GPU]` log lines confirm the compute pipeline ran.
+
+## License
+MotionCam Player is distributed under the Apache License 2.0. The full license text is available in [motioncam-decoder/LICENSE](motioncam-decoder/LICENSE).
+
