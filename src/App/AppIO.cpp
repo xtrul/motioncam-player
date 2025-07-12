@@ -1493,9 +1493,16 @@ void App::exportCurrentClipToProRes() {
             t0 = t1;
             if (gpuActive) {
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
-                converter.convertToFrame(asU16(raw), width, height, frame, gpuParams);
+                converter.convertToFrame(asU16(raw), width, height, frame, gpuParams, static_cast<int>(idx));
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+                if(idx == 0){
+                    const uint16_t* y = reinterpret_cast<const uint16_t*>(frame->data[0]);
+                    const uint16_t* u = reinterpret_cast<const uint16_t*>(frame->data[1]);
+                    const uint16_t* v = reinterpret_cast<const uint16_t*>(frame->data[2]);
+                    std::ostringstream oss; oss << "[GPU-CHECK] Y[0]=" << y[0] << " U[0]=" << u[0] << " V[0]=" << v[0];
+                    LogProRes(oss.str());
+                }
             } else {
                 convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();
