@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <chrono>
+#include <sstream>
 
 extern std::string g_AppBasePath;
 
@@ -37,26 +38,28 @@ bool GpuYuvConverter::init(int width, int height) {
     ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     VK_CHECK_RENDERER(vkCreateCommandPool(m_renderer->m_device_p, &ci, nullptr, &m_cmdPool));
 
-    VkDescriptorSetLayoutBinding bindings[2]{};
+    VkDescriptorSetLayoutBinding bindings[4]{};
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[0].descriptorCount = 1;
     bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    bindings[1].binding = 1;
-    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    bindings[1].descriptorCount = 1;
-    bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    for (int i = 0; i < 3; ++i) {
+        bindings[1 + i].binding = 1 + i;
+        bindings[1 + i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bindings[1 + i].descriptorCount = 1;
+        bindings[1 + i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    }
 
     VkDescriptorSetLayoutCreateInfo layoutCI{};
     layoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutCI.bindingCount = 2;
+    layoutCI.bindingCount = 4;
     layoutCI.pBindings = bindings;
     VK_CHECK_RENDERER(vkCreateDescriptorSetLayout(m_renderer->m_device_p, &layoutCI, nullptr, &m_setLayout));
 
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = sizeof(int) * 2;
+    pcRange.size = sizeof(int) * 2 + sizeof(float) * 3 + sizeof(float) * 9;
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -80,15 +83,17 @@ bool GpuYuvConverter::init(int width, int height) {
 
     vkDestroyShaderModule(m_renderer->m_device_p, module, nullptr);
 
-    VkDescriptorPoolSize poolSizes[2]{};
+    VkDescriptorPoolSize poolSizes[4]{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSizes[0].descriptorCount = 1;
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    poolSizes[1].descriptorCount = 1;
+    for (int i = 0; i < 3; ++i) {
+        poolSizes[1 + i].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        poolSizes[1 + i].descriptorCount = 1;
+    }
     VkDescriptorPoolCreateInfo poolCI{};
     poolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolCI.maxSets = 1;
-    poolCI.poolSizeCount = 2;
+    poolCI.poolSizeCount = 4;
     poolCI.pPoolSizes = poolSizes;
     VK_CHECK_RENDERER(vkCreateDescriptorPool(m_renderer->m_device_p, &poolCI, nullptr, &m_descPool));
 
@@ -101,46 +106,48 @@ bool GpuYuvConverter::init(int width, int height) {
     LogProRes("[GPU] Compute pipeline initialized");
     LogProRes("[GPU] init complete");
 
-    // Create YUV image for compute output
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = static_cast<uint32_t>((width + 1) / 2);
-    imageInfo.extent.height = static_cast<uint32_t>(height);
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = VK_FORMAT_R16G16B16A16_UINT;
-    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    // Create Y, U and V images for compute output
+    for (int i = 0; i < 3; ++i) {
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = static_cast<uint32_t>(i == 0 ? width : (width + 1) / 2);
+        imageInfo.extent.height = static_cast<uint32_t>(height);
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = VK_FORMAT_R16_UINT;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
-    VmaAllocationCreateInfo allocInfo{};
-    allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+        VmaAllocationCreateInfo allocInfo{};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
-    VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &imageInfo, &allocInfo, &m_yuvImage, &m_yuvAlloc, nullptr));
+        VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &imageInfo, &allocInfo,
+                                         &m_planeImages[i], &m_planeAllocs[i], nullptr));
 
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = m_yuvImage;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R16G16B16A16_UINT;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-    VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &viewInfo, nullptr, &m_yuvView));
+        VkImageViewCreateInfo viewInfo{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        viewInfo.image = m_planeImages[i];
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = VK_FORMAT_R16_UINT;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &viewInfo, nullptr, &m_planeViews[i]));
 
-    ImageResource::transitionImageLayout(
-        m_renderer->m_device_p,
-        m_cmdPool,
-        m_renderer->m_graphicsQueue_p,
-        m_yuvImage,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_GENERAL);
+        ImageResource::transitionImageLayout(
+            m_renderer->m_device_p,
+            m_cmdPool,
+            m_renderer->m_graphicsQueue_p,
+            m_planeImages[i],
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_GENERAL);
+    }
 
     // Create private RAW image for input
     VkImageCreateInfo rawInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
@@ -216,14 +223,16 @@ void GpuYuvConverter::cleanup() {
         m_rawImage = VK_NULL_HANDLE;
         m_rawAlloc = VK_NULL_HANDLE;
     }
-    if (m_yuvView != VK_NULL_HANDLE) {
-        vkDestroyImageView(m_renderer->m_device_p, m_yuvView, nullptr);
-        m_yuvView = VK_NULL_HANDLE;
-    }
-    if (m_yuvImage != VK_NULL_HANDLE) {
-        vmaDestroyImage(m_renderer->m_allocator_p, m_yuvImage, m_yuvAlloc);
-        m_yuvImage = VK_NULL_HANDLE;
-        m_yuvAlloc = VK_NULL_HANDLE;
+    for (int i = 0; i < 3; ++i) {
+        if (m_planeViews[i] != VK_NULL_HANDLE) {
+            vkDestroyImageView(m_renderer->m_device_p, m_planeViews[i], nullptr);
+            m_planeViews[i] = VK_NULL_HANDLE;
+        }
+        if (m_planeImages[i] != VK_NULL_HANDLE) {
+            vmaDestroyImage(m_renderer->m_allocator_p, m_planeImages[i], m_planeAllocs[i]);
+            m_planeImages[i] = VK_NULL_HANDLE;
+            m_planeAllocs[i] = VK_NULL_HANDLE;
+        }
     }
     if (m_descPool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(m_renderer->m_device_p, m_descPool, nullptr);
@@ -247,11 +256,13 @@ void GpuYuvConverter::cleanup() {
     }
 }
 
-bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int height,
-                                         std::vector<uint16_t>& outPacked) {
-    LogProRes("[GPU] convertAndReadback invoked");
+bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
+                                     AVFrame* frame,
+                                     const float wbGains[3], const float rgb2yuv[9]) {
+    LogProRes("[GPU] convertToFrame invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
-    VkDeviceSize outSize = static_cast<VkDeviceSize>(width) * height * 4;
+    VkDeviceSize ySize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
+    VkDeviceSize cSize = static_cast<VkDeviceSize>((width / 2)) * height * sizeof(uint16_t);
 
     VkBuffer stagingBuf = VK_NULL_HANDLE;
     VmaAllocation stagingAlloc = VK_NULL_HANDLE;
@@ -268,18 +279,20 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     memcpy(sbAllocInfo.pMappedData, raw, rawSize);
     vmaFlushAllocation(m_renderer->m_allocator_p, stagingAlloc, 0, rawSize);
 
-    VkBuffer readbackBuf = VK_NULL_HANDLE;
-    VmaAllocation readbackAlloc = VK_NULL_HANDLE;
-    VkBufferCreateInfo rbInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-    rbInfo.size = outSize;
-    rbInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    VmaAllocationCreateInfo rbAlloc{};
-    rbAlloc.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-    rbAlloc.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
-                    VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    VmaAllocationInfo rbAllocInfo{};
-    VK_CHECK_RENDERER(vmaCreateBuffer(m_renderer->m_allocator_p, &rbInfo, &rbAlloc,
-                                      &readbackBuf, &readbackAlloc, &rbAllocInfo));
+    VkBuffer readbackBuf[3]{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VmaAllocation readbackAlloc[3]{VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
+    VmaAllocationInfo rbAllocInfo[3]{};
+    for (int i = 0; i < 3; ++i) {
+        VkBufferCreateInfo rbInfo{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        rbInfo.size = (i == 0 ? ySize : cSize);
+        rbInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        VmaAllocationCreateInfo rbAlloc{};
+        rbAlloc.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+        rbAlloc.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT |
+                        VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        VK_CHECK_RENDERER(vmaCreateBuffer(m_renderer->m_allocator_p, &rbInfo, &rbAlloc,
+                                          &readbackBuf[i], &readbackAlloc[i], &rbAllocInfo[i]));
+    }
 
     VkCommandBuffer cmd = VulkanHelpers::beginSingleTimeCommands(m_renderer->m_device_p,
                                                                 m_cmdPool);
@@ -343,97 +356,123 @@ bool GpuYuvConverter::convertAndReadback(const uint16_t* raw, int width, int hei
     inputInfo.imageView = m_rawView;
     inputInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkDescriptorImageInfo outInfo{};
-    outInfo.imageView = m_yuvView;
-    outInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    VkDescriptorImageInfo outInfos[3]{};
+    for(int i=0;i<3;++i){
+        outInfos[i].imageView = m_planeViews[i];
+        outInfos[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    }
 
-    VkWriteDescriptorSet writes[2]{};
+    VkWriteDescriptorSet writes[4]{};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[0].dstSet = m_descSet;
     writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[0].pImageInfo = &inputInfo;
-    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = m_descSet;
-    writes[1].dstBinding = 1;
-    writes[1].descriptorCount = 1;
-    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    writes[1].pImageInfo = &outInfo;
-    vkUpdateDescriptorSets(m_renderer->m_device_p, 2, writes, 0, nullptr);
+    for(int i=0;i<3;++i){
+        writes[1+i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[1+i].dstSet = m_descSet;
+        writes[1+i].dstBinding = 1 + i;
+        writes[1+i].descriptorCount = 1;
+        writes[1+i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        writes[1+i].pImageInfo = &outInfos[i];
+    }
+    vkUpdateDescriptorSets(m_renderer->m_device_p, 4, writes, 0, nullptr);
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
 
-    struct Push { int w; int h; } push{ width, height };
+    struct Push {
+        int w; int h;
+        float gains[3];
+        float mtx[9];
+    } push{};
+    push.w = width; push.h = height;
+    for(int i=0;i<3;++i) push.gains[i] = wbGains[i];
+    for(int i=0;i<9;++i) push.mtx[i] = rgb2yuv[i];
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 15) / 16), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
 
-    VkImageMemoryBarrier bar3{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-    bar3.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    bar3.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    bar3.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar3.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar3.image = m_yuvImage;
-    bar3.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    bar3.subresourceRange.baseMipLevel = 0;
-    bar3.subresourceRange.levelCount = 1;
-    bar3.subresourceRange.baseArrayLayer = 0;
-    bar3.subresourceRange.layerCount = 1;
-    bar3.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    bar3.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    vkCmdPipelineBarrier(cmd,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &bar3);
+    for(int i=0;i<3;++i){
+        VkImageMemoryBarrier bar{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        bar.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        bar.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        bar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bar.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bar.image = m_planeImages[i];
+        bar.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        bar.subresourceRange.baseMipLevel = 0;
+        bar.subresourceRange.levelCount = 1;
+        bar.subresourceRange.baseArrayLayer = 0;
+        bar.subresourceRange.layerCount = 1;
+        bar.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        bar.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        vkCmdPipelineBarrier(cmd,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &bar);
 
-    VkBufferImageCopy rbRegion{};
-    rbRegion.bufferOffset = 0;
-    rbRegion.bufferRowLength = 0;
-    rbRegion.bufferImageHeight = 0;
-    rbRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    rbRegion.imageSubresource.mipLevel = 0;
-    rbRegion.imageSubresource.baseArrayLayer = 0;
-    rbRegion.imageSubresource.layerCount = 1;
-    rbRegion.imageOffset = {0,0,0};
-    rbRegion.imageExtent = { static_cast<uint32_t>((width + 1) / 2), static_cast<uint32_t>(height), 1 };
-    vkCmdCopyImageToBuffer(cmd, m_yuvImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           readbackBuf, 1, &rbRegion);
+        VkBufferImageCopy rbRegion{};
+        rbRegion.bufferOffset = 0;
+        rbRegion.bufferRowLength = 0;
+        rbRegion.bufferImageHeight = 0;
+        rbRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        rbRegion.imageSubresource.mipLevel = 0;
+        rbRegion.imageSubresource.baseArrayLayer = 0;
+        rbRegion.imageSubresource.layerCount = 1;
+        rbRegion.imageOffset = {0,0,0};
+        rbRegion.imageExtent = { static_cast<uint32_t>(i==0?width:(width+1)/2), static_cast<uint32_t>(height), 1 };
+        vkCmdCopyImageToBuffer(cmd, m_planeImages[i], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               readbackBuf[i], 1, &rbRegion);
 
-    VkImageMemoryBarrier bar4{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-    bar4.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    bar4.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    bar4.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar4.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bar4.image = m_yuvImage;
-    bar4.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    bar4.subresourceRange.baseMipLevel = 0;
-    bar4.subresourceRange.levelCount = 1;
-    bar4.subresourceRange.baseArrayLayer = 0;
-    bar4.subresourceRange.layerCount = 1;
-    bar4.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    bar4.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    vkCmdPipelineBarrier(cmd,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &bar4);
+        bar.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        bar.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        bar.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        bar.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        vkCmdPipelineBarrier(cmd,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &bar);
+    }
     VulkanHelpers::endSingleTimeCommands(m_renderer->m_device_p, m_cmdPool,
         m_renderer->m_graphicsQueue_p, cmd);
 
-    vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc, 0, outSize);
-    outPacked.resize(static_cast<size_t>(outSize / sizeof(uint16_t)));
-    memcpy(outPacked.data(), rbAllocInfo.pMappedData, outSize);
+    for(int i=0;i<3;++i){
+        VkDeviceSize size = (i==0? ySize : cSize);
+        vmaInvalidateAllocation(m_renderer->m_allocator_p, readbackAlloc[i], 0, size);
+    }
+
+    for(int y=0;y<height;++y){
+        const uint8_t* srcY = reinterpret_cast<const uint8_t*>(rbAllocInfo[0].pMappedData) + y*width*2;
+        uint8_t* dstY = frame->data[0] + y*frame->linesize[0];
+        memcpy(dstY, srcY, width*2);
+        const uint8_t* srcU = reinterpret_cast<const uint8_t*>(rbAllocInfo[1].pMappedData) + y*width;
+        const uint8_t* srcV = reinterpret_cast<const uint8_t*>(rbAllocInfo[2].pMappedData) + y*width;
+        uint8_t* dstU = frame->data[1] + y*frame->linesize[1];
+        uint8_t* dstV = frame->data[2] + y*frame->linesize[2];
+        memcpy(dstU, srcU, width);
+        memcpy(dstV, srcV, width);
+        if(y==0){
+            uint16_t y0 = *reinterpret_cast<const uint16_t*>(dstY);
+            uint16_t u0 = *reinterpret_cast<const uint16_t*>(dstU);
+            uint16_t v0 = *reinterpret_cast<const uint16_t*>(dstV);
+            std::ostringstream oss; oss << "[GPU-CHECK] first macropixel  Y=" << y0 << "  U=" << u0 << "  V=" << v0; LogProRes(oss.str());
+        }
+    }
+
     LogProRes("[GPU] readback complete");
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
-    vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
+    for(int i=0;i<3;++i){
+        vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf[i], readbackAlloc[i]);
+    }
     return true;
 }
