@@ -58,11 +58,6 @@ App::~App() {
         m_proResThread.join();
         LogToFile("[App::~App] ProRes export thread joined.");
     }
-    if (m_dnxhrThread.joinable()) {
-        LogToFile("[App::~App] Joining DNxHR export thread...");
-        m_dnxhrThread.join();
-        LogToFile("[App::~App] DNxHR export thread joined.");
-    }
 #endif
 
     destroyPersistentStagingBuffers();
