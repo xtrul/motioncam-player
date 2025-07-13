@@ -74,9 +74,3 @@ runtime DLLs will be copied automatically.
 - The log prints `MODE = GPU (Vulkan hw_frames)` when this path is used.
 - If initialization of Vulkan hardware frames fails it falls back to the CPU path automatically.
 - When GPU processing is active additional `[GPU]` log lines confirm the compute pipeline ran.
-
-## DNxHR Export
-
-- The context menu also provides **Export to DNxHR** and **Convert to DNxHR (GPU)** which operate similarly to the ProRes paths.
-- Encoding uses the `dnxhd` encoder with the `dnxhr_hq` profile.
-- Progress and error reporting mirror the ProRes export and are written to the same log file.

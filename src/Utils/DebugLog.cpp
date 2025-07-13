@@ -160,9 +160,7 @@ void LogFFmpegStatus() {
         LogProRes("[FFmpeg] Some FFmpeg DLLs could not be loaded; export may fail.");
     }
 #   else
-#if LIBAVFORMAT_VERSION_MAJOR < 58
     av_register_all();
-#endif
     int version = avcodec_version();
     LogToFile(std::string("[FFmpeg] avcodec version ") + std::to_string(version));
     LogProRes(std::string("[FFmpeg] avcodec version ") + std::to_string(version));
