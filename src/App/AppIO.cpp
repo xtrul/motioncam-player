@@ -40,9 +40,6 @@ namespace fs = std::filesystem;
 #ifdef ENABLE_PRORES_EXPORT
 static bool g_useGpuProRes = false;
 #endif
-#ifdef ENABLE_DNXHR_EXPORT
-static bool g_useGpuDnxhr = false;
-#endif
 namespace {
     bool writeDngInternal(
         const std::string& outputPath,
@@ -1680,23 +1677,6 @@ void App::convertCurrentClipToProRes() {
     showActionMessage("FFmpeg support not built");
 #endif
 }
-
-#ifdef ENABLE_DNXHR_EXPORT
-void App::exportCurrentClipToDnxhr() {
-    showActionMessage("DNxHR export not implemented");
-}
-
-void App::convertCurrentClipToDnxhr() {
-    showActionMessage("DNxHR export not implemented");
-}
-#else
-void App::exportCurrentClipToDnxhr() {
-    showActionMessage("DNxHR support not built");
-}
-void App::convertCurrentClipToDnxhr() {
-    showActionMessage("DNxHR support not built");
-}
-#endif
 
 void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
     if (!m_playbackController_ptr) return;

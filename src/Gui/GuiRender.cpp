@@ -248,11 +248,6 @@ namespace GuiOverlay {
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
-#ifdef ENABLE_DNXHR_EXPORT
-            if (ImGui::MenuItem("Export to DNxHR (GPU)", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->convertCurrentClipToDnxhr();
-            }
-#endif
             ImGui::EndPopup();
         }
 

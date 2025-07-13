@@ -1,7 +1,0 @@
-#version 450
-
-// Placeholder compute shader for DNxHR DCT and quantization
-
-void main() {
-    // TODO: implement DCT, quantization and block packing
-}
