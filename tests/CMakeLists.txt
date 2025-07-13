@@ -1,8 +1,0 @@
-add_executable(test_dnxhr test_dnxhr.cpp ../src/Export/DnxhrExporter.cpp)
-target_include_directories(test_dnxhr PRIVATE ../include ../include/Export ${FFMPEG_INCLUDE_DIRS})
-if(TARGET FFMPEG::avcodec)
-  target_link_libraries(test_dnxhr PRIVATE FFMPEG::avcodec FFMPEG::avutil)
-else()
-  target_link_libraries(test_dnxhr PRIVATE ${FFMPEG_LIBRARIES})
-endif()
-add_test(NAME test_dnxhr COMMAND test_dnxhr)

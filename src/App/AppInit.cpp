@@ -149,8 +149,6 @@ App::App(const std::string& filePath) :
 #ifdef ENABLE_PRORES_EXPORT
     , m_showExportProgressPopup(false)
     , m_proResStatus()
-    , m_showDNxHRExportProgressPopup(false)
-    , m_dnxhrStatus()
 #endif
 {
     LogToFile(std::string("App::App Constructor called for file: ") + this->m_filePath);

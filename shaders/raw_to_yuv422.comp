@@ -2,20 +2,19 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
 #extension GL_EXT_shader_16bit_storage               : require
 #extension GL_KHR_shader_subgroup_basic              : enable
-//#extension GL_EXT_scalar_block_layout               : require
+#extension GL_EXT_scalar_block_layout               : require
 
 // --- bindings ----------------------------------------------
 layout(set = 0, binding = 0, r16ui   ) readonly  uniform uimage2D  rawImg;   // 16‑bit Bayer
 layout(set = 0, binding = 1, rgba32ui) writeonly uniform uimage2D  yuvImg;   // 32‑bit macropixel  Y0 U Y1 V (10‑bit each, LSB‑aligned)
 
 // --- push constants ----------------------------------------
-layout(push_constant, std430) uniform PC {
+layout(push_constant, scalar) uniform PC {
     uint   width, height;          // RAW dimensions
     uint   cfaType;                // 0 BGGR | 1 RGGB | 2 GBRG | 3 GRBG
-    uint   fullSwing;              // 0 = studio (64-940) | 1 = full (0-1023)
-    float  wbR, wbG, wbB;          // white-balance gains
-    float  _pad0;                  // alignment padding
-    mat3   colMat;                 // sensor -> BT.709 matrix
+    uint   fullSwing;              // 0 = studio (64‑940) | 1 = full (0‑1023)
+    float  wbR, wbG, wbB;          // white‑balance gains
+    mat3   colMat;                 // sensor → BT.709 matrix
     uint   black, white;           // raw black/white levels (inclusive)
 } pc;
 

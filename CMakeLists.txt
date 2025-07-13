@@ -32,21 +32,10 @@ if(NOT Vulkan_FOUND)
     message(FATAL_ERROR "Vulkan SDK not found. Please ensure it is installed and discoverable.")
 endif()
 find_package(Threads REQUIRED)
-find_package(FFMPEG QUIET COMPONENTS avcodec avformat avutil swscale swresample)
+find_package(FFMPEG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample)
 message(STATUS "FFmpeg_FOUND=${FFmpeg_FOUND} FFMPEG_FOUND=${FFMPEG_FOUND}")
-if(NOT FFMPEG_FOUND AND NOT FFmpeg_FOUND)
-    find_package(PkgConfig QUIET)
-    if(PKG_CONFIG_FOUND)
-        pkg_check_modules(FFMPEG_PKG QUIET libavcodec libavformat libavutil libswscale libswresample)
-        if(FFMPEG_PKG_FOUND)
-            set(FFMPEG_FOUND TRUE)
-            set(FFMPEG_LIBRARIES ${FFMPEG_PKG_LIBRARIES})
-            set(FFMPEG_INCLUDE_DIRS ${FFMPEG_PKG_INCLUDE_DIRS})
-        endif()
-    endif()
-endif()
 if(FFMPEG_FOUND OR FFmpeg_FOUND)
-    message(STATUS "FFmpeg found, enabling ProRes export")
+    message(STATUS "FFmpeg found via vcpkg, enabling ProRes export")
     set(HAVE_FFMPEG TRUE)
 else()
     message(STATUS "FFmpeg not found; ProRes export disabled")
@@ -172,7 +161,6 @@ set(APP_SOURCES
   src/Utils/DebugLog.cpp
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
-  src/Export/DnxhrExporter.cpp
 
   src/main.cpp
 )
@@ -211,7 +199,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${PROJECT_SOURCE_DIR}/include/Gui"
   "${PROJECT_SOURCE_DIR}/include/Playback"
   "${PROJECT_SOURCE_DIR}/include/Utils"
-  "${PROJECT_SOURCE_DIR}/include/Export"
 
   "${VMA_INCLUDE_DIR}"
   "${Vulkan_INCLUDE_DIRS}"
@@ -333,6 +320,3 @@ message(STATUS "  Target Executable: MotionCam Player")
 message(STATUS "  Output Directory:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}")
 message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/MotionCam Player${CMAKE_EXECUTABLE_SUFFIX}")
 message(STATUS "---------------------------------------------------------------------")
-
-enable_testing()
-add_subdirectory(tests)

@@ -524,42 +524,6 @@ std::string App::openSaveMovDialog() {
     return {};
 }
 
-std::string App::openSaveMxfDialog() {
-#ifdef _WIN32
-    OPENFILENAMEW ofn{};
-    wchar_t szFile[MAX_PATH] = { 0 };
-    ofn.lStructSize = sizeof(ofn);
-
-    HWND ownerHwnd = NULL;
-    if (m_window) {
-        ownerHwnd = glfwGetWin32Window(m_window);
-    }
-
-    ofn.hwndOwner = ownerHwnd;
-    ofn.lpstrFilter = L"MXF files\0*.mxf\0All Files\0*.*\0";
-    ofn.lpstrFile = szFile;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-    ofn.lpstrDefExt = L"mxf";
-
-    if (GetSaveFileNameW(&ofn)) {
-        std::string utf8Path = DebugLogHelper::wstring_to_utf8(szFile);
-        if (utf8Path.empty() && szFile[0] != L'\0') {
-            LogToFile("[App::openSaveMxfDialog] UTF-8 conversion failed for selected path.");
-            return {};
-        }
-        return utf8Path;
-    }
-#else
-    LogToFile("[App::openSaveMxfDialog] Save dialog not implemented for this platform. Using console fallback.");
-    std::string path;
-    std::cout << "Enter output .mxf path: " << std::flush;
-    std::getline(std::cin, path);
-    return path;
-#endif
-    return {};
-}
-
 void App::triggerOpenFileViaDialog() {
     std::string newPath = openMcrawDialog();
     if (!newPath.empty()) {
