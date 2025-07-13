@@ -1,0 +1,9 @@
+// Placeholder compute shader performing DCT and quantization for DNxHR.
+// This GLSL compute shader divides the frame into 8x8 blocks and would
+// output quantized coefficients. The real implementation is GPU specific.
+#version 450
+layout(local_size_x = 8, local_size_y = 8) in;
+
+void main() {
+    // TODO: Implement DCT and quantization on GPU
+}
