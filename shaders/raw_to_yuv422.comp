@@ -9,13 +9,21 @@ layout(set = 0, binding = 0, r16ui   ) readonly  uniform uimage2D  rawImg;   // 
 layout(set = 0, binding = 1, rgba32ui) writeonly uniform uimage2D  yuvImg;   // 32‑bit macropixel  Y0 U Y1 V (10‑bit each, LSB‑aligned)
 
 // --- push constants ----------------------------------------
-layout(push_constant, scalar) uniform PC {
-    uint   width, height;          // RAW dimensions
-    uint   cfaType;                // 0 BGGR | 1 RGGB | 2 GBRG | 3 GRBG
-    uint   fullSwing;              // 0 = studio (64‑940) | 1 = full (0‑1023)
-    float  wbR, wbG, wbB;          // white‑balance gains
-    mat3   colMat;                 // sensor → BT.709 matrix
-    uint   black, white;           // raw black/white levels (inclusive)
+// Push constants must follow the std430 layout rules to satisfy the Vulkan
+// validator. Using a mat3 directly with scalar layout triggered alignment
+// errors, so we use std430 and insert explicit padding.
+layout(push_constant, std430) uniform PC {
+    uint  width;
+    uint  height;
+    uint  cfaType;    // 0 BGGR | 1 RGGB | 2 GBRG | 3 GRBG
+    uint  fullSwing;  // 0 = studio (64‑940) | 1 = full (0‑1023)
+    float wbR;
+    float wbG;
+    float wbB;
+    float pad0;       // padding so mat3 starts at 16‑byte boundary
+    mat3  colMat;     // sensor → BT.709 matrix
+    uint  black;
+    uint  white;
 } pc;
 
 // -----------------------------------------------------------
