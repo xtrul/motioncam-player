@@ -111,8 +111,8 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
-    void exportCurrentClipToDnxhr(bool useGpu);
-    void convertCurrentClipToDnxhr();
+    void exportCurrentClipToProRes();
+    void convertCurrentClipToProRes();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -219,15 +219,15 @@ private:
     double m_uiAutoHideDelaySec = 3.0;
     float m_uiFadeSpeed = 3.0f;
 
-#ifdef ENABLE_DNXHR_EXPORT
-    struct ExportStatus {
+#ifdef ENABLE_PRORES_EXPORT
+    struct ProResExportStatus {
         std::atomic<bool> active{ false };
         std::atomic<int> currentFrame{ 0 };
         int totalFrames{ 0 };
         std::string errorMsg;
-    } m_exportStatus;
+    } m_proResStatus;
     std::atomic<bool> m_showExportProgressPopup{ false };
-    std::thread m_exportThread;
+    std::thread m_proResThread;
 #endif
 
 
@@ -270,7 +270,7 @@ private:
     void handleCursorPos(double xpos, double ypos);
     void framebufferSizeCallback(int width, int height);
     std::string openMcrawDialog();
-    std::string openSaveMxfDialog();
+    std::string openSaveMovDialog();
 
     struct SwapChainSupportDetails {
         VkSurfaceCapabilitiesKHR capabilities;

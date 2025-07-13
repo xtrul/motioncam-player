@@ -488,7 +488,7 @@ std::string App::openMcrawDialog() {
     return {};
 }
 
-std::string App::openSaveMxfDialog() {
+std::string App::openSaveMovDialog() {
 #ifdef _WIN32
     OPENFILENAMEW ofn{};
     wchar_t szFile[MAX_PATH] = { 0 };
@@ -500,24 +500,24 @@ std::string App::openSaveMxfDialog() {
     }
 
     ofn.hwndOwner = ownerHwnd;
-    ofn.lpstrFilter = L"MXF files\0*.mxf\0All Files\0*.*\0";
+    ofn.lpstrFilter = L"MOV files\0*.mov\0All Files\0*.*\0";
     ofn.lpstrFile = szFile;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-    ofn.lpstrDefExt = L"mxf";
+    ofn.lpstrDefExt = L"mov";
 
     if (GetSaveFileNameW(&ofn)) {
         std::string utf8Path = DebugLogHelper::wstring_to_utf8(szFile);
         if (utf8Path.empty() && szFile[0] != L'\0') {
-            LogToFile("[App::openSaveMxfDialog] UTF-8 conversion failed for selected path.");
+            LogToFile("[App::openSaveMovDialog] UTF-8 conversion failed for selected path.");
             return {};
         }
         return utf8Path;
     }
 #else
-    LogToFile("[App::openSaveMxfDialog] Save dialog not implemented for this platform. Using console fallback.");
+    LogToFile("[App::openSaveMovDialog] Save dialog not implemented for this platform. Using console fallback.");
     std::string path;
-    std::cout << "Enter output .mxf path: " << std::flush;
+    std::cout << "Enter output .mov path: " << std::flush;
     std::getline(std::cin, path);
     return path;
 #endif
