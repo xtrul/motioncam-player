@@ -58,7 +58,7 @@ bool GpuYuvConverter::init(int width, int height) {
     VkPushConstantRange pcRange{};
     pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
     pcRange.offset = 0;
-    pcRange.size = 72;
+    pcRange.size = 88;
 
     VkPipelineLayoutCreateInfo pli{};
     pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -348,8 +348,8 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
 
     struct Push {
         uint32_t width, height, cfaType, fullSwing;
-        float wbR, wbG, wbB;
-        float colMat[9];
+        float wbR, wbG, wbB, _pad0;
+        float colMat[12];
         uint32_t black, white;
     } push{};
     push.width = width;
@@ -359,7 +359,13 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     push.wbR = params.wbR;
     push.wbG = params.wbG;
     push.wbB = params.wbB;
-    for(int i=0;i<9;++i) push.colMat[i] = params.colorMatrix[i];
+    // mat3 uses std430 layout -> each column occupies a vec4 slot
+    for(int c=0;c<3;++c){
+        for(int r=0;r<3;++r){
+            push.colMat[c*4 + r] = params.colorMatrix[c*3 + r];
+        }
+        push.colMat[c*4 + 3] = 0.0f; // padding
+    }
     push.black = params.black;
     push.white = params.white;
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
@@ -436,6 +442,7 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         }
     }
 
+#ifdef VERBOSE
     {
         const uint32_t* first = macropix;
         std::ostringstream oss;
@@ -443,6 +450,7 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
             << " U=" << first[1] << " Y1=" << first[2] << " V=" << first[3];
         LogProRes(oss.str());
     }
+#endif
 
     LogProRes("[GPU] readback complete");
 
