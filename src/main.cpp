@@ -200,8 +200,8 @@ int main(int argc, char* argv[]) {
     // Determine and set the application base path.
     determineAppBasePath(argc > 0 ? argv[0] : "");
 
-    // Force creation of DNxHR log at startup
-    LogProRes("[Startup] DNxHR log initialized");
+    // Force creation of ProRes log at startup
+    LogProRes("[Startup] ProRes log initialized");
 
     // Record whether FFmpeg support is available
     LogFFmpegStatus();
