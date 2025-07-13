@@ -74,9 +74,3 @@ runtime DLLs will be copied automatically.
 - The log prints `MODE = GPU (Vulkan hw_frames)` when this path is used.
 - If initialization of Vulkan hardware frames fails it falls back to the CPU path automatically.
 - When GPU processing is active additional `[GPU]` log lines confirm the compute pipeline ran.
-
-## DNxHR Export
-
-- Right-click in the player window and choose **Export to DNxHR** to encode using the FFmpeg `dnxhd` encoder.
-- A GPU path is available via **Convert to DNxHR (GPU)** which runs the RAW→YUV stage on Vulkan.
-- Progress and logging are identical to the ProRes workflow.
