@@ -166,8 +166,8 @@ bool App::run() {
         // Update UI auto-hide and fade. Keep UI visible while exporting.
         {
             bool exporting = false;
-#ifdef ENABLE_PRORES_EXPORT
-            exporting = m_proResStatus.active.load();
+#ifdef ENABLE_DNXHR_EXPORT
+            exporting = m_dnxhrStatus.active.load();
 #endif
             if (!exporting) {
                 steady_clock::time_point now = steady_clock::now();
