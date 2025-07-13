@@ -11,11 +11,6 @@
 #include <sstream>
 #include <vector> // Required for GetModuleFileNameW buffer
 
-extern bool g_useGpuProRes;
-extern bool g_gpuAsyncExport;
-extern bool g_useGpuDNxHR;
-extern bool g_isDnxExport;
-
 #ifdef _WIN32
 #   define WIN32_LEAN_AND_MEAN
 #   include <windows.h>
@@ -269,17 +264,8 @@ int main(int argc, char* argv[]) {
 
 
     std::string inPath;
-    std::string outPath;
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "-o" && i + 1 < argc) { outPath = argv[++i]; }
-        else if (arg == "-gpu") { g_useGpuProRes = true; }
-        else if (arg == "-gpuAsyncExport") { g_gpuAsyncExport = true; }
-        else if (arg == "-dnxhr") { g_isDnxExport = true; }
-        else if (arg == "-gpuDNxHR") { g_useGpuDNxHR = true; }
-        else if (inPath.empty()) { inPath = arg; }
-    }
-    if (!inPath.empty()) {
+    if (argc >= 2 && argv[1] != nullptr) {
+        inPath = argv[1];
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
     } else {
         LogToFile("[main] No command line argument provided. Starting without file.");
