@@ -88,21 +88,6 @@ static std::ofstream& get_prores_log_file() {
     return log_file;
 }
 
-// Separate log file for DNxHR export diagnostics
-static std::ofstream& get_dnxhr_log_file() {
-    static std::ofstream log_file;
-    static bool initialized = false;
-    if (!initialized) {
-        std::filesystem::path logDir = getLogDirectory();
-        std::error_code ec;
-        std::filesystem::create_directories(logDir, ec);
-        std::filesystem::path logPath = logDir / "dnxhr_export_log.txt";
-        log_file.open(logPath, std::ios_base::app | std::ios_base::out);
-        initialized = true;
-    }
-    return log_file;
-}
-
 void LogToFile(const std::string& message) {
     std::lock_guard<std::mutex> lock(g_log_mutex); // Lock for thread safety
 
@@ -133,15 +118,6 @@ void LogProRes(const std::string& message) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
 
     std::ofstream& log_file = get_prores_log_file();
-    if (log_file.is_open()) {
-        log_file << "[" << make_timestamp() << "] " << message << std::endl;
-    }
-}
-
-void LogDnxhr(const std::string& message) {
-    std::lock_guard<std::mutex> lock(g_log_mutex);
-
-    std::ofstream& log_file = get_dnxhr_log_file();
     if (log_file.is_open()) {
         log_file << "[" << make_timestamp() << "] " << message << std::endl;
     }
