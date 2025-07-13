@@ -248,11 +248,6 @@ namespace GuiOverlay {
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
-#ifdef ENABLE_DNXHR_EXPORT
-            if (ImGui::MenuItem("Export to DNxHR (GPU)", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->exportCurrentClipToDnxhr();
-            }
-#endif
             ImGui::EndPopup();
         }
 
@@ -691,28 +686,6 @@ namespace GuiOverlay {
                 if (ImGui::Button("Close")) {
                     ImGui::CloseCurrentPopup();
                     appInstance->m_showExportProgressPopup.store(false);
-                }
-            }
-            ImGui::EndPopup();
-        }
-#endif
-#ifdef ENABLE_DNXHR_EXPORT
-        if (appInstance->m_showDnxhrProgressPopup.load()) {
-            ImGui::OpenPopup("DNXHR_PROGRESS");
-        }
-        if (ImGui::BeginPopupModal("DNXHR_PROGRESS", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            int cur = appInstance->m_dnxhrStatus.currentFrame.load();
-            int total = appInstance->m_dnxhrStatus.totalFrames;
-            float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
-            ImGui::Text("Exporting to DNxHR %d / %d", cur, total);
-            ImGui::ProgressBar(progress, ImVec2(200, 0));
-            if (!appInstance->m_dnxhrStatus.errorMsg.empty()) {
-                ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_dnxhrStatus.errorMsg.c_str());
-            }
-            if (!appInstance->m_dnxhrStatus.active.load()) {
-                if (ImGui::Button("Close")) {
-                    ImGui::CloseCurrentPopup();
-                    appInstance->m_showDnxhrProgressPopup.store(false);
                 }
             }
             ImGui::EndPopup();

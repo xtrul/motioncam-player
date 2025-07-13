@@ -33,9 +33,6 @@
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
 #endif
-#ifdef ENABLE_DNXHR_EXPORT
-#include "Export/GpuExport.h"
-#endif
 #include "Utils/ColorPipelineCPU.h"
 
 namespace fs = std::filesystem;
@@ -1678,34 +1675,6 @@ void App::convertCurrentClipToProRes() {
     exportCurrentClipToProRes();
 #else
     showActionMessage("FFmpeg support not built");
-#endif
-}
-
-void App::exportCurrentClipToDnxhr() {
-#ifdef ENABLE_DNXHR_EXPORT
-    LogDnxhr("[App] exportCurrentClipToDnxhr invoked");
-    if (m_dnxhrStatus.active.load()) {
-        showActionMessage("Export already running");
-        return;
-    }
-    std::string outputPath = openSaveMovDialog();
-    if (outputPath.empty()) return;
-    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mxf") {
-        outputPath += ".mxf";
-    }
-    m_dnxhrStatus.currentFrame.store(0);
-    m_dnxhrStatus.totalFrames = 0;
-    m_dnxhrStatus.errorMsg.clear();
-    m_dnxhrStatus.active.store(true);
-    m_showDnxhrProgressPopup.store(true);
-    if (m_dnxhrThread.joinable()) m_dnxhrThread.join();
-    m_dnxhrThread = std::thread([this, outputPath]() {
-        LogDnxhr("[DNxHR] export thread stub running");
-        gpuDnxhrExport(outputPath);
-        m_dnxhrStatus.active.store(false);
-    });
-#else
-    showActionMessage("DNxHR support not built");
 #endif
 }
 
