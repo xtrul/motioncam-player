@@ -22,8 +22,8 @@ This project builds a desktop player for MotionCam `.mcraw` files.
     cmake --build build --config Release
     ```
 
-FFmpeg is required for the "Export to ProRes" feature. When detected, the build
-system defines the `ENABLE_PRORES_EXPORT` flag. It will link using the
+FFmpeg is required for the "Export to DNxHR" feature. When detected, the build
+system defines the `ENABLE_DNXHR_EXPORT` flag. It will link using the
 `FFMPEG::` imported targets provided by vcpkg when they are available, falling
 back to the `${FFMPEG_LIBRARIES}` list otherwise. The CMake configuration will
 fail if the libraries cannot be found via vcpkg. When running the application on
@@ -34,19 +34,19 @@ approach is to copy them from
 `avfilter-10.dll`) to the output directory next to the executable. The
 `avfilter-10.pdb` file may also be copied for debugging symbols.
 
-If the **Export to ProRes** option is grayed out in the application, it means
+If the **Export to DNxHR** option is grayed out in the application, it means
 the binary was built without FFmpeg support. Re-run CMake and check that the
-configure step prints "FFmpeg found via vcpkg, enabling ProRes export". When
-this message appears, the `ENABLE_PRORES_EXPORT` definition is added and the
+configure step prints "FFmpeg found via vcpkg, enabling DNxHR export". When
+this message appears, the `ENABLE_DNXHR_EXPORT` definition is added and the
 runtime DLLs will be copied automatically.
 
-## ProRes Export
+## DNxHR Export
 
 - Right-click anywhere in the player window to open the context menu.
-- Choose **Export to ProRes** and select a `.mov` file path.
+- Choose **Export to DNxHR** and select a `.mov` file path.
 - Encoding uses FFmpeg linked via vcpkg. Make sure the libraries are installed in your vcpkg instance.
  - Progress is shown in a modal popup while the encoding thread runs.
- - The export uses the `prores_ks` encoder with frame threading and sets
+- The export uses the `dnxhd` encoder with the `dnxhr_hq` profile and frame threading. `slice_count` is set
    `slice_count` to the number of CPU cores. The conversion and scaling stages
    run on the same thread count via libswscale. The log records all thread
    counts and prints progress every 50 frames with elapsed time. A timing
@@ -55,22 +55,22 @@ runtime DLLs will be copied automatically.
    stage's percentage of the total duration are also printed.
 - Frame rate is derived from the clip's timestamps so the output is constant frame rate.
 - If the clip contains audio, 16‑bit PCM is muxed into the `.mov` container.
-- A `prores_export_log.txt` file is written inside the `Logs` folder for troubleshooting.
+- A `dnxhr_export_log.txt` file is written inside the `Logs` folder for troubleshooting.
 - The export pipeline relies on the `blackLevel`, `whiteLevel`, `asShotNeutral`, and
   `ColorMatrix*` metadata found in the `.mcraw` file. Incorrect values can result
   in an image that appears completely black. The log file lists the parsed
   numbers so you can verify them.
 - Encoder parameters, metadata values, and the detected CFA pattern are written
-  to `prores_export_log.txt` so you can verify exactly how the clip was processed.
+  to `dnxhr_export_log.txt` so you can verify exactly how the clip was processed.
 - If the resulting `.mov` only contains audio, check the log for
   **"No video frames encoded"**. This means the frame conversion failed and no
   video packets were written.
 - You can override the detected CFA pattern at runtime by pressing the number
   keys `1`‑`4` which map to **BGGR**, **RGGB**, **GBRG**, and **GRBG** respectively.
 
-### GPU ProRes Conversion
+### GPU DNxHR Conversion
 
-- Choose **Convert to ProRes (GPU)** from the context menu to run the RAW→YUV conversion on the GPU.
+- Choose **Convert to DNxHR (GPU)** from the context menu to run the RAW→YUV conversion on the GPU.
 - The log prints `MODE = GPU (Vulkan hw_frames)` when this path is used.
 - If initialization of Vulkan hardware frames fails it falls back to the CPU path automatically.
 - When GPU processing is active additional `[GPU]` log lines confirm the compute pipeline ran.
