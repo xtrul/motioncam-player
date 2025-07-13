@@ -113,6 +113,7 @@ public:
     void convertCurrentFileToDngs();
     void exportCurrentClipToProRes();
     void convertCurrentClipToProRes();
+    void exportCurrentClipToDnxhr();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -228,6 +229,16 @@ private:
     } m_proResStatus;
     std::atomic<bool> m_showExportProgressPopup{ false };
     std::thread m_proResThread;
+#endif
+#ifdef ENABLE_DNXHR_EXPORT
+    struct DnxhrExportStatus {
+        std::atomic<bool> active{ false };
+        std::atomic<int> currentFrame{ 0 };
+        int totalFrames{ 0 };
+        std::string errorMsg;
+    } m_dnxhrStatus;
+    std::atomic<bool> m_showDnxhrProgressPopup{ false };
+    std::thread m_dnxhrThread;
 #endif
 
 

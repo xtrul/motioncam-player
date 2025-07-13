@@ -150,6 +150,10 @@ App::App(const std::string& filePath) :
     , m_showExportProgressPopup(false)
     , m_proResStatus()
 #endif
+#ifdef ENABLE_DNXHR_EXPORT
+    , m_showDnxhrProgressPopup(false)
+    , m_dnxhrStatus()
+#endif
 {
     LogToFile(std::string("App::App Constructor called for file: ") + this->m_filePath);
 #ifndef NDEBUG
