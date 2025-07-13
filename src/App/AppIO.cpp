@@ -1273,14 +1273,14 @@ void App::exportCurrentClipToProRes() {
                 std::chrono::steady_clock::now() - allocStart).count();
         LogProRes("[ProResExport] Output context created in " + std::to_string(allocMs) + "ms");
 
-        const AVCodec* vcodec = avcodec_find_encoder_by_name("dnxhd");
+        const AVCodec* vcodec = avcodec_find_encoder_by_name("prores_ks");
         if (!vcodec) {
-            m_proResStatus.errorMsg = "DNxHR encoder not found";
+            m_proResStatus.errorMsg = "ProRes encoder not found";
             m_proResStatus.active.store(false);
             avformat_free_context(fmt);
             return;
         }
-        LogProRes(std::string("[ProResExport] DNxHR encoder: ") + avcodec_get_name(vcodec->id));
+        LogProRes(std::string("[ProResExport] ProRes encoder: ") + avcodec_get_name(vcodec->id));
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
         if (!vstream) {
@@ -1308,7 +1308,6 @@ void App::exportCurrentClipToProRes() {
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
         av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
-        av_dict_set(&encOpts, "profile", "dnxhr_hq", 0);
         LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {

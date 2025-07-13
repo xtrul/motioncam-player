@@ -239,14 +239,14 @@ namespace GuiOverlay {
             }
             ImGui::Separator();
 #ifdef ENABLE_PRORES_EXPORT
-            if (ImGui::MenuItem("Export to DNxHR", nullptr, false, canOperateOnCurrentFile)) {
+            if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->exportCurrentClipToProRes();
             }
-            if (ImGui::MenuItem("Convert to DNxHR (GPU)", nullptr, false, canOperateOnCurrentFile)) {
+            if (ImGui::MenuItem("Convert to ProRes (GPU)", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->convertCurrentClipToProRes();
             }
 #else
-            ImGui::MenuItem("Export to DNxHR", nullptr, false, false);
+            ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
             ImGui::EndPopup();
         }
@@ -677,7 +677,7 @@ namespace GuiOverlay {
             int cur = appInstance->m_proResStatus.currentFrame.load();
             int total = appInstance->m_proResStatus.totalFrames;
             float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
-            ImGui::Text("Exporting to DNxHR %d / %d", cur, total);
+            ImGui::Text("Exporting to ProRes %d / %d", cur, total);
             ImGui::ProgressBar(progress, ImVec2(200, 0));
             if (!appInstance->m_proResStatus.errorMsg.empty()) {
                 ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_proResStatus.errorMsg.c_str());
