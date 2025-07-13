@@ -98,6 +98,7 @@ set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
     "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
+    "${APP_SHADERS_SRC_DIR}/dct_quant.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -184,6 +185,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 if(HAVE_FFMPEG)
     target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_DNXHR_EXPORT)
 endif()
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
