@@ -21,8 +21,8 @@ bool GpuYuvConverter::init(int width, int height) {
     fs::path shaderPath = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_yuv422.comp.spv";
     auto code = VulkanHelpers::readFile(shaderPath.string());
     VkShaderModule module = VulkanHelpers::createShaderModule(m_renderer->m_device_p, code);
-    LogDnxhr("[GPU] Creating RAW->YUV compute pipeline");
-    LogDnxhr("[GPU] init start");
+    LogProRes("[GPU] Creating RAW->YUV compute pipeline");
+    LogProRes("[GPU] init start");
 
     // Create a private command pool for all converter operations
     uint32_t graphicsFamily = 0;
@@ -100,8 +100,8 @@ bool GpuYuvConverter::init(int width, int height) {
     ai.descriptorSetCount = 1;
     ai.pSetLayouts = &m_setLayout;
     VK_CHECK_RENDERER(vkAllocateDescriptorSets(m_renderer->m_device_p, &ai, &m_descSet));
-    LogDnxhr("[GPU] Compute pipeline initialized");
-    LogDnxhr("[GPU] init complete");
+    LogProRes("[GPU] Compute pipeline initialized");
+    LogProRes("[GPU] init complete");
 
     // Create RGBA32UI image for compute output (macropixels)
     VkImageCreateInfo imageInfo{};
@@ -231,7 +231,7 @@ void GpuYuvConverter::cleanup() {
 bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
                                      AVFrame* frame,
                                      const GpuColorParams& params) {
-    LogDnxhr("[GPU] convertToFrame invoked");
+    LogProRes("[GPU] convertToFrame invoked");
     VkDeviceSize rawSize = static_cast<VkDeviceSize>(width) * height * sizeof(uint16_t);
     VkDeviceSize outSize = static_cast<VkDeviceSize>(( (width + 1) / 2 )) * height * sizeof(uint32_t) * 4;
 
@@ -365,7 +365,7 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
 
     vkCmdDispatch(cmd, (uint32_t)((width + 31) / 32), (uint32_t)((height + 15) / 16), 1);
-    LogDnxhr("[GPU] compute dispatched");
+    LogProRes("[GPU] compute dispatched");
 
     VkImageMemoryBarrier barOut{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
     barOut.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -441,10 +441,10 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
         std::ostringstream oss;
         oss << "[GPU-CHECK] first macropixel  Y0=" << first[0]
             << " U=" << first[1] << " Y1=" << first[2] << " V=" << first[3];
-        LogDnxhr(oss.str());
+        LogProRes(oss.str());
     }
 
-    LogDnxhr("[GPU] readback complete");
+    LogProRes("[GPU] readback complete");
 
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
     vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
