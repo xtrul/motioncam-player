@@ -5,8 +5,9 @@
 
 // Simple file logger declaration
 void LogToFile(const std::string& message);
+void LogDnxhr(const std::string& message);
 void LogProRes(const std::string& message);
-// Logs whether FFmpeg/ProRes support is available at runtime
+// Logs whether FFmpeg/DNxHR support is available at runtime
 void LogFFmpegStatus();
 
 // Returns path to directory where log files should be stored.
