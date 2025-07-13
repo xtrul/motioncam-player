@@ -12,7 +12,7 @@
 #   include <windows.h>
 #   include <shlobj.h>
 #endif
-#ifdef ENABLE_DNXHR_EXPORT
+#ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
 #endif
 
@@ -73,15 +73,15 @@ static std::ofstream& get_log_file() {
     return log_file;
 }
 
-// Separate log file specifically for DNxHR export diagnostics
-static std::ofstream& get_dnxhr_log_file() {
+// Separate log file specifically for ProRes export diagnostics
+static std::ofstream& get_prores_log_file() {
     static std::ofstream log_file;
     static bool initialized = false;
     if (!initialized) {
         std::filesystem::path logDir = getLogDirectory();
         std::error_code ec;
         std::filesystem::create_directories(logDir, ec);
-        std::filesystem::path logPath = logDir / "dnxhr_export_log.txt";
+        std::filesystem::path logPath = logDir / "prores_export_log.txt";
         log_file.open(logPath, std::ios_base::app | std::ios_base::out);
         initialized = true;
     }
@@ -114,19 +114,19 @@ void LogToFile(const std::string& message) {
     }
 }
 
-void LogDnxhr(const std::string& message) {
+void LogProRes(const std::string& message) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
 
-    std::ofstream& log_file = get_dnxhr_log_file();
+    std::ofstream& log_file = get_prores_log_file();
     if (log_file.is_open()) {
         log_file << "[" << make_timestamp() << "] " << message << std::endl;
     }
 }
 
 void LogFFmpegStatus() {
-#ifdef ENABLE_DNXHR_EXPORT
-    LogToFile("[FFmpeg] DNxHR export support compiled in.");
-    LogDnxhr("[FFmpeg] DNxHR export support compiled in.");
+#ifdef ENABLE_PRORES_EXPORT
+    LogToFile("[FFmpeg] ProRes export support compiled in.");
+    LogProRes("[FFmpeg] ProRes export support compiled in.");
 #   ifdef _WIN32
     const char* dlls[] = {
         "avcodec-61.dll", "avformat-61.dll", "avutil-59.dll",
@@ -139,34 +139,34 @@ void LogFFmpegStatus() {
             HMODULE h = LoadLibraryA(p.string().c_str());
             if (h) {
                 LogToFile(std::string("[FFmpeg] Loaded ") + dll);
-                LogDnxhr(std::string("[FFmpeg] Loaded ") + dll);
+                LogProRes(std::string("[FFmpeg] Loaded ") + dll);
                 FreeLibrary(h);
             } else {
                 LogToFile(std::string("[FFmpeg] Failed to load ") + dll + " error " + std::to_string(GetLastError()));
-                LogDnxhr(std::string("[FFmpeg] Failed to load ") + dll + " error " + std::to_string(GetLastError()));
+                LogProRes(std::string("[FFmpeg] Failed to load ") + dll + " error " + std::to_string(GetLastError()));
                 allLoaded = false;
             }
         } else {
             LogToFile(std::string("[FFmpeg] Missing ") + dll);
-            LogDnxhr(std::string("[FFmpeg] Missing ") + dll);
+            LogProRes(std::string("[FFmpeg] Missing ") + dll);
             allLoaded = false;
         }
     }
     if (allLoaded) {
-        LogToFile("[FFmpeg] All DLLs loaded; DNxHR export enabled.");
-        LogDnxhr("[FFmpeg] All DLLs loaded; DNxHR export enabled.");
+        LogToFile("[FFmpeg] All DLLs loaded; ProRes export enabled.");
+        LogProRes("[FFmpeg] All DLLs loaded; ProRes export enabled.");
     } else {
         LogToFile("[FFmpeg] Some FFmpeg DLLs could not be loaded; export may fail.");
-        LogDnxhr("[FFmpeg] Some FFmpeg DLLs could not be loaded; export may fail.");
+        LogProRes("[FFmpeg] Some FFmpeg DLLs could not be loaded; export may fail.");
     }
 #   else
     av_register_all();
     int version = avcodec_version();
     LogToFile(std::string("[FFmpeg] avcodec version ") + std::to_string(version));
-    LogDnxhr(std::string("[FFmpeg] avcodec version ") + std::to_string(version));
+    LogProRes(std::string("[FFmpeg] avcodec version ") + std::to_string(version));
 #   endif
 #else
-    LogToFile("[FFmpeg] FFmpeg support not built; DNxHR export unavailable.");
-    LogDnxhr("[FFmpeg] FFmpeg support not built; DNxHR export unavailable.");
+    LogToFile("[FFmpeg] FFmpeg support not built; ProRes export unavailable.");
+    LogProRes("[FFmpeg] FFmpeg support not built; ProRes export unavailable.");
 #endif
 }

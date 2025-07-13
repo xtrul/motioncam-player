@@ -111,8 +111,8 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
-    void exportCurrentClipToDnxhr();
-    void convertCurrentClipToDnxhr();
+    void exportCurrentClipToProRes();
+    void convertCurrentClipToProRes();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -219,15 +219,15 @@ private:
     double m_uiAutoHideDelaySec = 3.0;
     float m_uiFadeSpeed = 3.0f;
 
-#ifdef ENABLE_DNXHR_EXPORT
-    struct DnxhrExportStatus {
+#ifdef ENABLE_PRORES_EXPORT
+    struct ProResExportStatus {
         std::atomic<bool> active{ false };
         std::atomic<int> currentFrame{ 0 };
         int totalFrames{ 0 };
         std::string errorMsg;
-    } m_dnxhrStatus;
+    } m_proResStatus;
     std::atomic<bool> m_showExportProgressPopup{ false };
-    std::thread m_dnxhrThread;
+    std::thread m_proResThread;
 #endif
 
 

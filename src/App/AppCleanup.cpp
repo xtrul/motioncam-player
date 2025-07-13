@@ -52,11 +52,11 @@ App::~App() {
         m_decodeThread.join();
         LogToFile("[App::~App] Decode thread joined.");
     }
-#ifdef ENABLE_DNXHR_EXPORT
-    if (m_dnxhrThread.joinable()) {
-        LogToFile("[App::~App] Joining DNxHR export thread...");
-        m_dnxhrThread.join();
-        LogToFile("[App::~App] DNxHR export thread joined.");
+#ifdef ENABLE_PRORES_EXPORT
+    if (m_proResThread.joinable()) {
+        LogToFile("[App::~App] Joining ProRes export thread...");
+        m_proResThread.join();
+        LogToFile("[App::~App] ProRes export thread joined.");
     }
 #endif
 
