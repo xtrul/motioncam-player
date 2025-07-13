@@ -1195,10 +1195,10 @@ void App::exportCurrentClipToProRes() {
         return;
     }
 
-    LogProRes(std::string("[ProResExport] Starting export to ") + outputPath);
+    LogProRes(std::string("[DNxHRExport] Starting export to ") + outputPath);
 
     m_proResStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
-    LogProRes(std::string("[ProResExport] Total frames: ") + std::to_string(m_proResStatus.totalFrames));
+    LogProRes(std::string("[DNxHRExport] Total frames: ") + std::to_string(m_proResStatus.totalFrames));
     m_proResStatus.currentFrame.store(0);
     m_proResStatus.active.store(true);
     m_proResStatus.errorMsg.clear();
@@ -1212,12 +1212,12 @@ void App::exportCurrentClipToProRes() {
     bool useGpu = g_useGpuProRes;
     m_proResThread = std::thread([this, outputPath, useGpu]() {
         av_log_set_level(AV_LOG_ERROR);
-        LogProRes("[ProResExport] Thread started");
-        LogProRes(std::string("[ProResExport] MODE = ") + (useGpu ? "GPU (Vulkan hw_frames)" : "CPU (swscale)"));
+        LogProRes("[DNxHRExport] Thread started");
+        LogProRes(std::string("[DNxHRExport] MODE = ") + (useGpu ? "GPU (Vulkan hw_frames)" : "CPU (swscale)"));
 
         auto* dec = m_decoderWrapper_ptr->getDecoder();
         const auto& frames = dec->getFrames();
-        LogProRes(std::string("[ProResExport] Frames to export: ") + std::to_string(frames.size()));
+        LogProRes(std::string("[DNxHRExport] Frames to export: ") + std::to_string(frames.size()));
         if (frames.empty()) {
             m_proResStatus.errorMsg = "No frames to export";
             m_proResStatus.active.store(false);
@@ -1229,14 +1229,14 @@ void App::exportCurrentClipToProRes() {
         try {
             dec->loadFrame(frames[0], rawBuf, meta);
         } catch (const std::exception& e) {
-            LogToFile(std::string("[ProResExport] Failed to load first frame: ") + e.what());
+            LogToFile(std::string("[DNxHRExport] Failed to load first frame: ") + e.what());
             m_proResStatus.errorMsg = "Failed to load first frame";
             m_proResStatus.active.store(false);
             return;
         }
         int width = meta.value("width", 0);
         int height = meta.value("height", 0);
-        LogProRes(std::string("[ProResExport] Frame dimensions: ") + std::to_string(width) + "x" + std::to_string(height));
+        LogProRes(std::string("[DNxHRExport] Frame dimensions: ") + std::to_string(width) + "x" + std::to_string(height));
         if (width <= 0 || height <= 0) {
             m_proResStatus.errorMsg = "Invalid frame dimensions";
             m_proResStatus.active.store(false);
@@ -1247,7 +1247,7 @@ void App::exportCurrentClipToProRes() {
         bool gpuActive = useGpu;
         if (gpuActive) {
             if (!converter.init(width, height)) {
-                LogProRes("[ProResExport] GPU init failed, falling back to CPU");
+                LogProRes("[DNxHRExport] GPU init failed, falling back to CPU");
                 gpuActive = false;
             }
         }
@@ -1259,9 +1259,9 @@ void App::exportCurrentClipToProRes() {
             frameDurationNs = 41708333; // ~24fps fallback
         }
         AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
-        LogProRes(std::string("[ProResExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
+        LogProRes(std::string("[DNxHRExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
 
-        LogProRes("[ProResExport] Allocating output context");
+        LogProRes("[DNxHRExport] Allocating output context");
         auto allocStart = std::chrono::steady_clock::now();
         AVFormatContext* fmt = nullptr;
         if (avformat_alloc_output_context2(&fmt, nullptr, nullptr, outputPath.c_str()) < 0 || !fmt) {
@@ -1271,16 +1271,16 @@ void App::exportCurrentClipToProRes() {
         }
         auto allocMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - allocStart).count();
-        LogProRes("[ProResExport] Output context created in " + std::to_string(allocMs) + "ms");
+        LogProRes("[DNxHRExport] Output context created in " + std::to_string(allocMs) + "ms");
 
-        const AVCodec* vcodec = avcodec_find_encoder_by_name("prores_ks");
+        const AVCodec* vcodec = avcodec_find_encoder_by_name("dnxhd");
         if (!vcodec) {
-            m_proResStatus.errorMsg = "ProRes encoder not found";
+            m_proResStatus.errorMsg = "DNxHR encoder not found";
             m_proResStatus.active.store(false);
             avformat_free_context(fmt);
             return;
         }
-        LogProRes(std::string("[ProResExport] ProRes encoder: ") + avcodec_get_name(vcodec->id));
+        LogProRes(std::string("[DNxHRExport] DNxHR encoder: ") + avcodec_get_name(vcodec->id));
 
         AVStream* vstream = avformat_new_stream(fmt, nullptr);
         if (!vstream) {
@@ -1301,14 +1301,13 @@ void App::exportCurrentClipToProRes() {
         if (threads == 0) threads = 1;
         vctx->thread_count = 0; // let FFmpeg decide based on HW
         vctx->thread_type = FF_THREAD_FRAME;
-        LogProRes(std::string("[ProResExport] Detected CPU threads: ") +
+        LogProRes(std::string("[DNxHRExport] Detected CPU threads: ") +
                   std::to_string(threads));
-        LogProRes(std::string("[ProResExport] Thread type: FRAME"));
+        LogProRes(std::string("[DNxHRExport] Thread type: FRAME"));
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
-        av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
-        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
+        av_dict_set(&encOpts, "profile", "dnxhr_hq", 0);
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_proResStatus.errorMsg = "avcodec_open2 failed";
@@ -1321,12 +1320,12 @@ void App::exportCurrentClipToProRes() {
         auto openVMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - openVStart).count();
         av_dict_free(&encOpts);
-        LogProRes(std::string("[ProResExport] Video codec opened in ") + std::to_string(openVMs) + "ms");
-        LogProRes(std::string("[ProResExport] Actual thread count: ") +
+        LogProRes(std::string("[DNxHRExport] Video codec opened in ") + std::to_string(openVMs) + "ms");
+        LogProRes(std::string("[DNxHRExport] Actual thread count: ") +
                   std::to_string(vctx->thread_count));
         {
             std::ostringstream vinfo;
-            vinfo << "[ProResExport] Video encoder settings: "
+            vinfo << "[DNxHRExport] Video encoder settings: "
                   << avcodec_get_name(vctx->codec_id) << " "
                   << vctx->width << "x" << vctx->height
                   << " pix_fmt=YUV422P10LE";
@@ -1354,7 +1353,7 @@ void App::exportCurrentClipToProRes() {
                 astream->time_base = actx->time_base;
                 {
                     std::ostringstream ainfo;
-                    ainfo << "[ProResExport] Audio encoder: PCM S16LE, channels="
+                    ainfo << "[DNxHRExport] Audio encoder: PCM S16LE, channels="
                           << actx->ch_layout.nb_channels
                           << " sample_rate=" << actx->sample_rate;
                     LogProRes(ainfo.str());
@@ -1362,12 +1361,12 @@ void App::exportCurrentClipToProRes() {
             } else {
                 avcodec_free_context(&actx);
                 actx = nullptr;
-                LogProRes("[ProResExport] Failed to initialize audio encoder");
+                LogProRes("[DNxHRExport] Failed to initialize audio encoder");
             }
         }
 
         if (!(fmt->oformat->flags & AVFMT_NOFILE)) {
-            LogProRes("[ProResExport] Opening output file");
+            LogProRes("[DNxHRExport] Opening output file");
             auto fileOpenStart = std::chrono::steady_clock::now();
             if (avio_open(&fmt->pb, outputPath.c_str(), AVIO_FLAG_WRITE) < 0) {
                 m_proResStatus.errorMsg = "avio_open failed";
@@ -1378,10 +1377,10 @@ void App::exportCurrentClipToProRes() {
             }
             auto fileOpenMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - fileOpenStart).count();
-            LogProRes("[ProResExport] Output file opened in " + std::to_string(fileOpenMs) + "ms");
+            LogProRes("[DNxHRExport] Output file opened in " + std::to_string(fileOpenMs) + "ms");
         }
 
-        LogProRes("[ProResExport] Writing header");
+        LogProRes("[DNxHRExport] Writing header");
         auto headerStart = std::chrono::steady_clock::now();
         if (avformat_write_header(fmt, nullptr) < 0) {
             m_proResStatus.errorMsg = "avformat_write_header failed";
@@ -1393,10 +1392,10 @@ void App::exportCurrentClipToProRes() {
         }
         auto headerMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - headerStart).count();
-        LogProRes("[ProResExport] Header written in " + std::to_string(headerMs) + "ms");
+        LogProRes("[DNxHRExport] Header written in " + std::to_string(headerMs) + "ms");
 
         auto encodeStart = std::chrono::steady_clock::now();
-        LogProRes("[ProResExport] Encode loop starting");
+        LogProRes("[DNxHRExport] Encode loop starting");
         long long readUS = 0;
         long long rgbUS = 0;
         long long scaleUS = 0;
@@ -1421,7 +1420,7 @@ void App::exportCurrentClipToProRes() {
                                          width, height, AV_PIX_FMT_YUV422P10LE,
                                          SWS_BILINEAR, nullptr,nullptr,nullptr);
         av_opt_set_int(sws, "threads", threads, 0);
-        LogProRes(std::string("[ProResExport] swscale threads: ") + std::to_string(threads));
+        LogProRes(std::string("[DNxHRExport] swscale threads: ") + std::to_string(threads));
 
         int framesEncoded = 0;
 
@@ -1458,20 +1457,20 @@ void App::exportCurrentClipToProRes() {
 
         {
             std::ostringstream oss;
-            oss << "[ProResExport] Metadata: black=" << cpParams.blackLevel
+            oss << "[DNxHRExport] Metadata: black=" << cpParams.blackLevel
                 << " white=" << cpParams.whiteLevel
                 << " cfaType=" << cpParams.cfaType;
             LogProRes(oss.str());
 
             std::ostringstream asn;
-            asn << "[ProResExport] asShotNeutral:";
+            asn << "[DNxHRExport] asShotNeutral:";
             for (size_t i = 0; i < asn_json.size(); ++i) {
                 asn << (i ? "," : " ") << asn_json[i];
             }
             LogProRes(asn.str());
 
             std::ostringstream ccmss;
-            ccmss << "[ProResExport] ColorMatrix:";
+            ccmss << "[DNxHRExport] ColorMatrix:";
             for (int i = 0; i < 9; ++i) {
                 ccmss << (i ? "," : " ") << cpParams.ccm[i];
             }
@@ -1531,7 +1530,7 @@ void App::exportCurrentClipToProRes() {
                 auto now = std::chrono::steady_clock::now();
                 auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - encodeStart).count();
                 std::ostringstream prog;
-                prog << "[ProResExport] Encoded frame " << (idx + 1) << "/" << frames.size()
+                prog << "[DNxHRExport] Encoded frame " << (idx + 1) << "/" << frames.size()
                      << " elapsed=" << ms << "ms";
                 LogProRes(prog.str());
             }
@@ -1539,7 +1538,7 @@ void App::exportCurrentClipToProRes() {
 
         // Encode audio
         if (actx && astream) {
-            LogProRes("[ProResExport] Starting audio encode");
+            LogProRes("[DNxHRExport] Starting audio encode");
             motioncam::AudioChunkLoader* loader = m_decoderWrapper_ptr->makeFreshAudioLoader();
             motioncam::AudioChunk chunk;
             int64_t audioPts = 0;
@@ -1577,7 +1576,7 @@ void App::exportCurrentClipToProRes() {
                 av_interleaved_write_frame(fmt, &apkt);
                 av_packet_unref(&apkt);
             }
-            LogProRes("[ProResExport] Audio encode finished");
+            LogProRes("[DNxHRExport] Audio encode finished");
         }
 
         auto flushStart = std::chrono::steady_clock::now();
@@ -1604,13 +1603,13 @@ void App::exportCurrentClipToProRes() {
         double fps = totalMs > 0 ? (framesEncoded * 1000.0) / totalMs : 0.0;
         {
             std::ostringstream finfo;
-            finfo << "[ProResExport] Encode duration=" << totalMs << "ms fps="
+            finfo << "[DNxHRExport] Encode duration=" << totalMs << "ms fps="
                   << std::fixed << std::setprecision(2) << fps;
             LogProRes(finfo.str());
         }
         {
             std::ostringstream summary;
-            summary << "[ProResExport] Timing breakdown ms: read="
+            summary << "[DNxHRExport] Timing breakdown ms: read="
                     << (readUS / 1000) << " rgb=" << (rgbUS / 1000)
                     << " scale=" << (scaleUS / 1000)
                     << " encode=" << (encodeUS / 1000);
@@ -1623,7 +1622,7 @@ void App::exportCurrentClipToProRes() {
             double scaleAvg = scaleUS / 1000.0 / framesEncoded;
             double encAvg = encodeUS / 1000.0 / framesEncoded;
             std::ostringstream avg;
-            avg << "[ProResExport] Avg per-frame ms: read=" << std::fixed
+            avg << "[DNxHRExport] Avg per-frame ms: read=" << std::fixed
                 << std::setprecision(2) << readAvg << " rgb=" << rgbAvg
                 << " scale=" << scaleAvg << " encode=" << encAvg;
             LogProRes(avg.str());
@@ -1633,7 +1632,7 @@ void App::exportCurrentClipToProRes() {
             double scalePct = scaleUS * 100.0 / totalUS;
             double encPct = encodeUS * 100.0 / totalUS;
             std::ostringstream pct;
-            pct << "[ProResExport] Time share %: read=" << readPct
+            pct << "[DNxHRExport] Time share %: read=" << readPct
                 << " rgb=" << rgbPct << " scale=" << scalePct
                 << " encode=" << encPct;
             LogProRes(pct.str());
@@ -1643,7 +1642,7 @@ void App::exportCurrentClipToProRes() {
         av_write_trailer(fmt);
         auto trailerMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - trailerStart).count();
-        LogProRes("[ProResExport] Trailer written in " + std::to_string(trailerMs) + "ms");
+        LogProRes("[DNxHRExport] Trailer written in " + std::to_string(trailerMs) + "ms");
         sws_freeContext(sws);
         if (actx) avcodec_free_context(&actx);
         if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
@@ -1652,11 +1651,11 @@ void App::exportCurrentClipToProRes() {
 
         if (m_proResStatus.errorMsg.empty()) {
             showActionMessage("Export Finished");
-            LogProRes(std::string("[ProResExport] Export finished successfully, frames encoded: ") + std::to_string(framesEncoded));
+            LogProRes(std::string("[DNxHRExport] Export finished successfully, frames encoded: ") + std::to_string(framesEncoded));
         }
         else {
-            LogToFile(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
-            LogProRes(std::string("[ProResExport] Error: ") + m_proResStatus.errorMsg);
+            LogToFile(std::string("[DNxHRExport] Error: ") + m_proResStatus.errorMsg);
+            LogProRes(std::string("[DNxHRExport] Error: ") + m_proResStatus.errorMsg);
         }
         m_proResStatus.active.store(false);
         g_useGpuProRes = false;
