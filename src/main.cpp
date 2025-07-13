@@ -34,7 +34,6 @@
 #include <SDL.h>
 
 #include "App/App.h"
-#include "App/ProResExport.h"
 #include "Utils/DebugLog.h"
 #ifdef _WIN32
 #include "Utils/SingleInstanceGuard.h"
@@ -270,12 +269,6 @@ int main(int argc, char* argv[]) {
         LogToFile(std::string("[main] Input file from command line: ") + inPath);
     } else {
         LogToFile("[main] No command line argument provided. Starting without file.");
-    }
-
-    for(int i=2;i<argc;i++){
-        std::string a = argv[i];
-        if(a == "-gpu") g_useGpuProRes = true;
-        else if(a == "-gpuAsyncExport") g_gpuAsyncExport = true;
     }
 
     if (!inPath.empty() && (!fs::exists(inPath) || !fs::is_regular_file(inPath))) {
