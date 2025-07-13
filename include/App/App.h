@@ -113,6 +113,8 @@ public:
     void convertCurrentFileToDngs();
     void exportCurrentClipToProRes();
     void convertCurrentClipToProRes();
+    void exportCurrentClipToDNxHR();
+    void convertCurrentClipToDNxHR();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
