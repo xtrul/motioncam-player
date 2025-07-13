@@ -202,6 +202,11 @@ int main(int argc, char* argv[]) {
 
     // Force creation of ProRes log at startup
     LogProRes("[Startup] ProRes log initialized");
+#ifdef ENABLE_DNXHR_EXPORT
+    LogToFile("[Startup] DNxHR exporter available: yes");
+#else
+    LogToFile("[Startup] DNxHR exporter available: no");
+#endif
 
     // Record whether FFmpeg support is available
     LogFFmpegStatus();

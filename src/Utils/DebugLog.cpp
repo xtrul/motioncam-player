@@ -169,4 +169,7 @@ void LogFFmpegStatus() {
     LogToFile("[FFmpeg] FFmpeg support not built; ProRes export unavailable.");
     LogProRes("[FFmpeg] FFmpeg support not built; ProRes export unavailable.");
 #endif
+#ifdef ENABLE_DNXHR_EXPORT
+    LogToFile("[DNxHR] GPU exporter compiled in.");
+#endif
 }
