@@ -245,12 +245,6 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Convert to ProRes (GPU)", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->convertCurrentClipToProRes();
             }
-            if (ImGui::MenuItem("Export to DNxHR", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->exportCurrentClipToDNxHR();
-            }
-            if (ImGui::MenuItem("Convert to DNxHR (GPU)", nullptr, false, canOperateOnCurrentFile)) {
-                if (appInstance) appInstance->convertCurrentClipToDNxHR();
-            }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
@@ -692,27 +686,6 @@ namespace GuiOverlay {
                 if (ImGui::Button("Close")) {
                     ImGui::CloseCurrentPopup();
                     appInstance->m_showExportProgressPopup.store(false);
-                }
-            }
-            ImGui::EndPopup();
-        }
-
-        if (appInstance->m_showDNxHRExportProgressPopup.load()) {
-            ImGui::OpenPopup("DNXHR_EXPORT_PROGRESS");
-        }
-        if (ImGui::BeginPopupModal("DNXHR_EXPORT_PROGRESS", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            int cur = appInstance->m_dnxhrStatus.currentFrame.load();
-            int total = appInstance->m_dnxhrStatus.totalFrames;
-            float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
-            ImGui::Text("Exporting to DNxHR %d / %d", cur, total);
-            ImGui::ProgressBar(progress, ImVec2(200, 0));
-            if (!appInstance->m_dnxhrStatus.errorMsg.empty()) {
-                ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_dnxhrStatus.errorMsg.c_str());
-            }
-            if (!appInstance->m_dnxhrStatus.active.load()) {
-                if (ImGui::Button("Close")) {
-                    ImGui::CloseCurrentPopup();
-                    appInstance->m_showDNxHRExportProgressPopup.store(false);
                 }
             }
             ImGui::EndPopup();
