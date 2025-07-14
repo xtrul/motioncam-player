@@ -102,6 +102,20 @@ static std::ofstream& get_dnxhr_log_file() {
     return log_file;
 }
 
+static std::ofstream& get_hevc_log_file() {
+    static std::ofstream log_file;
+    static bool initialized = false;
+    if (!initialized) {
+        std::filesystem::path logDir = getLogDirectory();
+        std::error_code ec;
+        std::filesystem::create_directories(logDir, ec);
+        std::filesystem::path logPath = logDir / "hevc_export_log.txt";
+        log_file.open(logPath, std::ios_base::app | std::ios_base::out);
+        initialized = true;
+    }
+    return log_file;
+}
+
 void LogToFile(const std::string& message) {
     std::lock_guard<std::mutex> lock(g_log_mutex); // Lock for thread safety
 
@@ -141,6 +155,15 @@ void LogDnxhr(const std::string& message) {
     std::lock_guard<std::mutex> lock(g_log_mutex);
 
     std::ofstream& log_file = get_dnxhr_log_file();
+    if (log_file.is_open()) {
+        log_file << "[" << make_timestamp() << "] " << message << std::endl;
+    }
+}
+
+void LogHevc(const std::string& message) {
+    std::lock_guard<std::mutex> lock(g_log_mutex);
+
+    std::ofstream& log_file = get_hevc_log_file();
     if (log_file.is_open()) {
         log_file << "[" << make_timestamp() << "] " << message << std::endl;
     }

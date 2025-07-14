@@ -560,6 +560,42 @@ std::string App::openSaveMxfDialog() {
     return {};
 }
 
+std::string App::openSaveMp4Dialog() {
+#ifdef _WIN32
+    OPENFILENAMEW ofn{};
+    wchar_t szFile[MAX_PATH] = { 0 };
+    ofn.lStructSize = sizeof(ofn);
+
+    HWND ownerHwnd = NULL;
+    if (m_window) {
+        ownerHwnd = glfwGetWin32Window(m_window);
+    }
+
+    ofn.hwndOwner = ownerHwnd;
+    ofn.lpstrFilter = L"MP4 files\0*.mp4\0All Files\0*.*\0";
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    ofn.lpstrDefExt = L"mp4";
+
+    if (GetSaveFileNameW(&ofn)) {
+        std::string utf8Path = DebugLogHelper::wstring_to_utf8(szFile);
+        if (utf8Path.empty() && szFile[0] != L'\0') {
+            LogToFile("[App::openSaveMp4Dialog] UTF-8 conversion failed for selected path.");
+            return {};
+        }
+        return utf8Path;
+    }
+#else
+    LogToFile("[App::openSaveMp4Dialog] Save dialog not implemented for this platform. Using console fallback.");
+    std::string path;
+    std::cout << "Enter output .mp4 path: " << std::flush;
+    std::getline(std::cin, path);
+    return path;
+#endif
+    return {};
+}
+
 void App::triggerOpenFileViaDialog() {
     std::string newPath = openMcrawDialog();
     if (!newPath.empty()) {
