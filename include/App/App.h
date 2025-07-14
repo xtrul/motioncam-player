@@ -115,8 +115,6 @@ public:
     void convertCurrentClipToProRes();
     void exportCurrentClipToDNxHR();
     void convertCurrentClipToDNxHR();
-    void exportCurrentClipToHEVC_AMD();
-    void convertCurrentClipToHEVC_AMD();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -241,15 +239,6 @@ private:
     } m_dnxhrStatus;
     std::atomic<bool> m_showDNxHRExportProgressPopup{ false };
     std::thread m_dnxhrThread;
-
-    struct HevcExportStatus {
-        std::atomic<bool> active{ false };
-        std::atomic<int> currentFrame{ 0 };
-        int totalFrames{ 0 };
-        std::string errorMsg;
-    } m_hevcStatus;
-    std::atomic<bool> m_showHevcExportProgressPopup{ false };
-    std::thread m_hevcThread;
 #endif
 
 
@@ -294,7 +283,6 @@ private:
     std::string openMcrawDialog();
     std::string openSaveMovDialog();
     std::string openSaveMxfDialog();
-    std::string openSaveMp4Dialog();
 
     struct SwapChainSupportDetails {
         VkSurfaceCapabilitiesKHR capabilities;

@@ -7,7 +7,6 @@
 void LogToFile(const std::string& message);
 void LogProRes(const std::string& message);
 void LogDnxhr(const std::string& message);
-void LogHevc(const std::string& message);
 // Logs whether FFmpeg/ProRes support is available at runtime
 void LogFFmpegStatus();
 
