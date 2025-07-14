@@ -1,0 +1,16 @@
+{
+  "ProRes": {
+    "enabled": true,
+    "profile": "hq",
+    "threads": 8,
+    "thread_type": "slice",
+    "pix_fmt": "yuv422p10le"
+  },
+  "DNxHR": {
+    "enabled": true,
+    "profile": "hqx",
+    "threads": 6,
+    "thread_type": "frame",
+    "pix_fmt": "yuv422p10le"
+  }
+}
