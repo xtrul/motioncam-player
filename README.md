@@ -83,3 +83,9 @@ runtime DLLs will be copied automatically.
   Non-conforming sizes emit a warning but encoding still proceeds.
 - Uses the DNxHR **HQX** profile (10‑bit 4:2:2) with the MXF container.
 - Progress and error reporting mirror the ProRes export and are written to the same log file.
+
+## HEVC Export (AMD)
+
+- Choose **Convert to HEVC (GPU, AMD 10-bit HQ)** to encode using the `hevc_amf` hardware encoder.
+- The output `.mp4` uses the 10‑bit P010 pixel format with constant quality mode.
+- If the AMD encoder is unavailable the export aborts and logs to `hevc_export_log.txt`.
