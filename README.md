@@ -87,7 +87,8 @@ runtime DLLs will be copied automatically.
 ## HEVC Export (AMD)
 
 - Choose **Convert to HEVC (GPU, AMD 10-bit HQ)** to encode using the `hevc_amf` hardware encoder.
-- Encoding runs in constant quality mode using 10‑bit P010 frames with the `transcoding` usage preset and `slow` quality setting.
+- Encoding uses the `transcoding` usage preset with the `slow` quality setting and 10‑bit P010 frames.
+- The encoder runs in high quality **ABR** mode at ~250&nbsp;Mbps with an IDR frame every frame (GOP&nbsp;= 1).
+- BT.709 color metadata is written so DaVinci Resolve interprets the clip correctly.
 - If the AMD encoder is unavailable the export aborts and logs to `hevc_export_log.txt`.
-- Intra frames now use a QP value of 16 and the encoder writes BT.709 color metadata.
 - The log file lists these settings so you can verify the parameters used.
