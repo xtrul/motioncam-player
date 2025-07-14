@@ -251,6 +251,9 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Convert to DNxHR (GPU)", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->convertCurrentClipToDNxHR();
             }
+            if (ImGui::MenuItem("Convert to HEVC (GPU, AMD 10-bit HQ)", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->convertCurrentClipToHEVC_AMD();
+            }
 #else
             ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
@@ -713,6 +716,26 @@ namespace GuiOverlay {
                 if (ImGui::Button("Close")) {
                     ImGui::CloseCurrentPopup();
                     appInstance->m_showDNxHRExportProgressPopup.store(false);
+                }
+            }
+            ImGui::EndPopup();
+        }
+        if (appInstance->m_showHevcExportProgressPopup.load()) {
+            ImGui::OpenPopup("HEVC_EXPORT_PROGRESS");
+        }
+        if (ImGui::BeginPopupModal("HEVC_EXPORT_PROGRESS", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            int cur = appInstance->m_hevcStatus.currentFrame.load();
+            int total = appInstance->m_hevcStatus.totalFrames;
+            float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
+            ImGui::Text("Exporting to HEVC %d / %d", cur, total);
+            ImGui::ProgressBar(progress, ImVec2(200, 0));
+            if (!appInstance->m_hevcStatus.errorMsg.empty()) {
+                ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_hevcStatus.errorMsg.c_str());
+            }
+            if (!appInstance->m_hevcStatus.active.load()) {
+                if (ImGui::Button("Close")) {
+                    ImGui::CloseCurrentPopup();
+                    appInstance->m_showHevcExportProgressPopup.store(false);
                 }
             }
             ImGui::EndPopup();
