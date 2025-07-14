@@ -108,6 +108,7 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
+    void exportCurrentClipToHEVC_AMD();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 
