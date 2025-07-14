@@ -2344,18 +2344,20 @@ void App::exportCurrentClipToHEVC_AMD() {
 
         av_opt_set(vctx->priv_data, "usage", "transcoding", 0);
         av_opt_set(vctx->priv_data, "quality", "slow", 0);
-        av_opt_set(vctx->priv_data, "profile", "main", 0);
+        av_opt_set(vctx->priv_data, "profile", "main10", 0);
         av_opt_set(vctx->priv_data, "tier", "high", 0);
-        av_opt_set(vctx->priv_data, "b", "0", 0);
-        av_opt_set(vctx->priv_data, "rc", "cqp", 0);
-        av_opt_set(vctx->priv_data, "qp_i", "16", 0);
-        av_opt_set(vctx->priv_data, "g", "250", 0);
+        av_opt_set(vctx->priv_data, "rc", "abr", 0);
+        av_opt_set(vctx->priv_data, "b", "250M", 0);
+        av_opt_set(vctx->priv_data, "maxrate", "250M", 0);
+        av_opt_set(vctx->priv_data, "bufsize", "500M", 0);
+        av_opt_set(vctx->priv_data, "g", "1", 0);
+        av_opt_set(vctx->priv_data, "forced-idr", "1", 0);
         vctx->color_primaries = AVCOL_PRI_BT709;
         vctx->color_trc = AVCOL_TRC_BT709;
         vctx->colorspace = AVCOL_SPC_BT709;
         LogHevc("[HEVCExport] color_primaries=bt709 color_trc=bt709 colorspace=bt709");
 
-        LogHevc("[HEVCExport] usage=transcoding quality=slow profile=main tier=high rc=cqp qp_i=16 g=250 color=bt709");
+        LogHevc("[HEVCExport] usage=transcoding quality=slow profile=main10 tier=high rc=abr b=250M maxrate=250M bufsize=500M g=1 color=bt709");
         char pixDesc[64];
         snprintf(pixDesc, sizeof(pixDesc), "[HEVCExport] pix_fmt=%s", av_get_pix_fmt_name(vctx->pix_fmt));
         LogHevc(pixDesc);
