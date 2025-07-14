@@ -211,6 +211,9 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Send All in Playlist to motioncam-fs", nullptr, false, playlistNotEmpty)) {
                 if (appInstance) appInstance->sendAllPlaylistFilesToMotionCamFS();
             }
+            if (ImGui::MenuItem("Convert to HEVC (GPU, AMD 10-bit HQ)", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->exportCurrentClipToHEVC_AMD();
+            }
             ImGui::EndPopup();
         }
 
