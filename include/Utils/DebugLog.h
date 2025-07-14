@@ -5,5 +5,6 @@
 
 // Simple file logger declaration
 void LogToFile(const std::string& message);
+void LogHevc(const std::string& message);
 
 #endif // DEBUG_LOG_H
