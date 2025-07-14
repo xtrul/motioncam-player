@@ -202,7 +202,6 @@ int main(int argc, char* argv[]) {
 
     // Force creation of ProRes log at startup
     LogProRes("[Startup] ProRes log initialized");
-    LogHevc("[Startup] HEVC log initialized");
 
     // Record whether FFmpeg support is available
     LogFFmpegStatus();
