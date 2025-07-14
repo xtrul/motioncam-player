@@ -151,8 +151,6 @@ App::App(const std::string& filePath) :
     , m_proResStatus()
     , m_showDNxHRExportProgressPopup(false)
     , m_dnxhrStatus()
-    , m_showHevcExportProgressPopup(false)
-    , m_hevcStatus()
 #endif
 {
     LogToFile(std::string("App::App Constructor called for file: ") + this->m_filePath);
