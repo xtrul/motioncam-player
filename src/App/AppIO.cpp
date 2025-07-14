@@ -32,9 +32,6 @@
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
-#include "Graphics/GpuDctQuantizer.h"
-#include "Export/SliceWriter.h"
-#include "Export/RawDnxhrWriter.h"
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
@@ -1770,27 +1767,6 @@ void App::exportCurrentClipToDNxHR() {
         if (badDim) {
             LogProRes(std::string("[DNxHRExport] WARN non-even dimensions ") + std::to_string(width) + "x" + std::to_string(height) +
                        " – DNxHR may fail in some NLEs");
-        }
-
-        if (useGpu) {
-            LogProRes("[GpuDctQuantizer] Running");
-            GpuDctQuantizer quantizer(m_rendererVk.get());
-            quantizer.init(width, height);
-            size_t blocks = static_cast<size_t>(((width + 7) / 8) * ((height + 7) / 8) * 64 * 3);
-            std::vector<uint32_t> coeffs(blocks);
-            quantizer.process(VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, coeffs.data(), coeffs.size() * sizeof(uint32_t));
-            std::vector<Slice> slices((width + 7) / 8 * ((height + 7) / 8));
-            for (auto& s : slices) s.coeffs.assign(64, 0);
-            SliceWriter writer;
-            std::vector<uint8_t> frameBuf;
-            writer.writeFrame(slices, width, height, frameBuf);
-            LogProRes(std::string("[SliceWriter] Slice size = ") + std::to_string(frameBuf.size()));
-            LogProRes(std::string("[RawDnxhrWriter] Writing to ") + outputPath);
-            writeRawDnxhr(frameBuf, width, height, outputPath, true);
-            LogProRes("[DNxHRExport] GPU path complete");
-            m_dnxhrStatus.active.store(false);
-            g_useGpuDNxHR = false;
-            return;
         }
 
         GpuYuvConverter converter(m_rendererVk.get());
