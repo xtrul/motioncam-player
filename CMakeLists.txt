@@ -109,7 +109,6 @@ set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
     "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
-    "${APP_SHADERS_SRC_DIR}/dct_quant.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -174,9 +173,6 @@ set(APP_SOURCES
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
   src/Export/DnxhrExporter.cpp
-  src/Export/SliceWriter.cpp
-  src/Export/RawDnxhrWriter.cpp
-  src/Graphics/GpuDctQuantizer.cpp
 
   src/main.cpp
 )
