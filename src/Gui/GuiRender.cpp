@@ -204,6 +204,9 @@ namespace GuiOverlay {
             if (ImGui::MenuItem("Soft Delete MCRAW", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->softDeleteCurrentFile();
             }
+            if (ImGui::MenuItem("Convert to HEVC (GPU, AMD 10-bit HQ)", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->exportCurrentClipToHEVC_AMD();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Send Current to motioncam-fs", nullptr, false, canOperateOnCurrentFile)) {
                 if (appInstance) appInstance->sendCurrentFileToMotionCamFS();

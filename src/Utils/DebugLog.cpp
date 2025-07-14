@@ -8,6 +8,7 @@
 #include <mutex> // For thread-safe logging
 
 static std::mutex g_log_mutex; // Mutex to protect file access
+static std::mutex g_hevc_log_mutex;
 
 static std::ofstream& hevc_log_file() {
     static std::ofstream file("hevc_export_log.txt", std::ios_base::app | std::ios_base::out);
@@ -41,10 +42,7 @@ void LogToFile(const std::string& message) {
 }
 
 void LogHevc(const std::string& message) {
-    std::lock_guard<std::mutex> lock(g_log_mutex);
 
-    auto& file = hevc_log_file();
-    if (file.is_open()) {
         auto now = std::chrono::system_clock::now();
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         std::time_t time_now = std::chrono::system_clock::to_time_t(now);
@@ -55,10 +53,11 @@ void LogHevc(const std::string& message) {
 #else
         localtime_r(&time_now, &timeinfo);
 #endif
+
         std::ostringstream oss;
         oss << std::put_time(&timeinfo, "%Y-%m-%d %H:%M:%S");
         oss << '.' << std::setfill('0') << std::setw(3) << ms.count();
 
-        file << "[" << oss.str() << "] " << message << std::endl;
+
     }
 }

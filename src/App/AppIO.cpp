@@ -984,6 +984,80 @@ void App::convertCurrentFileToDngs() {
     }
 }
 
+void App::exportCurrentClipToHEVC_AMD() {
+    if (m_fileList.empty() || m_currentFileIndex < 0 ||
+        static_cast<size_t>(m_currentFileIndex) >= m_fileList.size()) {
+        LogHevc("[HEVCExport] No valid file to export.");
+        return;
+    }
+
+    std::string inputPathStr = m_fileList[m_currentFileIndex];
+    fs::path inputPath = inputPathStr;
+    fs::path outputPath = inputPath.parent_path() /
+        (inputPath.stem().string() + "_HEVC_AMD_HQ.mp4");
+
+    // Check for hevc_amf encoder
+    bool encoderAvailable = false;
+#ifdef _WIN32
+    const char* checkCmd = "ffmpeg -encoders";
+#else
+    const char* checkCmd = "ffmpeg -encoders 2>&1";
+#endif
+    FILE* pipe = nullptr;
+#ifdef _WIN32
+    pipe = _popen(checkCmd, "r");
+#else
+    pipe = popen(checkCmd, "r");
+#endif
+    if (pipe) {
+        char buf[256];
+        while (fgets(buf, sizeof(buf), pipe)) {
+            std::string line(buf);
+            if (line.find("hevc_amf") != std::string::npos) {
+                encoderAvailable = true;
+            }
+        }
+#ifdef _WIN32
+        _pclose(pipe);
+#else
+        pclose(pipe);
+#endif
+    }
+
+    if (!encoderAvailable) {
+        LogHevc("[HEVCExport] AMD hardware encoder not available. Aborting export.");
+        return;
+    }
+
+    std::stringstream cmd;
+    cmd << "ffmpeg -y -i \"" << inputPathStr << "\" "
+        << "-c:v hevc_amf -pix_fmt p010le -quality quality "
+        << "-rc cqp -cqp_i 20 -cqp_p 23 -cqp_b 25 "
+        << "\"" << outputPath.string() << "\"";
+
+    LogHevc(std::string("[HEVCExport] Command: ") + cmd.str());
+
+#ifdef _WIN32
+    pipe = _popen(cmd.str().c_str(), "r");
+#else
+    pipe = popen((cmd.str() + " 2>&1").c_str(), "r");
+#endif
+    if (!pipe) {
+        LogHevc("[HEVCExport] Failed to launch ffmpeg.");
+        return;
+    }
+    char buf[512];
+    while (fgets(buf, sizeof(buf), pipe)) {
+        LogHevc(std::string(buf));
+    }
+#ifdef _WIN32
+    int ret = _pclose(pipe);
+#else
+    int ret = pclose(pipe);
+#endif
+    LogHevc(std::string("[HEVCExport] ffmpeg exited with code ") + std::to_string(ret));
+}
+
 void App::sendCurrentFileToMotionCamFS()
 {
     if (m_fileList.empty() ||
