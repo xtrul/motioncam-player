@@ -1,0 +1,52 @@
+#version 460
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, r32ui) readonly uniform uimage2D inY;
+layout(set = 0, binding = 1, r32ui) readonly uniform uimage2D inU;
+layout(set = 0, binding = 2, r32ui) readonly uniform uimage2D inV;
+layout(set = 0, binding = 3, std430) writeonly buffer OutSlice {
+    uint data[];
+} outBuf;
+
+layout(push_constant) uniform Push {
+    uint blocksX;
+} pc;
+
+shared float src[8][8];
+shared float tmp[8][8];
+const float PI = 3.14159265359;
+float c(uint u){ return u == 0u ? 0.70710678 : 1.0; }
+
+void main(){
+    ivec2 base = ivec2(gl_WorkGroupID.xy) * 8 + ivec2(gl_LocalInvocationID.xy);
+    src[gl_LocalInvocationID.y][gl_LocalInvocationID.x] = float(imageLoad(inY, base).r);
+    barrier();
+
+    float sum = 0.0;
+    for(int n=0;n<8;n++)
+        sum += src[gl_LocalInvocationID.y][n] * cos((PI/8.0)*(float(n)+0.5)*float(gl_LocalInvocationID.x));
+    tmp[gl_LocalInvocationID.y][gl_LocalInvocationID.x] = 0.5 * c(gl_LocalInvocationID.x) * sum;
+    barrier();
+
+    sum = 0.0;
+    for(int n=0;n<8;n++)
+        sum += tmp[n][gl_LocalInvocationID.x] * cos((PI/8.0)*(float(n)+0.5)*float(gl_LocalInvocationID.y));
+    float coeff = 0.5 * c(gl_LocalInvocationID.y) * sum;
+
+    const float qmat[64] = float[64](
+        4,3,4,5,4,6,7,8,
+        3,3,4,5,5,7,8,10,
+        4,4,5,6,7,8,9,11,
+        4,5,6,7,8,9,11,13,
+        5,6,7,8,9,11,13,15,
+        6,7,8,9,11,13,15,17,
+        7,8,9,11,13,15,17,19,
+        8,10,11,13,15,17,19,21
+    );
+
+    int q = int(round(coeff / qmat[gl_LocalInvocationID.y*8 + gl_LocalInvocationID.x]));
+    uint blockIndex = gl_WorkGroupID.y * pc.blocksX + gl_WorkGroupID.x;
+    uint outIndex = blockIndex*64 + gl_LocalInvocationID.y*8 + gl_LocalInvocationID.x;
+    outBuf.data[outIndex] = uint(q & 0xffff);
+}
