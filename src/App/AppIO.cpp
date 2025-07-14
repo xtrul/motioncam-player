@@ -32,6 +32,8 @@
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
+#include "Export/CodecSettings.h"
+#include <libavutil/pixdesc.h>
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
@@ -1196,6 +1198,20 @@ void App::exportCurrentClipToProRes() {
         return;
     }
 
+    CodecSettings dnxCfg = loadCodecSettings("DNxHR");
+    if(!dnxCfg.enabled) {
+        showActionMessage("DNxHR export disabled");
+        LogProRes("[DNxHRExport] Disabled via codec_settings.json");
+        return;
+    }
+
+    CodecSettings proresCfg = loadCodecSettings("ProRes");
+    if(!proresCfg.enabled) {
+        showActionMessage("ProRes export disabled");
+        LogProRes("[ProResExport] Disabled via codec_settings.json");
+        return;
+    }
+
     LogProRes(std::string("[ProResExport] Starting export to ") + outputPath);
 
     m_proResStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
@@ -1211,7 +1227,8 @@ void App::exportCurrentClipToProRes() {
     }
 
     bool useGpu = g_useGpuProRes;
-    m_proResThread = std::thread([this, outputPath, useGpu]() {
+    CodecSettings threadCfg = proresCfg; // capture by value
+    m_proResThread = std::thread([this, outputPath, useGpu, threadCfg]() {
         av_log_set_level(AV_LOG_ERROR);
         LogProRes("[ProResExport] Thread started");
         LogProRes(std::string("[ProResExport] MODE = ") + (useGpu ? "GPU (Vulkan hw_frames)" : "CPU (swscale)"));
@@ -1293,24 +1310,24 @@ void App::exportCurrentClipToProRes() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        vctx->pix_fmt = AV_PIX_FMT_YUV422P10LE;
+        AVPixelFormat pix = av_get_pix_fmt(threadCfg.pix_fmt.c_str());
+        vctx->pix_fmt = (pix == AV_PIX_FMT_NONE) ? AV_PIX_FMT_YUV422P10LE : pix;
         vctx->width = width;
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
-        unsigned threads = std::thread::hardware_concurrency();
+        unsigned threads = threadCfg.threads > 0 ? threadCfg.threads : std::thread::hardware_concurrency();
         if (threads == 0) threads = 1;
         int bitrate = (width == 1920) ? 185000000 : 90000000;
         vctx->bit_rate = bitrate;
-        vctx->thread_count = 0; // let FFmpeg decide based on HW
-        vctx->thread_type = FF_THREAD_FRAME;
-        LogProRes(std::string("[ProResExport] Detected CPU threads: ") +
-                  std::to_string(threads));
-        LogProRes(std::string("[ProResExport] Thread type: FRAME"));
+        vctx->thread_count = threads;
+        vctx->thread_type = (threadCfg.thread_type == "slice") ? FF_THREAD_SLICE : FF_THREAD_FRAME;
+        LogProRes("[ProRes] Threads = " + std::to_string(threads) + ", Mode = " + threadCfg.thread_type + ", PixFmt = " + threadCfg.pix_fmt);
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
         av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
+        av_dict_set(&encOpts, "profile", threadCfg.profile.c_str(), 0);
         LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
@@ -1332,7 +1349,8 @@ void App::exportCurrentClipToProRes() {
             vinfo << "[ProResExport] Video encoder settings: "
                   << avcodec_get_name(vctx->codec_id) << " "
                   << vctx->width << "x" << vctx->height
-                  << " pix_fmt=YUV422P10LE";
+                  << " pix_fmt=" << threadCfg.pix_fmt
+                  << " profile=" << threadCfg.profile;
             LogProRes(vinfo.str());
         }
         avcodec_parameters_from_context(vstream->codecpar, vctx);
@@ -1731,7 +1749,8 @@ void App::exportCurrentClipToDNxHR() {
     }
 
     bool useGpu = g_useGpuDNxHR;
-    m_dnxhrThread = std::thread([this, outputPath, useGpu]() {
+    CodecSettings threadCfg = dnxCfg;
+    m_dnxhrThread = std::thread([this, outputPath, useGpu, threadCfg]() {
         av_log_set_level(AV_LOG_ERROR);
         LogProRes("[DNxHRExport] Thread started");
         LogProRes(std::string("[DNxHRExport] MODE = ") + (useGpu ? "GPU (Vulkan hw_frames)" : "CPU (swscale)"));
@@ -1818,26 +1837,35 @@ void App::exportCurrentClipToDNxHR() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        vctx->pix_fmt = AV_PIX_FMT_YUV422P10LE;
+        AVPixelFormat dpix = av_get_pix_fmt(threadCfg.pix_fmt.c_str());
+        vctx->pix_fmt = (dpix == AV_PIX_FMT_NONE) ? AV_PIX_FMT_YUV422P10LE : dpix;
         vctx->bits_per_raw_sample = 10;
-        vctx->profile = FF_PROFILE_DNXHR_HQX;
+        if(threadCfg.profile == "hqx")
+            vctx->profile = FF_PROFILE_DNXHR_HQX;
+        else if(threadCfg.profile == "hq")
+            vctx->profile = FF_PROFILE_DNXHR_HQ;
+        else if(threadCfg.profile == "lb")
+            vctx->profile = FF_PROFILE_DNXHR_LB;
+        else if(threadCfg.profile == "sq")
+            vctx->profile = FF_PROFILE_DNXHR_SQ;
+        else
+            vctx->profile = FF_PROFILE_DNXHR_HQX;
         vctx->width = width;
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
-        unsigned threads = std::thread::hardware_concurrency();
+        unsigned threads = threadCfg.threads > 0 ? threadCfg.threads : std::thread::hardware_concurrency();
         if (threads == 0) threads = 1;
-        vctx->thread_count = 0;
-        vctx->thread_type = FF_THREAD_FRAME;
+        vctx->thread_count = threads;
+        vctx->thread_type = (threadCfg.thread_type == "slice") ? FF_THREAD_SLICE : FF_THREAD_FRAME;
         int bitrate = (width == 1920) ? 185000000 : 90000000;
         vctx->bit_rate = bitrate;
         LogProRes(std::string("[DNxHRExport] Bitrate: ") + std::to_string(bitrate));
-        LogProRes(std::string("[DNxHRExport] Detected CPU threads: ") + std::to_string(threads));
-        LogProRes(std::string("[DNxHRExport] Thread type: FRAME"));
+        LogProRes("[DNxHR] Threads = " + std::to_string(threads) + ", Mode = " + threadCfg.thread_type + ", PixFmt = " + threadCfg.pix_fmt);
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
-        av_dict_set(&encOpts, "profile", "dnxhr_hqx", 0);
+        av_dict_set(&encOpts, "profile", threadCfg.profile.c_str(), 0);
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_dnxhrStatus.errorMsg = "avcodec_open2 failed";
@@ -1857,7 +1885,8 @@ void App::exportCurrentClipToDNxHR() {
             vinfo << "[DNxHRExport] Video encoder settings: "
                   << avcodec_get_name(vctx->codec_id) << " "
                   << vctx->width << "x" << vctx->height
-                  << " pix_fmt=YUV422P10LE profile=HQX";
+                  << " pix_fmt=" << threadCfg.pix_fmt
+                  << " profile=" << threadCfg.profile;
             LogProRes(vinfo.str());
         }
         avcodec_parameters_from_context(vstream->codecpar, vctx);
