@@ -172,14 +172,10 @@ set(APP_SOURCES
   src/Utils/DebugLog.cpp
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
+  src/Export/DnxhrExporter.cpp
 
   src/main.cpp
 )
-
-# Optional DNxHR export helper may not be present in minimal source trees
-if(EXISTS "${PROJECT_SOURCE_DIR}/src/Export/DnxhrExporter.cpp")
-    list(APPEND APP_SOURCES src/Export/DnxhrExporter.cpp)
-endif()
 
 list(APPEND APP_SOURCES "${IMGUI_SOURCE_DIR}/backends/imgui_impl_glfw.cpp")
 list(APPEND APP_SOURCES "${IMGUI_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp")
@@ -215,6 +211,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${PROJECT_SOURCE_DIR}/include/Gui"
   "${PROJECT_SOURCE_DIR}/include/Playback"
   "${PROJECT_SOURCE_DIR}/include/Utils"
+  "${PROJECT_SOURCE_DIR}/include/Export"
 
   "${VMA_INCLUDE_DIR}"
   "${Vulkan_INCLUDE_DIRS}"
@@ -337,10 +334,5 @@ message(STATUS "  Output Directory:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_C
 message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/MotionCam Player${CMAKE_EXECUTABLE_SUFFIX}")
 message(STATUS "---------------------------------------------------------------------")
 
-# Only enable the optional tests if the directory exists. Some
-# minimal source archives omit it which would otherwise cause
-# configuration failures.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
-    enable_testing()
-    add_subdirectory(tests)
-endif()
+enable_testing()
+add_subdirectory(tests)
