@@ -89,3 +89,5 @@ runtime DLLs will be copied automatically.
 - Choose **Convert to HEVC (GPU, AMD 10-bit HQ)** to encode using the `hevc_amf` hardware encoder.
 - Encoding runs in constant quality mode using 10‑bit P010 frames with the `transcoding` usage preset and `slow` quality setting.
 - If the AMD encoder is unavailable the export aborts and logs to `hevc_export_log.txt`.
+- Intra frames now use a QP value of 16 and the encoder writes BT.709 color metadata.
+- The log file lists these settings so you can verify the parameters used.
