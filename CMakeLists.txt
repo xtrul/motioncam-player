@@ -173,7 +173,6 @@ set(APP_SOURCES
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
   src/Export/DnxhrExporter.cpp
-  src/Export/CodecSettings.cpp
 
   src/main.cpp
 )
