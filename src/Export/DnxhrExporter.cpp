@@ -1,11 +1,9 @@
 #include "Export/DnxhrExporter.h"
 #include "Utils/DebugLog.h"
 #include <string>
-extern "C" {
 #include <libavutil/pixdesc.h>
-}
 
-#if !defined(CONFIG_DNXHR_ENCODER) || CONFIG_DNXHR_ENCODER
+#if CONFIG_DNXHR_ENCODER
 
 AVCodecContext* create_dnxhr_hqx_encoder(int width, int height, AVRational time_base) {
     const AVCodec* codec = avcodec_find_encoder_by_name("dnxhd");
@@ -57,4 +55,4 @@ AVCodecContext* create_dnxhr_hqx_encoder(int, int, AVRational) {
     return nullptr;
 }
 
-#endif // !CONFIG_DNXHR_ENCODER
+#endif // CONFIG_DNXHR_ENCODER
