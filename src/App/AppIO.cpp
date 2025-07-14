@@ -1332,11 +1332,7 @@ void App::exportCurrentClipToProRes() {
             vinfo << "[ProResExport] Video encoder settings: "
                   << avcodec_get_name(vctx->codec_id) << " "
                   << vctx->width << "x" << vctx->height
-                  << " pix_fmt=YUV422P10LE"
-                  << " bitrate=" << vctx->bit_rate
-                  << " profile=" << vctx->profile
-                  << " threads=" << vctx->thread_count
-                  << " thread_type=" << ((vctx->thread_type == FF_THREAD_SLICE) ? "SLICE" : "FRAME");
+                  << " pix_fmt=YUV422P10LE";
             LogProRes(vinfo.str());
         }
         avcodec_parameters_from_context(vstream->codecpar, vctx);
@@ -1408,8 +1404,6 @@ void App::exportCurrentClipToProRes() {
         long long rgbUS = 0;
         long long scaleUS = 0;
         long long encodeUS = 0;
-        long long sendUS = 0;
-        long long recvUS = 0;
 
         AVFrame* frame = av_frame_alloc();
         frame->format = vctx->pix_fmt;
@@ -1523,16 +1517,8 @@ void App::exportCurrentClipToProRes() {
             pts++;
 
             t0 = std::chrono::steady_clock::now();
-            auto s0 = std::chrono::steady_clock::now();
             if (avcodec_send_frame(vctx, frame) < 0) { m_proResStatus.errorMsg = "send_frame failed"; break; }
-            auto s1 = std::chrono::steady_clock::now();
-            sendUS += std::chrono::duration_cast<std::chrono::microseconds>(s1 - s0).count();
-            while (true) {
-                auto r0 = std::chrono::steady_clock::now();
-                int rret = avcodec_receive_packet(vctx, &pkt);
-                auto r1 = std::chrono::steady_clock::now();
-                recvUS += std::chrono::duration_cast<std::chrono::microseconds>(r1 - r0).count();
-                if (rret != 0) break;
+            while (avcodec_receive_packet(vctx, &pkt) == 0) {
                 pkt.stream_index = vstream->index;
                 pkt.duration = 1;
                 pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
@@ -1609,17 +1595,9 @@ void App::exportCurrentClipToProRes() {
         }
 
         auto flushStart = std::chrono::steady_clock::now();
-        auto fs0 = std::chrono::steady_clock::now();
         avcodec_send_frame(vctx, nullptr);
-        auto fs1 = std::chrono::steady_clock::now();
-        sendUS += std::chrono::duration_cast<std::chrono::microseconds>(fs1 - fs0).count();
         int rret;
-        while (true) {
-            auto fr0 = std::chrono::steady_clock::now();
-            rret = avcodec_receive_packet(vctx, &pkt);
-            auto fr1 = std::chrono::steady_clock::now();
-            recvUS += std::chrono::duration_cast<std::chrono::microseconds>(fr1 - fr0).count();
-            if (rret != 0) break;
+        while ((rret = avcodec_receive_packet(vctx, &pkt)) == 0) {
             pkt.stream_index = vstream->index;
             pkt.duration = 1;
             pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
@@ -1631,7 +1609,7 @@ void App::exportCurrentClipToProRes() {
         if (rret < 0 && rret != AVERROR_EOF) {
             char errbuf[128];
             av_strerror(rret, errbuf, sizeof(errbuf));
-            LogProRes(std::string("[ProResExport] flush receive_packet error: ") + errbuf);
+            LogProRes(std::string("[DNxHRExport] flush receive_packet error: ") + errbuf);
         }
         encodeUS += std::chrono::duration_cast<std::chrono::microseconds>(
                        std::chrono::steady_clock::now() - flushStart)
@@ -1655,8 +1633,6 @@ void App::exportCurrentClipToProRes() {
             summary << "[ProResExport] Timing breakdown ms: read="
                     << (readUS / 1000) << " rgb=" << (rgbUS / 1000)
                     << " scale=" << (scaleUS / 1000)
-                    << " send=" << (sendUS / 1000)
-                    << " recv=" << (recvUS / 1000)
                     << " encode=" << (encodeUS / 1000);
             LogProRes(summary.str());
         }
@@ -1665,26 +1641,20 @@ void App::exportCurrentClipToProRes() {
             double readAvg = readUS / 1000.0 / framesEncoded;
             double rgbAvg = rgbUS / 1000.0 / framesEncoded;
             double scaleAvg = scaleUS / 1000.0 / framesEncoded;
-            double sendAvg = sendUS / 1000.0 / framesEncoded;
-            double recvAvg = recvUS / 1000.0 / framesEncoded;
             double encAvg = encodeUS / 1000.0 / framesEncoded;
             std::ostringstream avg;
             avg << "[ProResExport] Avg per-frame ms: read=" << std::fixed
                 << std::setprecision(2) << readAvg << " rgb=" << rgbAvg
-                << " scale=" << scaleAvg << " send=" << sendAvg
-                << " recv=" << recvAvg << " encode=" << encAvg;
+                << " scale=" << scaleAvg << " encode=" << encAvg;
             LogProRes(avg.str());
 
             double readPct = readUS * 100.0 / totalUS;
             double rgbPct = rgbUS * 100.0 / totalUS;
             double scalePct = scaleUS * 100.0 / totalUS;
-            double sendPct = sendUS * 100.0 / totalUS;
-            double recvPct = recvUS * 100.0 / totalUS;
             double encPct = encodeUS * 100.0 / totalUS;
             std::ostringstream pct;
             pct << "[ProResExport] Time share %: read=" << readPct
                 << " rgb=" << rgbPct << " scale=" << scalePct
-                << " send=" << sendPct << " recv=" << recvPct
                 << " encode=" << encPct;
             LogProRes(pct.str());
         }
@@ -1887,10 +1857,7 @@ void App::exportCurrentClipToDNxHR() {
             vinfo << "[DNxHRExport] Video encoder settings: "
                   << avcodec_get_name(vctx->codec_id) << " "
                   << vctx->width << "x" << vctx->height
-                  << " pix_fmt=YUV422P10LE profile=HQX"
-                  << " bitrate=" << vctx->bit_rate
-                  << " threads=" << vctx->thread_count
-                  << " thread_type=" << ((vctx->thread_type == FF_THREAD_SLICE) ? "SLICE" : "FRAME");
+                  << " pix_fmt=YUV422P10LE profile=HQX";
             LogProRes(vinfo.str());
         }
         avcodec_parameters_from_context(vstream->codecpar, vctx);
@@ -1961,8 +1928,6 @@ void App::exportCurrentClipToDNxHR() {
         long long rgbUS = 0;
         long long scaleUS = 0;
         long long encodeUS = 0;
-        long long sendUS = 0;
-        long long recvUS = 0;
 
         AVFrame* frame = av_frame_alloc();
         frame->format = vctx->pix_fmt;
@@ -2075,10 +2040,7 @@ void App::exportCurrentClipToDNxHR() {
             pts++;
 
             t0 = std::chrono::steady_clock::now();
-            auto s0 = std::chrono::steady_clock::now();
             int sret = avcodec_send_frame(vctx, frame);
-            auto s1 = std::chrono::steady_clock::now();
-            sendUS += std::chrono::duration_cast<std::chrono::microseconds>(s1 - s0).count();
             if (sret < 0) {
                 char errbuf[128];
                 av_strerror(sret, errbuf, sizeof(errbuf));
@@ -2087,12 +2049,7 @@ void App::exportCurrentClipToDNxHR() {
                 break;
             }
             int rret;
-            while (true) {
-                auto r0 = std::chrono::steady_clock::now();
-                rret = avcodec_receive_packet(vctx, &pkt);
-                auto r1 = std::chrono::steady_clock::now();
-                recvUS += std::chrono::duration_cast<std::chrono::microseconds>(r1 - r0).count();
-                if (rret != 0) break;
+            while ((rret = avcodec_receive_packet(vctx, &pkt)) == 0) {
                 pkt.stream_index = vstream->index;
                 pkt.duration = 1;
                 pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
@@ -2164,16 +2121,8 @@ void App::exportCurrentClipToDNxHR() {
         }
 
         auto flushStart = std::chrono::steady_clock::now();
-        auto fs0 = std::chrono::steady_clock::now();
         avcodec_send_frame(vctx, nullptr);
-        auto fs1 = std::chrono::steady_clock::now();
-        sendUS += std::chrono::duration_cast<std::chrono::microseconds>(fs1 - fs0).count();
-        while (true) {
-            auto fr0 = std::chrono::steady_clock::now();
-            int rret_flush = avcodec_receive_packet(vctx, &pkt);
-            auto fr1 = std::chrono::steady_clock::now();
-            recvUS += std::chrono::duration_cast<std::chrono::microseconds>(fr1 - fr0).count();
-            if (rret_flush != 0) break;
+        while (avcodec_receive_packet(vctx, &pkt) == 0) {
             pkt.stream_index = vstream->index;
             pkt.duration = 1;
             pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
@@ -2204,8 +2153,6 @@ void App::exportCurrentClipToDNxHR() {
             summary << "[DNxHRExport] Timing breakdown ms: read="
                     << (readUS / 1000) << " rgb=" << (rgbUS / 1000)
                     << " scale=" << (scaleUS / 1000)
-                    << " send=" << (sendUS / 1000)
-                    << " recv=" << (recvUS / 1000)
                     << " encode=" << (encodeUS / 1000);
             LogProRes(summary.str());
         }
@@ -2214,26 +2161,20 @@ void App::exportCurrentClipToDNxHR() {
             double readAvg = readUS / 1000.0 / framesEncoded;
             double rgbAvg = rgbUS / 1000.0 / framesEncoded;
             double scaleAvg = scaleUS / 1000.0 / framesEncoded;
-            double sendAvg = sendUS / 1000.0 / framesEncoded;
-            double recvAvg = recvUS / 1000.0 / framesEncoded;
             double encAvg = encodeUS / 1000.0 / framesEncoded;
             std::ostringstream avg;
             avg << "[DNxHRExport] Avg per-frame ms: read=" << std::fixed
                 << std::setprecision(2) << readAvg << " rgb=" << rgbAvg
-                << " scale=" << scaleAvg << " send=" << sendAvg
-                << " recv=" << recvAvg << " encode=" << encAvg;
+                << " scale=" << scaleAvg << " encode=" << encAvg;
             LogProRes(avg.str());
 
             double readPct = readUS * 100.0 / totalUS;
             double rgbPct = rgbUS * 100.0 / totalUS;
             double scalePct = scaleUS * 100.0 / totalUS;
-            double sendPct = sendUS * 100.0 / totalUS;
-            double recvPct = recvUS * 100.0 / totalUS;
             double encPct = encodeUS * 100.0 / totalUS;
             std::ostringstream pct;
             pct << "[DNxHRExport] Time share %: read=" << readPct
                 << " rgb=" << rgbPct << " scale=" << scalePct
-                << " send=" << sendPct << " recv=" << recvPct
                 << " encode=" << encPct;
             LogProRes(pct.str());
         }
