@@ -32,9 +32,11 @@
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
-#include <libavutil/error.h>
-#include <libavutil/pixdesc.h>
-#include <libavutil/pixfmt.h>
+extern "C" {
+    #include <libavutil/error.h>
+    #include <libavutil/pixdesc.h>
+    #include <libavutil/pixfmt.h>
+}
 #endif
 #include "Utils/ColorPipelineCPU.h"
 

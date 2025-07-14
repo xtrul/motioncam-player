@@ -251,29 +251,20 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-target_include_directories(${PROJECT_NAME}
-  PRIVATE
-    ${FFMPEG_INCLUDE_DIRS}
-)
+set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
+set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
 
-# Prefer the imported targets provided by FindFFmpeg (vcpkg), but
-# fall back to the library list variables if the targets are not available.
-if(TARGET FFMPEG::avcodec)
-    target_link_libraries(${PROJECT_NAME}
-      PRIVATE
-        FFMPEG::avcodec
-        FFMPEG::avformat
-        FFMPEG::avutil
-        FFMPEG::swscale
-        FFMPEG::swresample
-    )
-else()
-    target_link_libraries(${PROJECT_NAME}
-      PRIVATE
-        ${FFMPEG_LIBRARIES}
-        avutil
-    )
-endif()
+target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+
+target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    avcodec.lib
+    avformat.lib
+    avutil.lib
+    swscale.lib
+    swresample.lib
+)
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
