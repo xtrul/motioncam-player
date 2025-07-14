@@ -6,7 +6,7 @@ std::string g_AppBasePath;
 
 int main() {
     AVRational tb{1,25};
-    AVCodecContext* ctx = create_dnxhr_hqx_encoder(64, 32, tb);
+    AVCodecContext* ctx = create_dnxhr_hqx_encoder(256, 128, tb);
     assert(ctx);
     assert(ctx->profile == FF_PROFILE_DNXHR_HQX);
     AVFrame* frame = av_frame_alloc();
