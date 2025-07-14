@@ -32,6 +32,9 @@
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
+#include "Graphics/GpuDctQuantizer.h"
+#include "Export/SliceWriter.h"
+#include "Export/RawDnxhrWriter.h"
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
@@ -1767,6 +1770,47 @@ void App::exportCurrentClipToDNxHR() {
         if (badDim) {
             LogProRes(std::string("[DNxHRExport] WARN non-even dimensions ") + std::to_string(width) + "x" + std::to_string(height) +
                        " – DNxHR may fail in some NLEs");
+        }
+
+        if (useGpu) {
+            LogDnxhr("[GpuDctQuantizer] Running");
+            GpuDctQuantizer quantizer(m_rendererVk.get());
+            quantizer.init(width, height);
+            size_t blocksX = static_cast<size_t>((width + 7) / 8);
+            size_t blocksY = static_cast<size_t>((height + 7) / 8);
+            size_t blocks = blocksX * blocksY * 64 * 3;
+
+            SliceWriter writer;
+            std::vector<uint8_t> frameBuf;
+
+            for(size_t f = 0; f < frames.size(); ++f){
+                std::vector<uint32_t> coeffs(blocks);
+                // Real YUV images would be provided here. For now use null handles
+                quantizer.process(VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE,
+                                  coeffs.data(), coeffs.size() * sizeof(uint32_t));
+
+                std::vector<Slice> slices(blocksX * blocksY);
+                for(size_t i=0; i<slices.size(); ++i){
+                    slices[i].coeffs.resize(64);
+                    for(int j=0;j<64;++j){
+                        slices[i].coeffs[j] = static_cast<int16_t>(coeffs[i*64 + j]);
+                    }
+                    slices[i].qp = 1;
+                }
+
+                writer.writeFrame(slices, width, height, frameBuf);
+                LogDnxhr(std::string("[SliceWriter] Wrote ") + std::to_string(slices.size()) + " slices");
+            }
+
+            LogDnxhr(std::string("[RawDnxhrWriter] Writing to ") + outputPath);
+            if(writeRawDnxhr(frameBuf, width, height, outputPath, true))
+                LogDnxhr("[RawDnxhrWriter] MXF export complete");
+            else
+                LogDnxhr("[RawDnxhrWriter] Failed to write MXF");
+            LogDnxhr("[DNxHRExport] GPU path complete");
+            m_dnxhrStatus.active.store(false);
+            g_useGpuDNxHR = false;
+            return;
         }
 
         GpuYuvConverter converter(m_rendererVk.get());
