@@ -23,7 +23,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <sstream> 
+#include <sstream>
+#include <cstdlib>
 
 namespace fs = std::filesystem;
 
@@ -1222,4 +1223,54 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 
     LogToFile(std::string("[App::sendAllToMotionCamFS] Done. Success: ")
         + std::to_string(ok) + ", Fail: " + std::to_string(fail));
+}
+
+namespace {
+    bool ffmpegSupportsHevcAmf() {
+        FILE* pipe = popen("ffmpeg -encoders 2>&1", "r");
+        if (!pipe) return false;
+        std::string output;
+        char buffer[256];
+        while (fgets(buffer, sizeof(buffer), pipe)) {
+            output += buffer;
+        }
+        pclose(pipe);
+        return output.find("hevc_amf") != std::string::npos;
+    }
+}
+
+void App::exportCurrentClipToHEVC_AMD()
+{
+    if (m_fileList.empty() || m_currentFileIndex < 0 || static_cast<size_t>(m_currentFileIndex) >= m_fileList.size())
+    {
+        LogHevc("[HEVCExport] No valid file selected.");
+        return;
+    }
+
+    if (!ffmpegSupportsHevcAmf()) {
+        LogHevc("[HEVCExport] AMD hardware encoder not available. Aborting export.");
+        return;
+    }
+
+    std::string inputPath = m_fileList[m_currentFileIndex];
+    fs::path inPath(inputPath);
+    fs::path outPath = inPath.parent_path() / (inPath.stem().string() + "_HEVC_AMD_HQ.mp4");
+
+    std::ostringstream cmd;
+    cmd << "ffmpeg -y -i \"" << inputPath << "\" "
+        << "-c:v hevc_amf "
+        << "-pix_fmt p010le "
+        << "-quality quality "
+        << "-rc cqp "
+        << "-cqp_i 20 -cqp_p 23 -cqp_b 25 "
+        << "\"" << outPath.string() << "\"";
+
+    LogHevc(std::string("[HEVCExport] Command: ") + cmd.str());
+
+    int ret = system(cmd.str().c_str());
+    if (ret == 0) {
+        LogHevc(std::string("[HEVCExport] Export completed: ") + outPath.string());
+    } else {
+        LogHevc(std::string("[HEVCExport] Export failed with code ") + std::to_string(ret));
+    }
 }
