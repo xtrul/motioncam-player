@@ -32,6 +32,9 @@
 #ifdef ENABLE_PRORES_EXPORT
 #include "ffmpeg_headers.hpp"
 #include "Graphics/GpuYuvConverter.h"
+#include <libavutil/error.h>
+#include <libavutil/pixdesc.h>
+#include <libavutil/pixfmt.h>
 #endif
 #include "Utils/ColorPipelineCPU.h"
 
@@ -40,6 +43,7 @@ namespace fs = std::filesystem;
 #ifdef ENABLE_PRORES_EXPORT
 static bool g_useGpuProRes = false;
 static bool g_useGpuDNxHR = false;
+static bool g_useGpuHevc = false;
 #endif
 namespace {
     bool writeDngInternal(
@@ -2213,6 +2217,389 @@ void App::convertCurrentClipToDNxHR() {
     LogProRes("[App] convertCurrentClipToDNxHR invoked");
     g_useGpuDNxHR = true;
     exportCurrentClipToDNxHR();
+#else
+    showActionMessage("FFmpeg support not built");
+#endif
+}
+
+#ifdef ENABLE_PRORES_EXPORT
+void App::exportCurrentClipToHEVC_AMD() {
+    if (m_hevcStatus.active.load()) {
+        showActionMessage("Export already running");
+        return;
+    }
+
+    std::string outputPath = openSaveMp4Dialog();
+    if (outputPath.empty()) return;
+    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mp4") {
+        outputPath += ".mp4";
+    }
+
+    if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder()) {
+        showActionMessage("No clip loaded");
+        return;
+    }
+
+    LogHevc(std::string("[HEVCExport] Starting export to ") + outputPath);
+
+    m_hevcStatus.totalFrames = static_cast<int>(m_decoderWrapper_ptr->getDecoder()->getFrames().size());
+    LogHevc(std::string("[HEVCExport] Total frames: ") + std::to_string(m_hevcStatus.totalFrames));
+    m_hevcStatus.currentFrame.store(0);
+    m_hevcStatus.active.store(true);
+    m_hevcStatus.errorMsg.clear();
+    m_showHevcExportProgressPopup.store(true);
+    showActionMessage("Export Started");
+
+    if (m_hevcThread.joinable()) {
+        m_hevcThread.join();
+    }
+
+    bool useGpu = g_useGpuHevc;
+    m_hevcThread = std::thread([this, outputPath, useGpu]() {
+        av_log_set_level(AV_LOG_ERROR);
+        LogHevc("[HEVCExport] Thread started");
+        LogHevc(std::string("[HEVCExport] MODE = ") + (useGpu ? "GPU (Vulkan hw_frames)" : "CPU (swscale)"));
+
+        auto* dec = m_decoderWrapper_ptr->getDecoder();
+        const auto& frames = dec->getFrames();
+        LogHevc(std::string("[HEVCExport] Frames to export: ") + std::to_string(frames.size()));
+        if (frames.empty()) {
+            m_hevcStatus.errorMsg = "No frames to export";
+            m_hevcStatus.active.store(false);
+            return;
+        }
+
+        RawBytes rawBuf;
+        nlohmann::json meta;
+        try {
+            dec->loadFrame(frames[0], rawBuf, meta);
+        } catch (const std::exception& e) {
+            LogToFile(std::string("[HEVCExport] Failed to load first frame: ") + e.what());
+            m_hevcStatus.errorMsg = "Failed to load first frame";
+            m_hevcStatus.active.store(false);
+            return;
+        }
+        int width = meta.value("width", 0);
+        int height = meta.value("height", 0);
+        LogHevc(std::string("[HEVCExport] Frame dimensions: ") + std::to_string(width) + "x" + std::to_string(height));
+        if (width <= 0 || height <= 0) {
+            m_hevcStatus.errorMsg = "Invalid frame dimensions";
+            m_hevcStatus.active.store(false);
+            return;
+        }
+
+        GpuYuvConverter converter(m_rendererVk.get());
+        bool gpuActive = useGpu;
+        if (gpuActive) {
+            if (!converter.init(width, height)) {
+                LogHevc("[HEVCExport] GPU init failed, falling back to CPU");
+                gpuActive = false;
+            }
+        }
+
+        int64_t frameDurationNs = 0;
+        if (frames.size() >= 2) {
+            frameDurationNs = frames[1] - frames[0];
+        } else {
+            frameDurationNs = 41708333; // ~24fps fallback
+        }
+        AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
+        LogHevc(std::string("[HEVCExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
+
+        AVFormatContext* fmt = nullptr;
+        if (avformat_alloc_output_context2(&fmt, nullptr, nullptr, outputPath.c_str()) < 0 || !fmt) {
+            m_hevcStatus.errorMsg = "avformat_alloc_output_context2 failed";
+            m_hevcStatus.active.store(false);
+            return;
+        }
+
+        const AVCodec* vcodec = avcodec_find_encoder_by_name("hevc_amf");
+        if (!vcodec) {
+            m_hevcStatus.errorMsg = "AMD hardware encoder not available. Aborting export.";
+            m_hevcStatus.active.store(false);
+            avformat_free_context(fmt);
+            return;
+        }
+        LogHevc(std::string("[HEVCExport] HEVC encoder: ") + avcodec_get_name(vcodec->id));
+
+        AVStream* vstream = avformat_new_stream(fmt, nullptr);
+        if (!vstream) {
+            m_hevcStatus.errorMsg = "avformat_new_stream failed";
+            m_hevcStatus.active.store(false);
+            avformat_free_context(fmt);
+            return;
+        }
+        AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
+        vctx->codec_id = vcodec->id;
+        vctx->codec_type = AVMEDIA_TYPE_VIDEO;
+        vctx->pix_fmt = AV_PIX_FMT_P010;
+        vctx->width = width;
+        vctx->height = height;
+        vctx->time_base = timeBase;
+        vctx->framerate = av_inv_q(timeBase);
+        if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
+            vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+        av_opt_set(vctx->priv_data, "usage", "transcoding", 0);
+        av_opt_set(vctx->priv_data, "quality", "slow", 0);
+        av_opt_set(vctx->priv_data, "profile", "main", 0);
+        av_opt_set(vctx->priv_data, "tier", "high", 0);
+        av_opt_set(vctx->priv_data, "b", "0", 0);
+        av_opt_set(vctx->priv_data, "rc", "cqp", 0);
+        av_opt_set(vctx->priv_data, "qp_i", "22", 0);
+        av_opt_set(vctx->priv_data, "g", "250", 0);
+
+        LogHevc("[HEVCExport] usage=transcoding quality=slow profile=main tier=high rc=cqp qp_i=22 g=250");
+        char pixDesc[64];
+        snprintf(pixDesc, sizeof(pixDesc), "[HEVCExport] pix_fmt=%s", av_get_pix_fmt_name(vctx->pix_fmt));
+        LogHevc(pixDesc);
+
+        int openErr = avcodec_open2(vctx, vcodec, nullptr);
+        if (openErr < 0) {
+            char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+            av_strerror(openErr, errbuf, sizeof(errbuf));
+            m_hevcStatus.errorMsg = std::string("avcodec_open2 failed: ") + errbuf;
+            m_hevcStatus.active.store(false);
+            avcodec_free_context(&vctx);
+            avformat_free_context(fmt);
+            return;
+        }
+        avcodec_parameters_from_context(vstream->codecpar, vctx);
+        vstream->time_base = timeBase;
+
+        const AVCodec* acodec = avcodec_find_encoder(AV_CODEC_ID_PCM_S16LE);
+        AVStream* astream = nullptr;
+        AVCodecContext* actx = nullptr;
+        if (acodec) {
+            astream = avformat_new_stream(fmt, nullptr);
+            actx = avcodec_alloc_context3(acodec);
+            actx->codec_id = AV_CODEC_ID_PCM_S16LE;
+            actx->sample_rate = 48000;
+            av_channel_layout_default(&actx->ch_layout, 2);
+            actx->sample_fmt = AV_SAMPLE_FMT_S16;
+            actx->time_base = {1, actx->sample_rate};
+            if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
+                actx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+            if (avcodec_open2(actx, acodec, nullptr) >= 0) {
+                avcodec_parameters_from_context(astream->codecpar, actx);
+                astream->time_base = actx->time_base;
+            } else {
+                avcodec_free_context(&actx);
+                actx = nullptr;
+            }
+        }
+
+        if (!(fmt->oformat->flags & AVFMT_NOFILE)) {
+            if (avio_open(&fmt->pb, outputPath.c_str(), AVIO_FLAG_WRITE) < 0) {
+                m_hevcStatus.errorMsg = "avio_open failed";
+                m_hevcStatus.active.store(false);
+                if (actx) avcodec_free_context(&actx);
+                avcodec_free_context(&vctx);
+                avformat_free_context(fmt);
+                return;
+            }
+        }
+
+        if (avformat_write_header(fmt, nullptr) < 0) {
+            m_hevcStatus.errorMsg = "avformat_write_header failed";
+            m_hevcStatus.active.store(false);
+            if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
+            if (actx) avcodec_free_context(&actx);
+            avcodec_free_context(&vctx);
+            avformat_free_context(fmt);
+            return;
+        }
+
+        AVFrame* frame = av_frame_alloc();
+        frame->format = vctx->pix_fmt;
+        frame->width = width;
+        frame->height = height;
+        if (av_frame_get_buffer(frame, 32) < 0) {
+            m_hevcStatus.errorMsg = "av_frame_get_buffer failed";
+            av_frame_free(&frame);
+            if (actx) avcodec_free_context(&actx);
+            if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
+            avcodec_free_context(&vctx);
+            avformat_free_context(fmt);
+            m_hevcStatus.active.store(false);
+            return;
+        }
+
+        SwsContext* swsRgb = sws_getContext(width, height, AV_PIX_FMT_RGB24,
+                                            width, height, AV_PIX_FMT_P010,
+                                            SWS_BILINEAR, nullptr,nullptr,nullptr);
+        unsigned threads = std::thread::hardware_concurrency();
+        av_opt_set_int(swsRgb, "threads", threads, 0);
+
+        SwsContext* sws422 = nullptr;
+        AVFrame* gpuFrame = nullptr;
+        if (gpuActive) {
+            gpuFrame = av_frame_alloc();
+            gpuFrame->format = AV_PIX_FMT_YUV422P10;
+            gpuFrame->width = width;
+            gpuFrame->height = height;
+            if (av_frame_get_buffer(gpuFrame, 32) < 0) {
+                m_hevcStatus.errorMsg = "gpuFrame buffer alloc failed";
+                av_frame_free(&frame);
+                av_frame_free(&gpuFrame);
+                if (actx) avcodec_free_context(&actx);
+                if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
+                avcodec_free_context(&vctx);
+                avformat_free_context(fmt);
+                m_hevcStatus.active.store(false);
+                return;
+            }
+            sws422 = sws_getContext(width, height, AV_PIX_FMT_YUV422P10,
+                                     width, height, AV_PIX_FMT_P010,
+                                     SWS_BILINEAR, nullptr, nullptr, nullptr);
+            av_opt_set_int(sws422, "threads", threads, 0);
+            LogHevc("[HEVCExport] GPU path using YUV422P10 -> P010 conversion");
+        }
+
+        CPUColorParams cpParams{};
+        cpParams.width = width;
+        cpParams.height = height;
+        cpParams.cfaType = m_cfaTypeFromMetadata;
+        cpParams.blackLevel = m_staticBlack;
+        cpParams.whiteLevel = m_staticWhite;
+
+        GpuColorParams gpuParams{};
+        gpuParams.cfaType = m_cfaTypeFromMetadata;
+        gpuParams.fullSwing = 0;
+        gpuParams.black = static_cast<unsigned int>(m_staticBlack);
+        gpuParams.white = static_cast<unsigned int>(m_staticWhite);
+
+        auto asn_json = meta.value("asShotNeutral", std::vector<double>{1.0,1.0,1.0});
+        if (asn_json.size() >= 3) {
+            cpParams.gainR = (asn_json[1] > 1e-6 && asn_json[0] > 1e-6) ? (float)(asn_json[1]/asn_json[0]) : 1.0f;
+            cpParams.gainB = (asn_json[1] > 1e-6 && asn_json[2] > 1e-6) ? (float)(asn_json[1]/asn_json[2]) : 1.0f;
+            gpuParams.wbR = cpParams.gainR;
+            gpuParams.wbG = 1.0f;
+            gpuParams.wbB = cpParams.gainB;
+        }
+        auto ccm_json = meta.value("ColorMatrix2", std::vector<double>{});
+        if (ccm_json.empty()) ccm_json = meta.value("ColorMatrix1", std::vector<double>{});
+        for (size_t i = 0; i < 9 && i < ccm_json.size(); ++i)
+            cpParams.ccm[i] = static_cast<float>(ccm_json[i]);
+
+        std::vector<uint8_t> rgbBuf;
+        RawBytes raw;
+        int framesEncoded = 0;
+
+        for (size_t idx = 0; idx < frames.size(); ++idx) {
+            try { dec->loadFrame(frames[idx], raw, meta); }
+            catch (...) { m_hevcStatus.errorMsg = "Frame read error"; break; }
+
+            if (gpuActive) {
+                converter.convertToFrame(asU16(raw), width, height, gpuFrame, gpuParams);
+                const uint8_t* srcSlices[3] = { gpuFrame->data[0], gpuFrame->data[1], gpuFrame->data[2] };
+                int srcStride[3] = { gpuFrame->linesize[0], gpuFrame->linesize[1], gpuFrame->linesize[2] };
+                sws_scale(sws422, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
+            } else {
+                convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
+                const uint8_t* srcSlice[1] = { rgbBuf.data() };
+                int srcStride[1] = { width * 3 };
+                sws_scale(swsRgb, srcSlice, srcStride, 0, height, frame->data, frame->linesize);
+            }
+            frame->pts = idx;
+            if (avcodec_send_frame(vctx, frame) < 0) { m_hevcStatus.errorMsg = "send_frame failed"; break; }
+            AVPacket pkt{};
+            while (avcodec_receive_packet(vctx, &pkt) == 0) {
+                pkt.stream_index = vstream->index;
+                pkt.duration = 1;
+                pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
+                pkt.dts = pkt.pts;
+                if (av_interleaved_write_frame(fmt, &pkt) < 0) { m_hevcStatus.errorMsg = "write_frame failed"; av_packet_unref(&pkt); break; }
+                av_packet_unref(&pkt);
+                ++framesEncoded;
+                m_hevcStatus.currentFrame.store(static_cast<int>(idx + 1));
+            }
+            if (!m_hevcStatus.errorMsg.empty()) break;
+        }
+
+        avcodec_send_frame(vctx, nullptr);
+        AVPacket pkt{};
+        while (avcodec_receive_packet(vctx, &pkt) == 0) {
+            pkt.stream_index = vstream->index;
+            pkt.duration = 1;
+            pkt.pts = av_rescale_q(pkt.pts, vctx->time_base, vstream->time_base);
+            pkt.dts = pkt.pts;
+            av_interleaved_write_frame(fmt, &pkt);
+            av_packet_unref(&pkt);
+            ++framesEncoded;
+        }
+
+        if (actx && astream) {
+            motioncam::AudioChunkLoader* loader = m_decoderWrapper_ptr->makeFreshAudioLoader();
+            motioncam::AudioChunk chunk;
+            int64_t audioPts = 0;
+            while (loader && loader->next(chunk)) {
+                if (chunk.second.empty()) break;
+                AVFrame* af = av_frame_alloc();
+                af->format = actx->sample_fmt;
+                av_channel_layout_copy(&af->ch_layout, &actx->ch_layout);
+                af->sample_rate = actx->sample_rate;
+                int nb = chunk.second.size() / actx->ch_layout.nb_channels;
+                af->nb_samples = nb;
+                av_frame_get_buffer(af, 0);
+                memcpy(af->data[0], chunk.second.data(), chunk.second.size()*sizeof(int16_t));
+                af->pts = audioPts;
+                audioPts += nb;
+                if (avcodec_send_frame(actx, af) >= 0) {
+                    AVPacket apkt{};
+                    while (avcodec_receive_packet(actx, &apkt) == 0) {
+                        apkt.stream_index = astream->index;
+                        apkt.pts = av_rescale_q(apkt.pts, actx->time_base, astream->time_base);
+                        apkt.dts = apkt.pts;
+                        av_interleaved_write_frame(fmt, &apkt);
+                        av_packet_unref(&apkt);
+                    }
+                }
+                av_frame_free(&af);
+            }
+            avcodec_send_frame(actx, nullptr);
+            AVPacket apkt{};
+            while (avcodec_receive_packet(actx, &apkt) == 0) {
+                apkt.stream_index = astream->index;
+                apkt.pts = av_rescale_q(apkt.pts, actx->time_base, astream->time_base);
+                apkt.dts = apkt.pts;
+                av_interleaved_write_frame(fmt, &apkt);
+                av_packet_unref(&apkt);
+            }
+        }
+
+        av_write_trailer(fmt);
+        if (sws422) sws_freeContext(sws422);
+        sws_freeContext(swsRgb);
+        av_frame_free(&frame);
+        if (gpuFrame) av_frame_free(&gpuFrame);
+        if (actx) avcodec_free_context(&actx);
+        if (!(fmt->oformat->flags & AVFMT_NOFILE)) avio_closep(&fmt->pb);
+        avcodec_free_context(&vctx);
+        avformat_free_context(fmt);
+
+        if (m_hevcStatus.errorMsg.empty()) {
+            showActionMessage("Export Finished");
+            LogHevc(std::string("[HEVCExport] Export finished successfully, frames encoded: ") + std::to_string(framesEncoded));
+        } else {
+            LogToFile(std::string("[HEVCExport] Error: ") + m_hevcStatus.errorMsg);
+            LogHevc(std::string("[HEVCExport] Error: ") + m_hevcStatus.errorMsg);
+        }
+        m_hevcStatus.active.store(false);
+        g_useGpuHevc = false;
+    });
+}
+#else
+void App::exportCurrentClipToHEVC_AMD() {
+    showActionMessage("FFmpeg support not built");
+}
+#endif
+
+void App::convertCurrentClipToHEVC_AMD() {
+#ifdef ENABLE_PRORES_EXPORT
+    LogHevc("[App] convertCurrentClipToHEVC_AMD invoked");
+    g_useGpuHevc = true;
+    exportCurrentClipToHEVC_AMD();
 #else
     showActionMessage("FFmpeg support not built");
 #endif
