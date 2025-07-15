@@ -172,7 +172,6 @@ set(APP_SOURCES
   src/Utils/DebugLog.cpp
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
-  src/App/EncodingConfig.cpp
 
   src/main.cpp
 )
