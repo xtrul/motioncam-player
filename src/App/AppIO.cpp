@@ -2347,8 +2347,8 @@ void App::exportCurrentClipToHEVC_AMD() {
         av_opt_set(vctx->priv_data, "profile", "main10", 0);
         av_opt_set(vctx->priv_data, "tier", "high", 0);
         av_opt_set(vctx->priv_data, "rc", "abr", 0);
-        av_opt_set(vctx->priv_data, "b", "250M", 0);
-        av_opt_set(vctx->priv_data, "maxrate", "250M", 0);
+        av_opt_set(vctx->priv_data, "b", "1500M", 0);
+        av_opt_set(vctx->priv_data, "maxrate", "1500M", 0);
         av_opt_set(vctx->priv_data, "bufsize", "500M", 0);
         av_opt_set(vctx->priv_data, "g", "1", 0);
         av_opt_set(vctx->priv_data, "forced-idr", "1", 0);
