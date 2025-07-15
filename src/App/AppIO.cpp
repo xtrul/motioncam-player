@@ -7,7 +7,6 @@
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 #include "Utils/OrientationUtils.h"
-#include "Utils/EncodingConfig.h"
 #include <motioncam/Decoder.hpp>
 #include <motioncam/RawData.hpp>
 
@@ -1281,10 +1280,7 @@ void App::exportCurrentClipToProRes() {
                 std::chrono::steady_clock::now() - allocStart).count();
         LogProRes("[ProResExport] Output context created in " + std::to_string(allocMs) + "ms");
 
-        EncodingConfig encCfg = loadEncodingConfig();
-        nlohmann::json pcfg = encCfg.prores;
-        std::string prCodec = pcfg.value("codec", "prores_ks");
-        const AVCodec* vcodec = avcodec_find_encoder_by_name(prCodec.c_str());
+        const AVCodec* vcodec = avcodec_find_encoder_by_name("prores_ks");
         if (!vcodec) {
             m_proResStatus.errorMsg = "ProRes encoder not found";
             m_proResStatus.active.store(false);
@@ -1303,24 +1299,16 @@ void App::exportCurrentClipToProRes() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        {
-            std::string pix = pcfg.value("pix_fmt", "yuv422p10le");
-            AVPixelFormat pf = av_get_pix_fmt(pix.c_str());
-            vctx->pix_fmt = (pf == AV_PIX_FMT_NONE) ? AV_PIX_FMT_YUV422P10LE : pf;
-            char pd[64];
-            snprintf(pd, sizeof(pd), "[ProResExport] pix_fmt=%s", av_get_pix_fmt_name(vctx->pix_fmt));
-            LogProRes(pd);
-        }
+        vctx->pix_fmt = AV_PIX_FMT_YUV422P10LE;
         vctx->width = width;
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
         unsigned threads = std::thread::hardware_concurrency();
         if (threads == 0) threads = 1;
-        int bitrate = pcfg.contains("bitrate") ? pcfg["bitrate"].get<int>() : ((width == 1920) ? 185000000 : 90000000);
+        int bitrate = (width == 1920) ? 185000000 : 90000000;
         vctx->bit_rate = bitrate;
-        LogProRes(std::string("[ProResExport] Bitrate: ") + std::to_string(bitrate));
-        vctx->thread_count = pcfg.value("thread_count", 0);
+        vctx->thread_count = 0; // let FFmpeg decide based on HW
         vctx->thread_type = FF_THREAD_FRAME;
         LogProRes(std::string("[ProResExport] Detected CPU threads: ") +
                   std::to_string(threads));
@@ -1328,11 +1316,8 @@ void App::exportCurrentClipToProRes() {
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
-        int slices = pcfg.contains("slice_count") ? pcfg["slice_count"].get<int>() : static_cast<int>(threads);
-        av_dict_set(&encOpts, "slice_count", std::to_string(slices).c_str(), 0);
-        std::string prof = pcfg.value("profile", "");
-        if (!prof.empty()) av_dict_set(&encOpts, "profile", prof.c_str(), 0);
-        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(slices));
+        av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
+        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_proResStatus.errorMsg = "avcodec_open2 failed";
@@ -1820,8 +1805,6 @@ void App::exportCurrentClipToDNxHR() {
                 std::chrono::steady_clock::now() - allocStart).count();
         LogProRes("[DNxHRExport] Output context created in " + std::to_string(allocMs) + "ms");
 
-        EncodingConfig encCfg = loadEncodingConfig();
-        nlohmann::json dcfg = encCfg.dnxhr;
         const AVCodec* vcodec = avcodec_find_encoder_by_name("dnxhd");
         if (!vcodec) {
             m_dnxhrStatus.errorMsg = "DNxHR encoder not found";
@@ -1841,14 +1824,7 @@ void App::exportCurrentClipToDNxHR() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        {
-            std::string pix = dcfg.value("pix_fmt", "yuv422p10le");
-            AVPixelFormat pf = av_get_pix_fmt(pix.c_str());
-            vctx->pix_fmt = (pf == AV_PIX_FMT_NONE) ? AV_PIX_FMT_YUV422P10LE : pf;
-            char pd[64];
-            snprintf(pd, sizeof(pd), "[DNxHRExport] pix_fmt=%s", av_get_pix_fmt_name(vctx->pix_fmt));
-            LogProRes(pd);
-        }
+        vctx->pix_fmt = AV_PIX_FMT_YUV422P10LE;
         vctx->bits_per_raw_sample = 10;
         vctx->profile = FF_PROFILE_DNXHR_HQX;
         vctx->width = width;
@@ -1857,9 +1833,9 @@ void App::exportCurrentClipToDNxHR() {
         vctx->framerate = av_inv_q(timeBase);
         unsigned threads = std::thread::hardware_concurrency();
         if (threads == 0) threads = 1;
-        vctx->thread_count = dcfg.value("thread_count", 0);
+        vctx->thread_count = 0;
         vctx->thread_type = FF_THREAD_FRAME;
-        int bitrate = dcfg.contains("bitrate") ? dcfg["bitrate"].get<int>() : ((width == 1920) ? 185000000 : 90000000);
+        int bitrate = (width == 1920) ? 185000000 : 90000000;
         vctx->bit_rate = bitrate;
         LogProRes(std::string("[DNxHRExport] Bitrate: ") + std::to_string(bitrate));
         LogProRes(std::string("[DNxHRExport] Detected CPU threads: ") + std::to_string(threads));
@@ -1867,8 +1843,7 @@ void App::exportCurrentClipToDNxHR() {
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
-        std::string dprofile = dcfg.value("profile", "dnxhr_hqx");
-        av_dict_set(&encOpts, "profile", dprofile.c_str(), 0);
+        av_dict_set(&encOpts, "profile", "dnxhr_hqx", 0);
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_dnxhrStatus.errorMsg = "avcodec_open2 failed";
@@ -1888,8 +1863,7 @@ void App::exportCurrentClipToDNxHR() {
             vinfo << "[DNxHRExport] Video encoder settings: "
                   << avcodec_get_name(vctx->codec_id) << " "
                   << vctx->width << "x" << vctx->height
-                  << " pix_fmt=" << av_get_pix_fmt_name(vctx->pix_fmt)
-                  << " profile=" << dprofile;
+                  << " pix_fmt=YUV422P10LE profile=HQX";
             LogProRes(vinfo.str());
         }
         avcodec_parameters_from_context(vstream->codecpar, vctx);
@@ -2341,10 +2315,7 @@ void App::exportCurrentClipToHEVC_AMD() {
             return;
         }
 
-        EncodingConfig encCfg = loadEncodingConfig();
-        nlohmann::json hcfg = encCfg.hevc_gpu;
-        std::string hevcEnc = hcfg.value("encoder", "hevc_amf");
-        const AVCodec* vcodec = avcodec_find_encoder_by_name(hevcEnc.c_str());
+        const AVCodec* vcodec = avcodec_find_encoder_by_name("hevc_amf");
         if (!vcodec) {
             m_hevcStatus.errorMsg = "AMD hardware encoder not available. Aborting export.";
             m_hevcStatus.active.store(false);
@@ -2363,94 +2334,30 @@ void App::exportCurrentClipToHEVC_AMD() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        {
-            std::string pix = hcfg.value("pix_fmt", "p010");
-            AVPixelFormat pf = av_get_pix_fmt(pix.c_str());
-            vctx->pix_fmt = (pf == AV_PIX_FMT_NONE) ? AV_PIX_FMT_P010 : pf;
-        }
+        vctx->pix_fmt = AV_PIX_FMT_P010;
         vctx->width = width;
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-        auto optStr = [&](const std::string& key, const std::string& def) {
-            if (hcfg.contains(key)) {
-                if (hcfg[key].is_number()) return std::to_string(hcfg[key].get<int>());
-                if (hcfg[key].is_string()) return hcfg[key].get<std::string>();
-            }
-            return def;
-        };
 
-        auto primFromStr = [&](const std::string& s){
-            if (s == "bt709") return AVCOL_PRI_BT709;
-            if (s == "bt2020") return AVCOL_PRI_BT2020;
-            return AVCOL_PRI_UNSPECIFIED;
-        };
-        auto trcFromStr = [&](const std::string& s){
-            if (s == "bt709") return AVCOL_TRC_BT709;
-            if (s == "smpte2084") return AVCOL_TRC_SMPTE2084;
-            return AVCOL_TRC_UNSPECIFIED;
-        };
-        auto cspFromStr = [&](const std::string& s){
-            if (s == "bt709") return AVCOL_SPC_BT709;
-            if (s == "bt2020_ncl") return AVCOL_SPC_BT2020_NCL;
-            return AVCOL_SPC_UNSPECIFIED;
-        };
+        av_opt_set(vctx->priv_data, "usage", "transcoding", 0);
+        av_opt_set(vctx->priv_data, "quality", "slow", 0);
+        av_opt_set(vctx->priv_data, "profile", "main10", 0);
+        av_opt_set(vctx->priv_data, "tier", "high", 0);
+        av_opt_set(vctx->priv_data, "rc", "abr", 0);
+        av_opt_set(vctx->priv_data, "b", "1500M", 0);
+        av_opt_set(vctx->priv_data, "maxrate", "1500M", 0);
+        av_opt_set(vctx->priv_data, "bufsize", "500M", 0);
+        av_opt_set(vctx->priv_data, "g", "1", 0);
+        av_opt_set(vctx->priv_data, "forced-idr", "1", 0);
+        vctx->color_primaries = AVCOL_PRI_BT709;
+        vctx->color_trc = AVCOL_TRC_BT709;
+        vctx->colorspace = AVCOL_SPC_BT709;
+        LogHevc("[HEVCExport] color_primaries=bt709 color_trc=bt709 colorspace=bt709");
 
-        av_opt_set(vctx->priv_data, "usage", optStr("usage", "transcoding").c_str(), 0);
-        av_opt_set(vctx->priv_data, "quality", optStr("quality", "slow").c_str(), 0);
-        av_opt_set(vctx->priv_data, "profile", optStr("profile", "main10").c_str(), 0);
-        av_opt_set(vctx->priv_data, "tier", optStr("tier", "high").c_str(), 0);
-        av_opt_set(vctx->priv_data, "rc", optStr("rate_control", "abr").c_str(), 0);
-        av_opt_set(vctx->priv_data, "b", optStr("bitrate", "1500M").c_str(), 0);
-        av_opt_set(vctx->priv_data, "maxrate", optStr("maxrate", "1500M").c_str(), 0);
-        av_opt_set(vctx->priv_data, "bufsize", optStr("bufsize", "500M").c_str(), 0);
-        av_opt_set(vctx->priv_data, "g", optStr("gop", "1").c_str(), 0);
-        av_opt_set(vctx->priv_data, "forced-idr", optStr("forced_idr", "1").c_str(), 0);
-        vctx->color_primaries = primFromStr(optStr("color_primaries", "bt709"));
-        vctx->color_trc = trcFromStr(optStr("color_trc", "bt709"));
-        vctx->colorspace = cspFromStr(optStr("colorspace", "bt709"));
-        int qp_i = hcfg.value("qp_i", 0);
-        int qp_p = hcfg.value("qp_p", 0);
-        int qp_b = hcfg.value("qp_b", 0);
-        if (qp_i) av_opt_set_int(vctx->priv_data, "qp_i", qp_i, 0);
-        if (qp_p) av_opt_set_int(vctx->priv_data, "qp_p", qp_p, 0);
-        if (qp_b) av_opt_set_int(vctx->priv_data, "qp_b", qp_b, 0);
-        auto primName = [&](int val){
-            switch(val){
-                case AVCOL_PRI_BT709: return "bt709";
-                case AVCOL_PRI_BT2020: return "bt2020";
-                default: return "unspecified";
-            }
-        };
-        auto trcName = [&](int val){
-            switch(val){
-                case AVCOL_TRC_BT709: return "bt709";
-                case AVCOL_TRC_SMPTE2084: return "smpte2084";
-                default: return "unspecified";
-            }
-        };
-        auto cspName = [&](int val){
-            switch(val){
-                case AVCOL_SPC_BT709: return "bt709";
-                case AVCOL_SPC_BT2020_NCL: return "bt2020_ncl";
-                default: return "unspecified";
-            }
-        };
-        LogHevc(std::string("[HEVCExport] color_primaries=") + primName(vctx->color_primaries) +
-                " color_trc=" + trcName(vctx->color_trc) +
-                " colorspace=" + cspName(vctx->colorspace));
-
-        LogHevc("[HEVCExport] usage=" + optStr("usage", "transcoding") +
-                " quality=" + optStr("quality", "slow") +
-                " profile=" + optStr("profile", "main10") +
-                " tier=" + optStr("tier", "high") +
-                " rc=" + optStr("rate_control", "abr") +
-                " b=" + optStr("bitrate", "1500M") +
-                " maxrate=" + optStr("maxrate", "1500M") +
-                " bufsize=" + optStr("bufsize", "500M") +
-                " g=" + optStr("gop", "1"));
+        LogHevc("[HEVCExport] usage=transcoding quality=slow profile=main10 tier=high rc=abr b=250M maxrate=250M bufsize=500M g=1 color=bt709");
         char pixDesc[64];
         snprintf(pixDesc, sizeof(pixDesc), "[HEVCExport] pix_fmt=%s", av_get_pix_fmt_name(vctx->pix_fmt));
         LogHevc(pixDesc);
