@@ -39,6 +39,7 @@ extern "C" {
 }
 #endif
 #include "Utils/ColorPipelineCPU.h"
+#include "Utils/EncodingConfig.h"
 
 namespace fs = std::filesystem;
 
@@ -1280,7 +1281,14 @@ void App::exportCurrentClipToProRes() {
                 std::chrono::steady_clock::now() - allocStart).count();
         LogProRes("[ProResExport] Output context created in " + std::to_string(allocMs) + "ms");
 
-        const AVCodec* vcodec = avcodec_find_encoder_by_name("prores_ks");
+        nlohmann::json cfg = loadEncodingConfig();
+        nlohmann::json pcfg = cfg.value("prores", nlohmann::json::object());
+        std::string codecName = pcfg.value("codec", "prores_ks");
+        const AVCodec* vcodec = avcodec_find_encoder_by_name(codecName.c_str());
+        if (!vcodec) {
+            LogProRes("[ProResExport] Config codec not found, falling back to prores_ks");
+            vcodec = avcodec_find_encoder_by_name("prores_ks");
+        }
         if (!vcodec) {
             m_proResStatus.errorMsg = "ProRes encoder not found";
             m_proResStatus.active.store(false);
@@ -1315,9 +1323,23 @@ void App::exportCurrentClipToProRes() {
         LogProRes(std::string("[ProResExport] Thread type: FRAME"));
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+        // Apply overrides from encoding_config.json
+        if (pcfg.contains("pix_fmt")) {
+            AVPixelFormat pf = av_get_pix_fmt(pcfg["pix_fmt"].get<std::string>().c_str());
+            if (pf != AV_PIX_FMT_NONE) vctx->pix_fmt = pf;
+        }
+        if (pcfg.contains("bitrate")) vctx->bit_rate = pcfg["bitrate"].get<int>();
+        if (pcfg.contains("thread_count")) vctx->thread_count = pcfg["thread_count"].get<int>();
+
+        int sliceCount = threads;
+        if (pcfg.contains("slice_count")) sliceCount = pcfg["slice_count"].get<int>();
+
         AVDictionary* encOpts = nullptr;
-        av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
-        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
+        if (pcfg.contains("profile"))
+            av_dict_set(&encOpts, "profile", pcfg["profile"].get<std::string>().c_str(), 0);
+        av_dict_set(&encOpts, "slice_count", std::to_string(sliceCount).c_str(), 0);
+        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(sliceCount));
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_proResStatus.errorMsg = "avcodec_open2 failed";
@@ -1805,6 +1827,8 @@ void App::exportCurrentClipToDNxHR() {
                 std::chrono::steady_clock::now() - allocStart).count();
         LogProRes("[DNxHRExport] Output context created in " + std::to_string(allocMs) + "ms");
 
+        nlohmann::json cfg = loadEncodingConfig();
+        nlohmann::json dcfg = cfg.value("dnxhr", nlohmann::json::object());
         const AVCodec* vcodec = avcodec_find_encoder_by_name("dnxhd");
         if (!vcodec) {
             m_dnxhrStatus.errorMsg = "DNxHR encoder not found";
@@ -1842,8 +1866,20 @@ void App::exportCurrentClipToDNxHR() {
         LogProRes(std::string("[DNxHRExport] Thread type: FRAME"));
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+        // Apply overrides from encoding_config.json
+        if (dcfg.contains("pix_fmt")) {
+            AVPixelFormat pf = av_get_pix_fmt(dcfg["pix_fmt"].get<std::string>().c_str());
+            if (pf != AV_PIX_FMT_NONE) vctx->pix_fmt = pf;
+        }
+        if (dcfg.contains("bitrate")) vctx->bit_rate = dcfg["bitrate"].get<int>();
+        if (dcfg.contains("thread_count")) vctx->thread_count = dcfg["thread_count"].get<int>();
+
         AVDictionary* encOpts = nullptr;
-        av_dict_set(&encOpts, "profile", "dnxhr_hqx", 0);
+        if (dcfg.contains("profile"))
+            av_dict_set(&encOpts, "profile", dcfg["profile"].get<std::string>().c_str(), 0);
+        else
+            av_dict_set(&encOpts, "profile", "dnxhr_hqx", 0);
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_dnxhrStatus.errorMsg = "avcodec_open2 failed";
@@ -2315,7 +2351,10 @@ void App::exportCurrentClipToHEVC_AMD() {
             return;
         }
 
-        const AVCodec* vcodec = avcodec_find_encoder_by_name("hevc_amf");
+        nlohmann::json cfg = loadEncodingConfig();
+        nlohmann::json hcfg = cfg.value("hevc_gpu", nlohmann::json::object());
+        std::string encoderName = hcfg.value("encoder", "hevc_amf");
+        const AVCodec* vcodec = avcodec_find_encoder_by_name(encoderName.c_str());
         if (!vcodec) {
             m_hevcStatus.errorMsg = "AMD hardware encoder not available. Aborting export.";
             m_hevcStatus.active.store(false);
@@ -2342,6 +2381,7 @@ void App::exportCurrentClipToHEVC_AMD() {
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
+        // Default options
         av_opt_set(vctx->priv_data, "usage", "transcoding", 0);
         av_opt_set(vctx->priv_data, "quality", "slow", 0);
         av_opt_set(vctx->priv_data, "profile", "main10", 0);
@@ -2352,15 +2392,64 @@ void App::exportCurrentClipToHEVC_AMD() {
         av_opt_set(vctx->priv_data, "bufsize", "500M", 0);
         av_opt_set(vctx->priv_data, "g", "1", 0);
         av_opt_set(vctx->priv_data, "forced-idr", "1", 0);
-        vctx->color_primaries = AVCOL_PRI_BT709;
-        vctx->color_trc = AVCOL_TRC_BT709;
-        vctx->colorspace = AVCOL_SPC_BT709;
-        LogHevc("[HEVCExport] color_primaries=bt709 color_trc=bt709 colorspace=bt709");
 
-        LogHevc("[HEVCExport] usage=transcoding quality=slow profile=main10 tier=high rc=abr b=250M maxrate=250M bufsize=500M g=1 color=bt709");
-        char pixDesc[64];
-        snprintf(pixDesc, sizeof(pixDesc), "[HEVCExport] pix_fmt=%s", av_get_pix_fmt_name(vctx->pix_fmt));
-        LogHevc(pixDesc);
+        // Apply overrides from encoding_config.json
+        if (hcfg.contains("pix_fmt")) {
+            AVPixelFormat pf = av_get_pix_fmt(hcfg["pix_fmt"].get<std::string>().c_str());
+            if (pf != AV_PIX_FMT_NONE) vctx->pix_fmt = pf;
+        }
+
+        auto opt_if = [&](const char* key){ if(hcfg.contains(key)) av_opt_set(vctx->priv_data, key, hcfg[key].get<std::string>().c_str(), 0); };
+        opt_if("usage");
+        opt_if("quality");
+        opt_if("profile");
+        opt_if("tier");
+        if (hcfg.contains("rate_control")) av_opt_set(vctx->priv_data, "rc", hcfg["rate_control"].get<std::string>().c_str(), 0);
+        if (hcfg.contains("bitrate")) av_opt_set(vctx->priv_data, "b", hcfg["bitrate"].get<std::string>().c_str(), 0);
+        if (hcfg.contains("maxrate")) av_opt_set(vctx->priv_data, "maxrate", hcfg["maxrate"].get<std::string>().c_str(), 0);
+        if (hcfg.contains("bufsize")) av_opt_set(vctx->priv_data, "bufsize", hcfg["bufsize"].get<std::string>().c_str(), 0);
+        if (hcfg.contains("gop")) av_opt_set(vctx->priv_data, "g", hcfg["gop"].get<std::string>().c_str(), 0);
+        if (hcfg.contains("forced_idr")) av_opt_set(vctx->priv_data, "forced-idr", hcfg["forced_idr"].get<std::string>().c_str(), 0);
+
+        auto mapPrimaries = [](const std::string& s){
+            if (s == "bt709") return AVCOL_PRI_BT709;
+            if (s == "bt2020") return AVCOL_PRI_BT2020;
+            return AVCOL_PRI_UNSPECIFIED;
+        };
+        auto mapTrc = [](const std::string& s){
+            if (s == "bt709") return AVCOL_TRC_BT709;
+            if (s == "smpte2084") return AVCOL_TRC_SMPTE2084;
+            return AVCOL_TRC_UNSPECIFIED;
+        };
+        auto mapSpace = [](const std::string& s){
+            if (s == "bt709") return AVCOL_SPC_BT709;
+            if (s == "bt2020nc") return AVCOL_SPC_BT2020_NCL;
+            return AVCOL_SPC_UNSPECIFIED;
+        };
+        std::string primName = hcfg.value("color_primaries", "bt709");
+        std::string trcName = hcfg.value("color_trc", "bt709");
+        std::string csName = hcfg.value("colorspace", "bt709");
+        vctx->color_primaries = mapPrimaries(primName);
+        vctx->color_trc = mapTrc(trcName);
+        vctx->colorspace = mapSpace(csName);
+
+        {
+            std::ostringstream ss;
+            ss << "[HEVCExport] color_primaries=" << primName
+               << " color_trc=" << trcName
+               << " colorspace=" << csName;
+            LogHevc(ss.str());
+        }
+
+        if (hcfg.contains("qp_i")) av_opt_set(vctx->priv_data, "qp_i", hcfg["qp_i"].get<std::string>().c_str(), 0);
+        if (hcfg.contains("qp_p")) av_opt_set(vctx->priv_data, "qp_p", hcfg["qp_p"].get<std::string>().c_str(), 0);
+        if (hcfg.contains("qp_b")) av_opt_set(vctx->priv_data, "qp_b", hcfg["qp_b"].get<std::string>().c_str(), 0);
+
+        {
+            std::ostringstream ss;
+            ss << "[HEVCExport] pix_fmt=" << av_get_pix_fmt_name(vctx->pix_fmt);
+            LogHevc(ss.str());
+        }
 
         int openErr = avcodec_open2(vctx, vcodec, nullptr);
         if (openErr < 0) {

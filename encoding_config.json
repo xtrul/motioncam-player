@@ -1,0 +1,36 @@
+{
+  "prores": {
+    "codec": "prores_ks",
+    "profile": "standard",
+    "pix_fmt": "yuv422p10le",
+    "bitrate": 185000000,
+    "slice_count": 8,
+    "thread_count": 4
+  },
+  "dnxhr": {
+    "profile": "dnxhr_hqx",
+    "pix_fmt": "yuv422p10le",
+    "bitrate": 185000000,
+    "thread_count": 8
+  },
+  "hevc_gpu": {
+    "encoder": "hevc_amf",
+    "usage": "transcoding",
+    "quality": "slow",
+    "profile": "main10",
+    "tier": "high",
+    "pix_fmt": "p010le",
+    "rate_control": "abr",
+    "bitrate": "1500M",
+    "maxrate": "1500M",
+    "bufsize": "500M",
+    "gop": "1",
+    "forced_idr": "1",
+    "color_primaries": "bt709",
+    "color_trc": "bt709",
+    "colorspace": "bt709",
+    "qp_i": "22",
+    "qp_p": "24",
+    "qp_b": "26"
+  }
+}

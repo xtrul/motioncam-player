@@ -170,6 +170,7 @@ set(APP_SOURCES
   src/Playback/PlaybackController.cpp
 
   src/Utils/DebugLog.cpp
+  src/Utils/EncodingConfig.cpp
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
 
