@@ -92,3 +92,51 @@ runtime DLLs will be copied automatically.
 - BT.709 color metadata is written so DaVinci Resolve interprets the clip correctly.
 - If the AMD encoder is unavailable the export aborts and logs to `hevc_export_log.txt`.
 - The log file lists these settings so you can verify the parameters used.
+
+## Encoding Configuration
+
+Runtime encoder settings can be overridden by placing an `encoding_config.json`
+file next to the executable. Options are grouped by encoder and all values are
+optional:
+
+```
+{
+  "prores": {
+    "codec": "prores_ks",
+    "profile": "standard",
+    "pix_fmt": "yuv422p10le",
+    "bitrate": 185000000,
+    "slice_count": 8,
+    "thread_count": 0
+  },
+  "dnxhr": {
+    "profile": "dnxhr_hqx",
+    "pix_fmt": "yuv422p10le",
+    "bitrate": 185000000,
+    "thread_count": 0
+  },
+  "hevc_gpu": {
+    "encoder": "hevc_amf",
+    "usage": "transcoding",
+    "quality": "slow",
+    "profile": "main10",
+    "tier": "high",
+    "pix_fmt": "p010",
+    "rate_control": "abr",
+    "bitrate": "1500M",
+    "maxrate": "1500M",
+    "bufsize": "500M",
+    "gop": 1,
+    "forced_idr": 1,
+    "color_primaries": "bt709",
+    "color_trc": "bt709",
+    "colorspace": "bt709",
+    "qp_i": 0,
+    "qp_p": 0,
+    "qp_b": 0
+  }
+}
+```
+
+When present, the file is loaded each time an export starts and any specified
+values override the built‑in defaults.
