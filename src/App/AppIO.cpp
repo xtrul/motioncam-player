@@ -11,6 +11,7 @@
 #include <motioncam/RawData.hpp>
 
 #include "App/AppConfig.h"
+#include "App/EncodingConfig.h"
 
 #ifndef TINY_DNG_WRITER_IMPLEMENTATION
 #define TINY_DNG_WRITER_IMPLEMENTATION
@@ -1268,6 +1269,9 @@ void App::exportCurrentClipToProRes() {
         AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
         LogProRes(std::string("[ProResExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
 
+        EncodingConfig encCfg = loadEncodingConfig((fs::current_path() / "encoding_config.json").string());
+        const auto& pcfg = encCfg.prores;
+
         LogProRes("[ProResExport] Allocating output context");
         auto allocStart = std::chrono::steady_clock::now();
         AVFormatContext* fmt = nullptr;
@@ -1280,7 +1284,10 @@ void App::exportCurrentClipToProRes() {
                 std::chrono::steady_clock::now() - allocStart).count();
         LogProRes("[ProResExport] Output context created in " + std::to_string(allocMs) + "ms");
 
-        const AVCodec* vcodec = avcodec_find_encoder_by_name("prores_ks");
+        const AVCodec* vcodec = avcodec_find_encoder_by_name(pcfg.codec.c_str());
+        if (!vcodec) {
+            vcodec = avcodec_find_encoder_by_name("prores_ks");
+        }
         if (!vcodec) {
             m_proResStatus.errorMsg = "ProRes encoder not found";
             m_proResStatus.active.store(false);
@@ -1299,16 +1306,17 @@ void App::exportCurrentClipToProRes() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        vctx->pix_fmt = AV_PIX_FMT_YUV422P10LE;
+        AVPixelFormat pfmt = av_get_pix_fmt(pcfg.pixFmt.c_str());
+        vctx->pix_fmt = (pfmt == AV_PIX_FMT_NONE) ? AV_PIX_FMT_YUV422P10LE : pfmt;
         vctx->width = width;
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
         unsigned threads = std::thread::hardware_concurrency();
         if (threads == 0) threads = 1;
-        int bitrate = (width == 1920) ? 185000000 : 90000000;
+        int bitrate = pcfg.bitrate > 0 ? pcfg.bitrate : ((width == 1920) ? 185000000 : 90000000);
         vctx->bit_rate = bitrate;
-        vctx->thread_count = 0; // let FFmpeg decide based on HW
+        vctx->thread_count = pcfg.threadCount;
         vctx->thread_type = FF_THREAD_FRAME;
         LogProRes(std::string("[ProResExport] Detected CPU threads: ") +
                   std::to_string(threads));
@@ -1316,8 +1324,11 @@ void App::exportCurrentClipToProRes() {
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
-        av_dict_set(&encOpts, "slice_count", std::to_string(threads).c_str(), 0);
-        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(threads));
+        int slices = pcfg.sliceCount > 0 ? pcfg.sliceCount : threads;
+        av_dict_set(&encOpts, "slice_count", std::to_string(slices).c_str(), 0);
+        if (!pcfg.profile.empty())
+            av_dict_set(&encOpts, "profile", pcfg.profile.c_str(), 0);
+        LogProRes(std::string("[ProResExport] Slice count: ") + std::to_string(slices));
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_proResStatus.errorMsg = "avcodec_open2 failed";
@@ -1793,6 +1804,9 @@ void App::exportCurrentClipToDNxHR() {
         AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
         LogProRes(std::string("[DNxHRExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
 
+        EncodingConfig encCfg = loadEncodingConfig((fs::current_path() / "encoding_config.json").string());
+        const auto& dcfg = encCfg.dnxhr;
+
         LogProRes("[DNxHRExport] Allocating output context");
         auto allocStart = std::chrono::steady_clock::now();
         AVFormatContext* fmt = nullptr;
@@ -1824,18 +1838,20 @@ void App::exportCurrentClipToDNxHR() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        vctx->pix_fmt = AV_PIX_FMT_YUV422P10LE;
+        AVPixelFormat pfmt_d = av_get_pix_fmt(dcfg.pixFmt.c_str());
+        vctx->pix_fmt = (pfmt_d == AV_PIX_FMT_NONE) ? AV_PIX_FMT_YUV422P10LE : pfmt_d;
         vctx->bits_per_raw_sample = 10;
-        vctx->profile = FF_PROFILE_DNXHR_HQX;
+        if (dcfg.profile == "HQX")
+            vctx->profile = FF_PROFILE_DNXHR_HQX;
         vctx->width = width;
         vctx->height = height;
         vctx->time_base = timeBase;
         vctx->framerate = av_inv_q(timeBase);
         unsigned threads = std::thread::hardware_concurrency();
         if (threads == 0) threads = 1;
-        vctx->thread_count = 0;
+        vctx->thread_count = dcfg.threadCount;
         vctx->thread_type = FF_THREAD_FRAME;
-        int bitrate = (width == 1920) ? 185000000 : 90000000;
+        int bitrate = dcfg.bitrate > 0 ? dcfg.bitrate : ((width == 1920) ? 185000000 : 90000000);
         vctx->bit_rate = bitrate;
         LogProRes(std::string("[DNxHRExport] Bitrate: ") + std::to_string(bitrate));
         LogProRes(std::string("[DNxHRExport] Detected CPU threads: ") + std::to_string(threads));
@@ -1843,7 +1859,10 @@ void App::exportCurrentClipToDNxHR() {
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
         AVDictionary* encOpts = nullptr;
-        av_dict_set(&encOpts, "profile", "dnxhr_hqx", 0);
+        if (!dcfg.profile.empty()) {
+            std::string profStr = dcfg.profile == "HQX" ? "dnxhr_hqx" : dcfg.profile;
+            av_dict_set(&encOpts, "profile", profStr.c_str(), 0);
+        }
         auto openVStart = std::chrono::steady_clock::now();
         if (avcodec_open2(vctx, vcodec, &encOpts) < 0) {
             m_dnxhrStatus.errorMsg = "avcodec_open2 failed";
@@ -2308,6 +2327,9 @@ void App::exportCurrentClipToHEVC_AMD() {
         AVRational timeBase{ static_cast<int>(frameDurationNs / 1000), 1000000 };
         LogHevc(std::string("[HEVCExport] Time base: ") + std::to_string(timeBase.num) + "/" + std::to_string(timeBase.den));
 
+        EncodingConfig encCfg = loadEncodingConfig((fs::current_path() / "encoding_config.json").string());
+        const auto& hcfg = encCfg.hevcGpu;
+
         AVFormatContext* fmt = nullptr;
         if (avformat_alloc_output_context2(&fmt, nullptr, nullptr, outputPath.c_str()) < 0 || !fmt) {
             m_hevcStatus.errorMsg = "avformat_alloc_output_context2 failed";
@@ -2315,7 +2337,7 @@ void App::exportCurrentClipToHEVC_AMD() {
             return;
         }
 
-        const AVCodec* vcodec = avcodec_find_encoder_by_name("hevc_amf");
+        const AVCodec* vcodec = avcodec_find_encoder_by_name(hcfg.encoder.c_str());
         if (!vcodec) {
             m_hevcStatus.errorMsg = "AMD hardware encoder not available. Aborting export.";
             m_hevcStatus.active.store(false);
@@ -2334,7 +2356,8 @@ void App::exportCurrentClipToHEVC_AMD() {
         AVCodecContext* vctx = avcodec_alloc_context3(vcodec);
         vctx->codec_id = vcodec->id;
         vctx->codec_type = AVMEDIA_TYPE_VIDEO;
-        vctx->pix_fmt = AV_PIX_FMT_P010;
+        AVPixelFormat pfmt_h = av_get_pix_fmt(hcfg.pixFmt.c_str());
+        vctx->pix_fmt = (pfmt_h == AV_PIX_FMT_NONE) ? AV_PIX_FMT_P010 : pfmt_h;
         vctx->width = width;
         vctx->height = height;
         vctx->time_base = timeBase;
@@ -2352,17 +2375,37 @@ void App::exportCurrentClipToHEVC_AMD() {
         av_opt_set(vctx->priv_data, "bufsize", "500M", 0);
         av_opt_set(vctx->priv_data, "g", "1", 0);
         av_opt_set(vctx->priv_data, "forced-idr", "1", 0);
+
         vctx->color_primaries = AVCOL_PRI_BT709;
         vctx->color_trc = AVCOL_TRC_BT709;
         vctx->colorspace = AVCOL_SPC_BT709;
-        LogHevc("[HEVCExport] color_primaries=bt709 color_trc=bt709 colorspace=bt709");
+        if (hcfg.colorPrimaries != "bt709") {
+            // simple mapping
+            if (hcfg.colorPrimaries == "bt2020") vctx->color_primaries = AVCOL_PRI_BT2020;
+        }
+        if (hcfg.colorTrc != "bt709") {
+            if (hcfg.colorTrc == "smpte2084") vctx->color_trc = AVCOL_TRC_SMPTE2084;
+        }
+        if (hcfg.colorspace != "bt709") {
+            if (hcfg.colorspace == "bt2020_ncl") vctx->colorspace = AVCOL_SPC_BT2020_NCL;
+        }
 
-        LogHevc("[HEVCExport] usage=transcoding quality=slow profile=main10 tier=high rc=abr b=250M maxrate=250M bufsize=500M g=1 color=bt709");
+        LogHevc("[HEVCExport] color_primaries=" + hcfg.colorPrimaries + " color_trc=" + hcfg.colorTrc + " colorspace=" + hcfg.colorspace);
+
+        LogHevc("[HEVCExport] usage=" + hcfg.usage + " quality=" + hcfg.quality + " profile=" + hcfg.profile + " tier=" + hcfg.tier +
+                " rc=" + hcfg.rateControl + " b=" + hcfg.bitrate + " maxrate=" + hcfg.maxrate + " bufsize=" + hcfg.bufsize +
+                " g=" + std::to_string(hcfg.gop) + " color=" + hcfg.colorPrimaries);
         char pixDesc[64];
         snprintf(pixDesc, sizeof(pixDesc), "[HEVCExport] pix_fmt=%s", av_get_pix_fmt_name(vctx->pix_fmt));
         LogHevc(pixDesc);
 
-        int openErr = avcodec_open2(vctx, vcodec, nullptr);
+        AVDictionary* hevcOpts = nullptr;
+        if (hcfg.qpI >= 0) av_dict_set(&hevcOpts, "qp_i", std::to_string(hcfg.qpI).c_str(), 0);
+        if (hcfg.qpP >= 0) av_dict_set(&hevcOpts, "qp_p", std::to_string(hcfg.qpP).c_str(), 0);
+        if (hcfg.qpB >= 0) av_dict_set(&hevcOpts, "qp_b", std::to_string(hcfg.qpB).c_str(), 0);
+
+        int openErr = avcodec_open2(vctx, vcodec, &hevcOpts);
+        av_dict_free(&hevcOpts);
         if (openErr < 0) {
             char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
             av_strerror(openErr, errbuf, sizeof(errbuf));
