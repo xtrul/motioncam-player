@@ -2362,17 +2362,17 @@ void App::exportCurrentClipToHEVC_AMD() {
         if (fmt->oformat->flags & AVFMT_GLOBALHEADER)
             vctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
-        av_opt_set(vctx->priv_data, "usage", hcfg.usage.c_str(), 0);
-        av_opt_set(vctx->priv_data, "quality", hcfg.quality.c_str(), 0);
-        av_opt_set(vctx->priv_data, "profile", hcfg.profile.c_str(), 0);
-        av_opt_set(vctx->priv_data, "tier", hcfg.tier.c_str(), 0);
-        av_opt_set(vctx->priv_data, "rc", hcfg.rateControl.c_str(), 0);
-        av_opt_set(vctx->priv_data, "b", hcfg.bitrate.c_str(), 0);
-        av_opt_set(vctx->priv_data, "maxrate", hcfg.maxrate.c_str(), 0);
-        av_opt_set(vctx->priv_data, "bufsize", hcfg.bufsize.c_str(), 0);
-        av_opt_set(vctx->priv_data, "g", std::to_string(hcfg.gop).c_str(), 0);
-        av_opt_set(vctx->priv_data, "forced-idr", std::to_string(hcfg.forcedIdr).c_str(), 0);
 
+        av_opt_set(vctx->priv_data, "usage", "transcoding", 0);
+        av_opt_set(vctx->priv_data, "quality", "slow", 0);
+        av_opt_set(vctx->priv_data, "profile", "main10", 0);
+        av_opt_set(vctx->priv_data, "tier", "high", 0);
+        av_opt_set(vctx->priv_data, "rc", "abr", 0);
+        av_opt_set(vctx->priv_data, "b", "1500M", 0);
+        av_opt_set(vctx->priv_data, "maxrate", "1500M", 0);
+        av_opt_set(vctx->priv_data, "bufsize", "500M", 0);
+        av_opt_set(vctx->priv_data, "g", "1", 0);
+        av_opt_set(vctx->priv_data, "forced-idr", "1", 0);
         vctx->color_primaries = AVCOL_PRI_BT709;
         vctx->color_trc = AVCOL_TRC_BT709;
         vctx->colorspace = AVCOL_SPC_BT709;
