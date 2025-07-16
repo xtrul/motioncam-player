@@ -5,7 +5,11 @@
 #include "Playback/PlaybackController.h"
 #include "Graphics/Renderer_VK.h"
 #include "Utils/DebugLog.h"
+#ifdef MOTIONCAM_BATCHER
+#include "Gui/BatcherGui.h"
+#else
 #include "Gui/GuiOverlay.h"
+#endif
 
 #include <chrono>
 #include <thread>
@@ -448,9 +452,15 @@ void App::drawFrame() {
     }
 
     if (m_uiOpacity > 0.0f) {
+#ifdef MOTIONCAM_BATCHER
+        BatcherGui::beginFrame();
+        BatcherGui::render(this);
+        BatcherGui::endFrame(cmd);
+#else
         GuiOverlay::beginFrame();
         GuiOverlay::render(this);
         GuiOverlay::endFrame(cmd);
+#endif
     }
     vkCmdEndRenderPass(cmd);
 
