@@ -111,26 +111,16 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
-    void exportCurrentClipToProRes(const std::string& outputPath = "");
-    void convertCurrentClipToProRes(const std::string& outputPath = "");
-    void exportCurrentClipToDNxHR(const std::string& outputPath = "");
-    void convertCurrentClipToDNxHR(const std::string& outputPath = "");
-    void exportCurrentClipToHEVC_AMD(const std::string& outputPath = "");
-    void convertCurrentClipToHEVC_AMD(const std::string& outputPath = "");
+    void exportCurrentClipToProRes();
+    void convertCurrentClipToProRes();
+    void exportCurrentClipToDNxHR();
+    void convertCurrentClipToDNxHR();
+    void exportCurrentClipToHEVC_AMD();
+    void convertCurrentClipToHEVC_AMD();
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
     void showActionMessage(const std::string& msg);
-
-#ifdef MOTIONCAM_BATCHER
-    enum class ExportFormat { PRORES, DNXHR, HEVC };
-    void startBatchConversion(ExportFormat fmt, const std::string& outputDir);
-    std::vector<std::string> m_batchLog;
-    std::atomic<bool> m_batchActive{ false };
-    std::thread m_batchThread;
-    int m_selectedBatchIndex = -1;
-    char m_outputFolder[1024] = "";
-#endif
 
     std::vector<VkImage> m_swapChainImages;
     std::atomic<size_t> m_activeFileLoadID{ 0 };

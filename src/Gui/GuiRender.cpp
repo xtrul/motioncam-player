@@ -184,55 +184,6 @@ namespace GuiOverlay {
 
 
     void render(App* appInstance) {
-#ifdef MOTIONCAM_BATCHER
-        if (!appInstance) return;
-        ImGuiIO& io = ImGui::GetIO();
-        ImGuiViewport* vp = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(vp->WorkPos);
-        ImGui::SetNextWindowSize(vp->WorkSize);
-        ImGui::Begin("BatcherMain", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
-
-        ImGui::BeginChild("FileListPanel", ImVec2(vp->WorkSize.x * 0.5f, vp->WorkSize.y - 150), true);
-        if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
-        ImGui::SameLine();
-        if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileList.size()) {
-            appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
-            appInstance->m_selectedBatchIndex = -1;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Clear")) { appInstance->m_fileList.clear(); appInstance->m_selectedBatchIndex = -1; }
-        ImGui::Separator();
-        for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
-            bool sel = (i == appInstance->m_selectedBatchIndex);
-            std::string name = std::filesystem::path(appInstance->m_fileList[i]).filename().string();
-            if (ImGui::Selectable(name.c_str(), sel)) appInstance->m_selectedBatchIndex = i;
-        }
-        ImGui::EndChild();
-
-        ImGui::SameLine();
-
-        ImGui::BeginChild("ExportSettings", ImVec2(0, vp->WorkSize.y - 150), true);
-        static int fmt = 0;
-        ImGui::RadioButton("ProRes", &fmt, 0);
-        ImGui::RadioButton("DNxHR", &fmt, 1);
-        ImGui::RadioButton("HEVC (GPU)", &fmt, 2);
-        ImGui::InputText("Output Folder", appInstance->m_outputFolder, IM_ARRAYSIZE(appInstance->m_outputFolder));
-        if (ImGui::Button("Convert All") && !appInstance->m_batchActive.load()) {
-            appInstance->startBatchConversion(static_cast<App::ExportFormat>(fmt), appInstance->m_outputFolder);
-        }
-        ImGui::EndChild();
-
-        ImGui::BeginChild("Log", ImVec2(0, 120), true);
-        for (const std::string& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
-        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
-        ImGui::EndChild();
-
-        ImGui::Separator();
-        ImGui::Text("MotionCam Batcher v0.36.0 — RAW VIDEO CONVERTER");
-        ImGui::Text("www.motioncamapp.com");
-
-        ImGui::End();
-#else
         if (!appInstance) return;
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appInstance->m_uiOpacity);
         UIData ui = GuiOverlay::gatherData(appInstance);
@@ -791,7 +742,6 @@ namespace GuiOverlay {
         }
 #endif
         ImGui::PopStyleVar();
-#endif
     }
 
     void endFrame(VkCommandBuffer commandBuffer) {
