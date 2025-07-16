@@ -6,6 +6,9 @@
 #include "Graphics/Renderer_VK.h"
 #include "Utils/DebugLog.h"
 #include "Gui/GuiOverlay.h"
+#ifdef MOTIONCAM_BATCHER
+#include "Gui/GuiBatcher.h"
+#endif
 
 #include <iostream>
 #include <stdexcept>
@@ -207,8 +210,13 @@ void App::cleanupVulkan() {
         m_rendererVk.reset();
     }
 
+#ifdef MOTIONCAM_BATCHER
+    LogToFile("[App::cleanupVulkan] Cleaning up GuiBatcher (ImGui shutdown)...");
+    GuiBatcher::cleanup();
+#else
     LogToFile("[App::cleanupVulkan] Cleaning up GuiOverlay (ImGui shutdown)...");
     GuiOverlay::cleanup();
+#endif
 
     if (m_imguiDescriptorPool != VK_NULL_HANDLE) {
         LogToFile("[App::cleanupVulkan] Destroying ImGui descriptor pool...");
