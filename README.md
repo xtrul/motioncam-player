@@ -92,5 +92,3 @@ runtime DLLs will be copied automatically.
 - BT.709 color metadata is written so DaVinci Resolve interprets the clip correctly.
 - If the AMD encoder is unavailable the export aborts and logs to `hevc_export_log.txt`.
 - The log file lists these settings so you can verify the parameters used.
-
-See `docs/Batcher_Enhancement_Spec.md` for proposed improvements to the MotionCam Batcher add-on.
