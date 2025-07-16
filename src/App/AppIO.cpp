@@ -837,7 +837,6 @@ void App::softDeleteCurrentFile() {
         }
 
         m_fileList.clear();
-        m_fileExportFormats.clear();
         fs::path anchorPathFs = fs::absolute(originalAnchorFilePath);
         fs::path parent_folder_of_anchor = anchorPathFs.parent_path();
         if (!fs::exists(parent_folder_of_anchor)) {
@@ -849,7 +848,6 @@ void App::softDeleteCurrentFile() {
         for (const auto& entry : fs::directory_iterator(parent_folder_of_anchor)) {
             if (entry.is_regular_file() && entry.path().extension() == ".mcraw") {
                 m_fileList.push_back(entry.path().string());
-                m_fileExportFormats.push_back(ExportFormat::PRORES_CPU);
             }
         }
         std::sort(m_fileList.begin(), m_fileList.end());
@@ -2759,42 +2757,22 @@ void App::loadFileForExport(const std::string& path) {
 }
 
 #ifdef MOTIONCAM_BATCHER
-void App::startBatchConversion() {
+void App::startBatchConversion(ExportFormat fmt, const std::string& outputDir) {
     if (m_batchActive.load()) return;
     m_batchActive.store(true);
     m_batchLog.clear();
-    // open log file with timestamp
-    namespace fs = std::filesystem;
-    auto now = std::chrono::system_clock::now();
-    std::time_t t = std::chrono::system_clock::to_time_t(now);
-    std::tm tm{};
-#ifdef _WIN32
-    localtime_s(&tm, &t);
-#else
-    localtime_r(&t, &tm);
-#endif
-    char ts[32];
-    std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", &tm);
-    fs::path logDir = fs::path(getLogDirectory()) / "batcher";
-    std::error_code ec;
-    fs::create_directories(logDir, ec);
-    fs::path logPath = logDir / (std::string("batcher_") + ts + ".log");
-    std::ofstream logFile(logPath.string());
-    m_batchThread = std::thread([this, logFile = std::move(logFile)]() mutable {
+    m_batchThread = std::thread([this, fmt, outputDir]() {
         namespace fs = std::filesystem;
         for (size_t i = 0; i < m_fileList.size(); ++i) {
             if (m_window && glfwWindowShouldClose(m_window)) break;
             const std::string& path = m_fileList[i];
             m_batchLog.push_back(std::string("Converting ") + fs::path(path).filename().string() + "...");
-            if (logFile.is_open()) logFile << "[start] " << fs::path(path).filename().string() << std::endl;
             loadFileForExport(path);
-            std::string outFolder = m_outputFolder[0] ? std::string(m_outputFolder) : fs::path(path).parent_path().string();
+            std::string outFolder = outputDir.empty() ? fs::path(path).parent_path().string() : outputDir;
             std::string stem = fs::path(path).stem().string();
             std::string outPath;
-            ExportFormat fmt = ExportFormat::PRORES_CPU;
-            if (i < m_fileExportFormats.size()) fmt = m_fileExportFormats[i];
             switch (fmt) {
-            case ExportFormat::PRORES_CPU:
+            case ExportFormat::PRORES:
                 outPath = (fs::path(outFolder) / (stem + ".mov")).string();
                 exportCurrentClipToProRes(outPath);
 #ifdef ENABLE_PRORES_EXPORT
@@ -2804,17 +2782,7 @@ void App::startBatchConversion() {
                 else m_batchLog.push_back(std::string("Error: ") + m_proResStatus.errorMsg);
 #endif
                 break;
-            case ExportFormat::PRORES_GPU:
-                outPath = (fs::path(outFolder) / (stem + ".mov")).string();
-                convertCurrentClipToProRes(outPath);
-#ifdef ENABLE_PRORES_EXPORT
-                while (m_proResStatus.active.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                if (m_proResThread.joinable()) m_proResThread.join();
-                if (m_proResStatus.errorMsg.empty()) m_batchLog.push_back(fs::path(path).filename().string() + " -> ProRes(GPU) done");
-                else m_batchLog.push_back(std::string("Error: ") + m_proResStatus.errorMsg);
-#endif
-                break;
-            case ExportFormat::DNXHR_CPU:
+            case ExportFormat::DNXHR:
                 outPath = (fs::path(outFolder) / (stem + ".mov")).string();
                 exportCurrentClipToDNxHR(outPath);
 #ifdef ENABLE_PRORES_EXPORT
@@ -2824,19 +2792,9 @@ void App::startBatchConversion() {
                 else m_batchLog.push_back(std::string("Error: ") + m_dnxhrStatus.errorMsg);
 #endif
                 break;
-            case ExportFormat::DNXHR_GPU:
-                outPath = (fs::path(outFolder) / (stem + ".mov")).string();
-                convertCurrentClipToDNxHR(outPath);
-#ifdef ENABLE_PRORES_EXPORT
-                while (m_dnxhrStatus.active.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                if (m_dnxhrThread.joinable()) m_dnxhrThread.join();
-                if (m_dnxhrStatus.errorMsg.empty()) m_batchLog.push_back(fs::path(path).filename().string() + " -> DNxHR(GPU) done");
-                else m_batchLog.push_back(std::string("Error: ") + m_dnxhrStatus.errorMsg);
-#endif
-                break;
-            case ExportFormat::HEVC_CPU:
+            case ExportFormat::HEVC:
                 outPath = (fs::path(outFolder) / (stem + ".mp4")).string();
-                exportCurrentClipToHEVC_AMD(outPath);
+                convertCurrentClipToHEVC_AMD(outPath);
 #ifdef ENABLE_PRORES_EXPORT
                 while (m_hevcStatus.active.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 if (m_hevcThread.joinable()) m_hevcThread.join();
@@ -2844,21 +2802,9 @@ void App::startBatchConversion() {
                 else m_batchLog.push_back(std::string("Error: ") + m_hevcStatus.errorMsg);
 #endif
                 break;
-            case ExportFormat::HEVC_GPU:
-                outPath = (fs::path(outFolder) / (stem + ".mp4")).string();
-                convertCurrentClipToHEVC_AMD(outPath);
-#ifdef ENABLE_PRORES_EXPORT
-                while (m_hevcStatus.active.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                if (m_hevcThread.joinable()) m_hevcThread.join();
-                if (m_hevcStatus.errorMsg.empty()) m_batchLog.push_back(fs::path(path).filename().string() + " -> HEVC(GPU) done");
-                else m_batchLog.push_back(std::string("Error: ") + m_hevcStatus.errorMsg);
-#endif
-                break;
             }
-            if (logFile.is_open()) logFile << "[end] " << fs::path(path).filename().string() << std::endl;
         }
         m_batchLog.push_back("Batch finished");
-        if (logFile.is_open()) logFile << "[summary] total=" << m_fileList.size() << std::endl;
         m_batchActive.store(false);
     });
 }
