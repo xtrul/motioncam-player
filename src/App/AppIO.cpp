@@ -1192,16 +1192,10 @@ void App::exportCurrentClipToProRes() {
         return;
     }
 
-    std::string outputPath;
-    if (!m_overrideProResPath.empty()) {
-        outputPath = m_overrideProResPath;
-        m_overrideProResPath.clear();
-    } else {
-        outputPath = openSaveMovDialog();
-        if (outputPath.empty()) return;
-        if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
-            outputPath += ".mov";
-        }
+    std::string outputPath = openSaveMovDialog();
+    if (outputPath.empty()) return;
+    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
+        outputPath += ".mov";
     }
 
     if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder()) {
@@ -1739,16 +1733,10 @@ void App::exportCurrentClipToDNxHR() {
         return;
     }
 
-    std::string outputPath;
-    if (!m_overrideDNxHRPath.empty()) {
-        outputPath = m_overrideDNxHRPath;
-        m_overrideDNxHRPath.clear();
-    } else {
-        outputPath = openSaveMovDialog();
-        if (outputPath.empty()) return;
-        if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
-            outputPath += ".mov";
-        }
+    std::string outputPath = openSaveMovDialog();
+    if (outputPath.empty()) return;
+    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
+        outputPath += ".mov";
     }
 
     if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder()) {
@@ -2279,16 +2267,10 @@ void App::exportCurrentClipToHEVC_AMD() {
         return;
     }
 
-    std::string outputPath;
-    if (!m_overrideHevcPath.empty()) {
-        outputPath = m_overrideHevcPath;
-        m_overrideHevcPath.clear();
-    } else {
-        outputPath = openSaveMp4Dialog();
-        if (outputPath.empty()) return;
-        if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mp4") {
-            outputPath += ".mp4";
-        }
+    std::string outputPath = openSaveMp4Dialog();
+    if (outputPath.empty()) return;
+    if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mp4") {
+        outputPath += ".mp4";
     }
 
     if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder()) {

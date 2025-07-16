@@ -865,11 +865,7 @@ void App::initImGuiVulkan() {
     VK_APP_CHECK(vkCreateDescriptorPool(m_device, &pool_info, nullptr, &m_imguiDescriptorPool));
     LogToFile("App::initImGuiVulkan ImGui descriptor pool created.");
 
-#ifdef MOTIONCAM_BATCHER
-    GuiBatcher::setup(m_window, this);
-#else
     GuiOverlay::setup(m_window, this);
-#endif
     LogToFile("App::initImGuiVulkan GuiOverlay::setup() called.");
 }
 

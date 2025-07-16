@@ -293,13 +293,8 @@ int main(int argc, char* argv[]) {
     LogToFile(std::string("[main] Initializing App with file: ") + inPath);
     try {
         App app(inPath);
-#ifdef MOTIONCAM_BATCHER
-        LogToFile("[main] App object created. Calling app.runBatcher()...");
-        if (!app.runBatcher()) {
-#else
         LogToFile("[main] App object created. Calling app.run()...");
         if (!app.run()) {
-#endif
             LogToFile("[main] App::run() returned false. Application will exit.");
 #ifdef _WIN32
             MessageBoxA(NULL, "Application run failed. See mcraw_player_debug_log.txt for details.", "Runtime Error - MCRAW Player", MB_OK | MB_ICONERROR);

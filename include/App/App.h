@@ -40,9 +40,6 @@ class DecoderWrapper;
 class Renderer_VK;
 
 #include "Gui/GuiOverlay.h"
-#ifdef MOTIONCAM_BATCHER
-#include "Gui/GuiBatcher.h"
-#endif
 #include "Utils/ThreadSafeQueue.h"
 #include "Decoder/DecoderTypes.h"
 
@@ -56,19 +53,9 @@ public:
 
     bool run();
 
-#ifdef MOTIONCAM_BATCHER
-    bool runBatcher();
-#endif
-
     friend GuiOverlay::UIData GuiOverlay::gatherData(App* appInstance);
     friend void GuiOverlay::render(App* appInstance);
     friend void GuiOverlay::setup(GLFWwindow* window, App* appInstance);
-#ifdef MOTIONCAM_BATCHER
-    friend void GuiBatcher::setup(GLFWwindow* window, App* appInstance);
-    friend void GuiBatcher::render(App* appInstance);
-    friend void GuiBatcher::beginFrame();
-    friend void GuiBatcher::endFrame(VkCommandBuffer cmd);
-#endif
 
     GLFWwindow* m_window = nullptr;
     VkInstance m_vkInstance = VK_NULL_HANDLE;
@@ -255,10 +242,6 @@ private:
     std::atomic<bool> m_showDNxHRExportProgressPopup{ false };
     std::thread m_dnxhrThread;
 
-    std::string m_overrideProResPath;
-    std::string m_overrideDNxHRPath;
-    std::string m_overrideHevcPath;
-
     struct HevcExportStatus {
         std::atomic<bool> active{ false };
         std::atomic<int> currentFrame{ 0 };
@@ -299,9 +282,6 @@ private:
     void recreateSwapChain();
 
     void drawFrame();
-#ifdef MOTIONCAM_BATCHER
-    void drawBatcherFrame();
-#endif
 
     void ioWorkerLoop();
     void decodeWorkerLoop();
