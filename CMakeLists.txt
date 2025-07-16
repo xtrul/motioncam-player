@@ -142,8 +142,6 @@ message(STATUS "Configured ImGui from: ${IMGUI_SOURCE_DIR}")
 add_subdirectory(motioncam-decoder EXCLUDE_FROM_ALL)
 message(STATUS "Configured motioncam-decoder subproject.")
 
-add_subdirectory(tools)
-
 set(APP_SOURCES
   src/App/AppInit.cpp
   src/App/AppLoop.cpp
