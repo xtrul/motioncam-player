@@ -48,9 +48,19 @@ std::string getLogDirectory() {
         std::string appData(size - 1, '\0');
         WideCharToMultiByte(CP_UTF8, 0, appDataPath, -1, &appData[0], size, nullptr, nullptr);
         CoTaskMemFree(appDataPath);
-        logDir = appData + "\\MotionCam Tools\\Player\\logs";
+        logDir = appData + "\\MotionCam Tools\\";
+#ifdef MOTIONCAM_BATCHER
+        logDir += "Batcher\\logs";
+#else
+        logDir += "Player\\logs";
+#endif
     } else {
-        logDir = std::filesystem::temp_directory_path().string() + "\\MotionCam Tools\\Player\\logs";
+        logDir = std::filesystem::temp_directory_path().string() + "\\MotionCam Tools\\";
+#ifdef MOTIONCAM_BATCHER
+        logDir += "Batcher\\logs";
+#else
+        logDir += "Player\\logs";
+#endif
     }
     return logDir;
 #else
@@ -66,7 +76,11 @@ static std::ofstream& get_log_file() {
         std::filesystem::path logDir = getLogDirectory();
         std::error_code ec;
         std::filesystem::create_directories(logDir, ec); // Ignore errors, file open will fail if directory can't be created
+#ifdef MOTIONCAM_BATCHER
+        std::filesystem::path logPath = logDir / "motioncam_batcher.txt";
+#else
         std::filesystem::path logPath = logDir / "motioncam_player_log.txt";
+#endif
         log_file.open(logPath, std::ios_base::app | std::ios_base::out);
         initialized = true;
     }
