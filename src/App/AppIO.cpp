@@ -1186,13 +1186,16 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToProRes() {
+void App::exportCurrentClipToProRes(const std::string& outputPathOverride) {
     if (m_proResStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = openSaveMovDialog();
+    std::string outputPath = outputPathOverride;
+    if (outputPath.empty()) {
+        outputPath = openSaveMovDialog();
+    }
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
         outputPath += ".mov";
@@ -1711,29 +1714,32 @@ void App::exportCurrentClipToProRes() {
     });
 }
 #else
-void App::exportCurrentClipToProRes() {
+void App::exportCurrentClipToProRes(const std::string& /*outputPathOverride*/) {
     showActionMessage("FFmpeg support not built");
 }
 #endif
 
-void App::convertCurrentClipToProRes() {
+void App::convertCurrentClipToProRes(const std::string& outputPathOverride) {
 #ifdef ENABLE_PRORES_EXPORT
     LogProRes("[App] convertCurrentClipToProRes invoked");
     g_useGpuProRes = true;
-    exportCurrentClipToProRes();
+    exportCurrentClipToProRes(outputPathOverride);
 #else
     showActionMessage("FFmpeg support not built");
 #endif
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToDNxHR() {
+void App::exportCurrentClipToDNxHR(const std::string& outputPathOverride) {
     if (m_dnxhrStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = openSaveMovDialog();
+    std::string outputPath = outputPathOverride;
+    if (outputPath.empty()) {
+        outputPath = openSaveMovDialog();
+    }
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
         outputPath += ".mov";
@@ -2245,29 +2251,32 @@ void App::exportCurrentClipToDNxHR() {
     });
 }
 #else
-void App::exportCurrentClipToDNxHR() {
+void App::exportCurrentClipToDNxHR(const std::string& /*outputPathOverride*/) {
     showActionMessage("FFmpeg support not built");
 }
 #endif
 
-void App::convertCurrentClipToDNxHR() {
+void App::convertCurrentClipToDNxHR(const std::string& outputPathOverride) {
 #ifdef ENABLE_PRORES_EXPORT
     LogProRes("[App] convertCurrentClipToDNxHR invoked");
     g_useGpuDNxHR = true;
-    exportCurrentClipToDNxHR();
+    exportCurrentClipToDNxHR(outputPathOverride);
 #else
     showActionMessage("FFmpeg support not built");
 #endif
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToHEVC_AMD() {
+void App::exportCurrentClipToHEVC_AMD(const std::string& outputPathOverride) {
     if (m_hevcStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
 
-    std::string outputPath = openSaveMp4Dialog();
+    std::string outputPath = outputPathOverride;
+    if (outputPath.empty()) {
+        outputPath = openSaveMp4Dialog();
+    }
     if (outputPath.empty()) return;
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mp4") {
         outputPath += ".mp4";
@@ -2687,16 +2696,16 @@ void App::exportCurrentClipToHEVC_AMD() {
     });
 }
 #else
-void App::exportCurrentClipToHEVC_AMD() {
+void App::exportCurrentClipToHEVC_AMD(const std::string& /*outputPathOverride*/) {
     showActionMessage("FFmpeg support not built");
 }
 #endif
 
-void App::convertCurrentClipToHEVC_AMD() {
+void App::convertCurrentClipToHEVC_AMD(const std::string& outputPathOverride) {
 #ifdef ENABLE_PRORES_EXPORT
     LogHevc("[App] convertCurrentClipToHEVC_AMD invoked");
     g_useGpuHevc = true;
-    exportCurrentClipToHEVC_AMD();
+    exportCurrentClipToHEVC_AMD(outputPathOverride);
 #else
     showActionMessage("FFmpeg support not built");
 #endif
@@ -2723,3 +2732,80 @@ void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
     LogToFile(std::string("[App::setPlaybackMode] Changed from ") + std::to_string(static_cast<int>(oldMode)) +
         " to " + std::to_string(static_cast<int>(mode)));
 }
+
+void App::loadFileForExport(const std::string& path) {
+    using namespace std::chrono;
+    namespace fs = std::filesystem;
+    m_decoderWrapper.reset();
+    m_decoderWrapper_ptr = nullptr;
+    try {
+        m_decoderWrapper = std::make_unique<DecoderWrapper>(path);
+        m_decoderWrapper_ptr = m_decoderWrapper.get();
+        nlohmann::json meta = m_decoderWrapper->getContainerMetadata();
+        auto black = meta.value("blackLevel", std::vector<double>{ 0.0 });
+        m_staticBlack = black.empty() ? 0.0 : std::accumulate(black.begin(), black.end(), 0.0) / black.size();
+        m_staticWhite = meta.value("whiteLevel", 65535.0);
+        m_cfaStringFromMetadata = meta.value("sensorArrangment", meta.value("sensorArrangement", "BGGR"));
+        m_cfaTypeFromMetadata = Renderer_VK::getCfaType(m_cfaStringFromMetadata);
+        m_containerFlipped = meta.value("flipped", false);
+        nlohmann::json orientVal = findOrientationValue(meta);
+        m_containerOrientationTag = computeOrientationTag(orientVal, m_containerFlipped, OrientationTag::kNormal);
+        LogToFile(std::string("[Batch] Loaded for export: ") + fs::path(path).filename().string());
+    } catch (const std::exception& e) {
+        LogToFile(std::string("[Batch] Failed to load file: ") + e.what());
+    }
+}
+
+#ifdef MOTIONCAM_BATCHER
+void App::startBatchConversion(ExportFormat fmt, const std::string& outputDir) {
+    if (m_batchActive.load()) return;
+    m_batchActive.store(true);
+    m_batchLog.clear();
+    m_batchThread = std::thread([this, fmt, outputDir]() {
+        namespace fs = std::filesystem;
+        for (size_t i = 0; i < m_fileList.size(); ++i) {
+            if (m_window && glfwWindowShouldClose(m_window)) break;
+            const std::string& path = m_fileList[i];
+            m_batchLog.push_back(std::string("Converting ") + fs::path(path).filename().string() + "...");
+            loadFileForExport(path);
+            std::string outFolder = outputDir.empty() ? fs::path(path).parent_path().string() : outputDir;
+            std::string stem = fs::path(path).stem().string();
+            std::string outPath;
+            switch (fmt) {
+            case ExportFormat::PRORES:
+                outPath = (fs::path(outFolder) / (stem + ".mov")).string();
+                exportCurrentClipToProRes(outPath);
+#ifdef ENABLE_PRORES_EXPORT
+                while (m_proResStatus.active.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                if (m_proResThread.joinable()) m_proResThread.join();
+                if (m_proResStatus.errorMsg.empty()) m_batchLog.push_back(fs::path(path).filename().string() + " -> ProRes done");
+                else m_batchLog.push_back(std::string("Error: ") + m_proResStatus.errorMsg);
+#endif
+                break;
+            case ExportFormat::DNXHR:
+                outPath = (fs::path(outFolder) / (stem + ".mov")).string();
+                exportCurrentClipToDNxHR(outPath);
+#ifdef ENABLE_PRORES_EXPORT
+                while (m_dnxhrStatus.active.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                if (m_dnxhrThread.joinable()) m_dnxhrThread.join();
+                if (m_dnxhrStatus.errorMsg.empty()) m_batchLog.push_back(fs::path(path).filename().string() + " -> DNxHR done");
+                else m_batchLog.push_back(std::string("Error: ") + m_dnxhrStatus.errorMsg);
+#endif
+                break;
+            case ExportFormat::HEVC:
+                outPath = (fs::path(outFolder) / (stem + ".mp4")).string();
+                convertCurrentClipToHEVC_AMD(outPath);
+#ifdef ENABLE_PRORES_EXPORT
+                while (m_hevcStatus.active.load()) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                if (m_hevcThread.joinable()) m_hevcThread.join();
+                if (m_hevcStatus.errorMsg.empty()) m_batchLog.push_back(fs::path(path).filename().string() + " -> HEVC done");
+                else m_batchLog.push_back(std::string("Error: ") + m_hevcStatus.errorMsg);
+#endif
+                break;
+            }
+        }
+        m_batchLog.push_back("Batch finished");
+        m_batchActive.store(false);
+    });
+}
+#endif
