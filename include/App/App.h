@@ -40,6 +40,9 @@ class DecoderWrapper;
 class Renderer_VK;
 
 #include "Gui/GuiOverlay.h"
+#ifdef MOTIONCAM_BATCHER
+#include "Gui/BatcherGui.h"
+#endif
 #include "Utils/ThreadSafeQueue.h"
 #include "Decoder/DecoderTypes.h"
 
@@ -56,6 +59,12 @@ public:
     friend GuiOverlay::UIData GuiOverlay::gatherData(App* appInstance);
     friend void GuiOverlay::render(App* appInstance);
     friend void GuiOverlay::setup(GLFWwindow* window, App* appInstance);
+#ifdef MOTIONCAM_BATCHER
+    friend void BatcherGui::render(App* appInstance);
+    friend void BatcherGui::setup(GLFWwindow* window, App* appInstance);
+    friend void BatcherGui::beginFrame();
+    friend void BatcherGui::endFrame(VkCommandBuffer commandBuffer);
+#endif
 
     GLFWwindow* m_window = nullptr;
     VkInstance m_vkInstance = VK_NULL_HANDLE;
@@ -111,12 +120,12 @@ public:
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void saveCurrentFrameAsDng();
     void convertCurrentFileToDngs();
-    void exportCurrentClipToProRes();
-    void convertCurrentClipToProRes();
-    void exportCurrentClipToDNxHR();
-    void convertCurrentClipToDNxHR();
-    void exportCurrentClipToHEVC_AMD();
-    void convertCurrentClipToHEVC_AMD();
+    void exportCurrentClipToProRes(const std::string& outputPath = "");
+    void convertCurrentClipToProRes(const std::string& outputPath = "");
+    void exportCurrentClipToDNxHR(const std::string& outputPath = "");
+    void convertCurrentClipToDNxHR(const std::string& outputPath = "");
+    void exportCurrentClipToHEVC_AMD(const std::string& outputPath = "");
+    void convertCurrentClipToHEVC_AMD(const std::string& outputPath = "");
     void performSeek(size_t new_frame_index);
     void triggerOpenFileViaDialog();
 	void setPlaybackMode(PlaybackController::PlaybackMode mode);
@@ -250,6 +259,16 @@ private:
     } m_hevcStatus;
     std::atomic<bool> m_showHevcExportProgressPopup{ false };
     std::thread m_hevcThread;
+#endif
+
+#ifdef MOTIONCAM_BATCHER
+    std::vector<std::string> m_batchFileQueue;
+    std::vector<std::string> m_conversionLog;
+    std::string m_outputFolder;
+    int m_selectedFormat = 0; // 0=ProRes 1=DNxHR 2=HEVC
+    bool m_batchActive = false;
+    std::thread m_batchThread;
+    void startBatchConversion();
 #endif
 
 

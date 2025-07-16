@@ -1186,14 +1186,16 @@ void App::sendAllPlaylistFilesToMotionCamFS()
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToProRes() {
+void App::exportCurrentClipToProRes(const std::string& outputOverride) {
     if (m_proResStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
-
-    std::string outputPath = openSaveMovDialog();
-    if (outputPath.empty()) return;
+    std::string outputPath = outputOverride;
+    if (outputPath.empty()) {
+        outputPath = openSaveMovDialog();
+        if (outputPath.empty()) return;
+    }
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
         outputPath += ".mov";
     }
@@ -1711,30 +1713,32 @@ void App::exportCurrentClipToProRes() {
     });
 }
 #else
-void App::exportCurrentClipToProRes() {
+void App::exportCurrentClipToProRes(const std::string&) {
     showActionMessage("FFmpeg support not built");
 }
 #endif
 
-void App::convertCurrentClipToProRes() {
+void App::convertCurrentClipToProRes(const std::string& outPath) {
 #ifdef ENABLE_PRORES_EXPORT
     LogProRes("[App] convertCurrentClipToProRes invoked");
     g_useGpuProRes = true;
-    exportCurrentClipToProRes();
+    exportCurrentClipToProRes(outPath);
 #else
     showActionMessage("FFmpeg support not built");
 #endif
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToDNxHR() {
+void App::exportCurrentClipToDNxHR(const std::string& outputOverride) {
     if (m_dnxhrStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
-
-    std::string outputPath = openSaveMovDialog();
-    if (outputPath.empty()) return;
+    std::string outputPath = outputOverride;
+    if (outputPath.empty()) {
+        outputPath = openSaveMovDialog();
+        if (outputPath.empty()) return;
+    }
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mov") {
         outputPath += ".mov";
     }
@@ -2245,30 +2249,32 @@ void App::exportCurrentClipToDNxHR() {
     });
 }
 #else
-void App::exportCurrentClipToDNxHR() {
+void App::exportCurrentClipToDNxHR(const std::string&) {
     showActionMessage("FFmpeg support not built");
 }
 #endif
 
-void App::convertCurrentClipToDNxHR() {
+void App::convertCurrentClipToDNxHR(const std::string& outPath) {
 #ifdef ENABLE_PRORES_EXPORT
     LogProRes("[App] convertCurrentClipToDNxHR invoked");
     g_useGpuDNxHR = true;
-    exportCurrentClipToDNxHR();
+    exportCurrentClipToDNxHR(outPath);
 #else
     showActionMessage("FFmpeg support not built");
 #endif
 }
 
 #ifdef ENABLE_PRORES_EXPORT
-void App::exportCurrentClipToHEVC_AMD() {
+void App::exportCurrentClipToHEVC_AMD(const std::string& outputOverride) {
     if (m_hevcStatus.active.load()) {
         showActionMessage("Export already running");
         return;
     }
-
-    std::string outputPath = openSaveMp4Dialog();
-    if (outputPath.empty()) return;
+    std::string outputPath = outputOverride;
+    if (outputPath.empty()) {
+        outputPath = openSaveMp4Dialog();
+        if (outputPath.empty()) return;
+    }
     if (outputPath.size() < 4 || outputPath.substr(outputPath.size() - 4) != ".mp4") {
         outputPath += ".mp4";
     }
@@ -2687,16 +2693,16 @@ void App::exportCurrentClipToHEVC_AMD() {
     });
 }
 #else
-void App::exportCurrentClipToHEVC_AMD() {
+void App::exportCurrentClipToHEVC_AMD(const std::string&) {
     showActionMessage("FFmpeg support not built");
 }
 #endif
 
-void App::convertCurrentClipToHEVC_AMD() {
+void App::convertCurrentClipToHEVC_AMD(const std::string& outPath) {
 #ifdef ENABLE_PRORES_EXPORT
     LogHevc("[App] convertCurrentClipToHEVC_AMD invoked");
     g_useGpuHevc = true;
-    exportCurrentClipToHEVC_AMD();
+    exportCurrentClipToHEVC_AMD(outPath);
 #else
     showActionMessage("FFmpeg support not built");
 #endif
