@@ -190,17 +190,25 @@ message(STATUS "Application sources for executable: ${APP_SOURCES}")
 add_executable(${PROJECT_NAME} WIN32 "")
 target_sources(${PROJECT_NAME} PRIVATE ${APP_SOURCES})
 
+set(BATCHER_SOURCES ${APP_SOURCES} src/Gui/GuiBatcher.cpp src/batcher_main.cpp)
+add_executable(MotionCam_Batcher WIN32 "")
+target_sources(MotionCam_Batcher PRIVATE ${BATCHER_SOURCES})
+
 if(WIN32 AND EXISTS "${APP_ROOT_DIR}/icon.rc")
     target_sources(${PROJECT_NAME} PRIVATE "${APP_ROOT_DIR}/icon.rc")
     message(STATUS "Added Windows icon resource: ${APP_ROOT_DIR}/icon.rc")
 endif()
 
 add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
+add_dependencies(MotionCam_Batcher CompileShaders glm motioncam_decoder imgui)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
+target_compile_definitions(MotionCam_Batcher PRIVATE SDL_MAIN_HANDLED)
+target_compile_definitions(MotionCam_Batcher PRIVATE GLFW_INCLUDE_NONE MOTIONCAM_BATCHER)
 if(HAVE_FFMPEG)
     target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
+    target_compile_definitions(MotionCam_Batcher PRIVATE ENABLE_PRORES_EXPORT)
 endif()
 if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
@@ -208,6 +216,29 @@ if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE
+  "${PROJECT_SOURCE_DIR}/include"
+  "${PROJECT_SOURCE_DIR}/include/App"
+  "${PROJECT_SOURCE_DIR}/include/Audio"
+  "${PROJECT_SOURCE_DIR}/include/Decoder"
+  "${PROJECT_SOURCE_DIR}/include/Graphics"
+  "${PROJECT_SOURCE_DIR}/include/Gui"
+  "${PROJECT_SOURCE_DIR}/include/Playback"
+  "${PROJECT_SOURCE_DIR}/include/Utils"
+
+  "${VMA_INCLUDE_DIR}"
+  "${Vulkan_INCLUDE_DIRS}"
+  "${GLFW_PATH}/include"
+  "${SDL2_PATH}/include"
+
+  "${APP_ROOT_DIR}/motioncam-decoder/lib/include"
+  "${APP_ROOT_DIR}/motioncam-decoder/thirdparty"
+
+  "${IMGUI_SOURCE_DIR}"
+  "${IMGUI_SOURCE_DIR}/backends"
+  "${APP_EXTERNAL_DIR}/tinydngwriter"
+)
+
+target_include_directories(MotionCam_Batcher PRIVATE
   "${PROJECT_SOURCE_DIR}/include"
   "${PROJECT_SOURCE_DIR}/include/App"
   "${PROJECT_SOURCE_DIR}/include/Audio"
@@ -251,15 +282,33 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${Vulkan_LIBRARIES}
 )
 
+target_link_libraries(MotionCam_Batcher PRIVATE
+    motioncam_decoder
+    imgui
+    glm
+    "${GLFW_LIB_PATH_VC_SPECIFIC}"
+    "${SDL2_LIBRARY_DIR}/SDL2.lib"
+    ${Vulkan_LIBRARIES}
+)
+
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
 set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
 set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+target_include_directories(MotionCam_Batcher PRIVATE ${FFMPEG_INCLUDE_DIR})
 
 target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
+target_link_directories(MotionCam_Batcher PRIVATE ${FFMPEG_LIBRARY_DIR})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    avcodec.lib
+    avformat.lib
+    avutil.lib
+    swscale.lib
+    swresample.lib
+)
+target_link_libraries(MotionCam_Batcher PRIVATE
     avcodec.lib
     avformat.lib
     avutil.lib
@@ -270,6 +319,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
+    target_link_libraries(MotionCam_Batcher PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
     if(HAVE_FFMPEG)
         # Copy required FFmpeg runtime DLLs next to the executable
         set(FFMPEG_RUNTIME_DIR "C:/dev/vcpkg/installed/x64-windows/bin")
@@ -281,10 +331,24 @@ if(WIN32)
                 COMMENT "Copying ${dll}"
             )
         endforeach()
+        foreach(dll IN ITEMS avcodec-61.dll avformat-61.dll avutil-59.dll swscale-8.dll swresample-5.dll avfilter-10.dll)
+            add_custom_command(TARGET MotionCam_Batcher POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${FFMPEG_RUNTIME_DIR}/${dll}"
+                    "$<TARGET_FILE_DIR:MotionCam_Batcher>/${dll}"
+                COMMENT "Copying ${dll}"
+            )
+        endforeach()
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${FFMPEG_RUNTIME_DIR}/avfilter-10.pdb"
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>/avfilter-10.pdb"
+            COMMENT "Copying avfilter-10.pdb"
+        )
+        add_custom_command(TARGET MotionCam_Batcher POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${FFMPEG_RUNTIME_DIR}/avfilter-10.pdb"
+                "$<TARGET_FILE_DIR:MotionCam_Batcher>/avfilter-10.pdb"
             COMMENT "Copying avfilter-10.pdb"
         )
     endif()
@@ -300,11 +364,22 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     OUTPUT_NAME "MotionCam Player"
 )
+set_target_properties(MotionCam_Batcher PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+    OUTPUT_NAME "MotionCam Batcher"
+)
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${SHADER_COMPILED_DIR}"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders_spv"
+    COMMENT "Copying compiled shaders to executable output directory"
+    VERBATIM
+)
+add_custom_command(TARGET MotionCam_Batcher POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${SHADER_COMPILED_DIR}"
+        "$<TARGET_FILE_DIR:MotionCam_Batcher>/shaders_spv"
     COMMENT "Copying compiled shaders to executable output directory"
     VERBATIM
 )
@@ -318,6 +393,13 @@ if(EXISTS "${APP_ASSETS_DIR}")
         COMMENT "Copying assets to executable output directory"
         VERBATIM
     )
+    add_custom_command(TARGET MotionCam_Batcher POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${APP_ASSETS_DIR}"
+            "$<TARGET_FILE_DIR:MotionCam_Batcher>/assets"
+        COMMENT "Copying assets to executable output directory"
+        VERBATIM
+    )
     message(STATUS "POST_BUILD: Configured to copy ${APP_ASSETS_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets")
 else()
     message(WARNING "Assets directory not found at ${APP_ASSETS_DIR}. Skipping asset copy.")
@@ -328,6 +410,7 @@ message(STATUS "Final Configuration Summary:")
 message(STATUS "  Target Executable: MotionCam Player")
 message(STATUS "  Output Directory:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}")
 message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/MotionCam Player${CMAKE_EXECUTABLE_SUFFIX}")
+message(STATUS "  Batcher Executable: MotionCam Batcher")
 message(STATUS "---------------------------------------------------------------------")
 
 # Only enable the optional tests if the directory exists. Some
