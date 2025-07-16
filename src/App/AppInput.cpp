@@ -78,6 +78,10 @@ void App::framebufferSizeCallback(int width, int height) {
 
 
 void App::handleKey(int key, int mods) {
+#ifdef MOTIONCAM_BATCHER
+    (void)key; (void)mods;
+    return;
+#else
     m_lastInteractionTime = std::chrono::steady_clock::now();
     if (m_uiAutoHidden) m_uiAutoHidden = false;
     if (!m_window || !m_playbackController) return;
@@ -358,6 +362,7 @@ void App::handleKey(int key, int mods) {
         // So, this specific else-if branch might not need additional action here, as performSeek should handle it.
         // LogToFile("[App::handleKey] Seek action occurred while paused. Anchor already updated by performSeek. Audio reset by performSeek.");
     }
+#endif // MOTIONCAM_BATCHER
 }
 
 void App::handleDrop(int count, const char** paths) {
@@ -488,6 +493,46 @@ std::string App::openMcrawDialog() {
     return {};
 }
 
+std::vector<std::string> App::openMultipleMcrawDialog() {
+#ifdef _WIN32
+    OPENFILENAMEW ofn{};
+    wchar_t buffer[32768] = { 0 };
+    ofn.lStructSize = sizeof(ofn);
+    HWND ownerHwnd = NULL;
+    if (m_window) ownerHwnd = glfwGetWin32Window(m_window);
+    ofn.hwndOwner = ownerHwnd;
+    ofn.lpstrFilter = L"MotionCam RAW files\0*.mcraw\0All Files\0*.*\0";
+    ofn.lpstrFile = buffer;
+    ofn.nMaxFile = sizeof(buffer) / sizeof(buffer[0]);
+    ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST |
+               OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR;
+    ofn.lpstrDefExt = L"mcraw";
+    std::vector<std::string> results;
+    if (GetOpenFileNameW(&ofn)) {
+        wchar_t* ptr = buffer;
+        std::wstring directory = ptr;
+        ptr += directory.size() + 1;
+        if (*ptr == L'\0') {
+            std::string single = DebugLogHelper::wstring_to_utf8(directory);
+            if (!single.empty()) results.push_back(single);
+        } else {
+            while (*ptr) {
+                std::wstring file = ptr;
+                ptr += file.size() + 1;
+                std::wstring full = directory + L"/" + file;
+                std::string utf8 = DebugLogHelper::wstring_to_utf8(full);
+                if (!utf8.empty()) results.push_back(utf8);
+            }
+        }
+    }
+    return results;
+#else
+    std::string single = openMcrawDialog();
+    if (!single.empty()) return { single };
+    return {};
+#endif
+}
+
 std::string App::openSaveMovDialog() {
 #ifdef _WIN32
     OPENFILENAMEW ofn{};
@@ -597,38 +642,22 @@ std::string App::openSaveMp4Dialog() {
 }
 
 void App::triggerOpenFileViaDialog() {
-    std::string newPath = openMcrawDialog();
-    if (!newPath.empty()) {
-        fs::path target = fs::absolute(newPath);
-        fs::path folder = target.parent_path();
+    std::vector<std::string> paths = openMultipleMcrawDialog();
+    if (!paths.empty()) {
         bool added = false;
-        try {
-            for (const auto& e : fs::directory_iterator(folder)) {
-                if (e.is_regular_file() && e.path().extension() == ".mcraw") {
-                    std::string s = e.path().string();
-                    if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) {
-                        m_fileList.push_back(s);
-                        added = true;
-                    }
-                }
+        for (const std::string& p : paths) {
+            if (std::find(m_fileList.begin(), m_fileList.end(), p) == m_fileList.end()) {
+                m_fileList.push_back(p);
+                added = true;
             }
-        } catch (const fs::filesystem_error& e) {
-            LogToFile(std::string("[App::triggerOpenFileViaDialog] Directory scan error: ") + e.what());
         }
         if (added) {
             std::sort(m_fileList.begin(), m_fileList.end());
         }
-        auto it_existing = std::find(m_fileList.begin(), m_fileList.end(), target.string());
-        if (it_existing != m_fileList.end()) {
-            if (m_firstFileLoaded) {
-                bool tempFirstLoaded = m_firstFileLoaded;
-                m_firstFileLoaded = true;
-                loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
-                m_firstFileLoaded = tempFirstLoaded;
-            } else {
-                loadFileAtIndex(static_cast<int>(std::distance(m_fileList.begin(), it_existing)));
-                m_firstFileLoaded = true;
-            }
+        if (!m_fileList.empty() && m_selectedBatchIndex == -1) {
+            m_selectedBatchIndex = 0;
+            loadFileForExport(m_fileList[0]);
+            m_firstFileLoaded = true;
         }
     }
 }
