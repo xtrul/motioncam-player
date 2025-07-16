@@ -17,6 +17,7 @@
 
 #include "Audio/AudioController.h"
 #include "Decoder/DecoderWrapper.h"
+#include "Gui/BatcherOverlay.h"
 #include <motioncam/Decoder.hpp>
 
 #include "Playback/PlaybackController.h"
@@ -110,8 +111,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL App::debugCallback(
 }
 
 
-App::App(const std::string& filePath) :
+App::App(const std::string& filePath, bool batcherMode) :
     m_filePath(filePath),
+    m_isBatcher(batcherMode),
     m_window(nullptr),
     m_playbackController_ptr(nullptr),
     m_decoderWrapper_ptr(nullptr),
@@ -865,8 +867,12 @@ void App::initImGuiVulkan() {
     VK_APP_CHECK(vkCreateDescriptorPool(m_device, &pool_info, nullptr, &m_imguiDescriptorPool));
     LogToFile("App::initImGuiVulkan ImGui descriptor pool created.");
 
-    GuiOverlay::setup(m_window, this);
-    LogToFile("App::initImGuiVulkan GuiOverlay::setup() called.");
+    if (m_isBatcher) {
+        BatcherOverlay::setup(m_window, this);
+    } else {
+        GuiOverlay::setup(m_window, this);
+    }
+    LogToFile("App::initImGuiVulkan ImGui setup called.");
 }
 
 void App::createPersistentStagingBuffers() {

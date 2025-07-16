@@ -263,46 +263,14 @@ int main(int argc, char* argv[]) {
     }
 
 
-    std::string inPath;
-    if (argc >= 2 && argv[1] != nullptr) {
-        inPath = argv[1];
-        LogToFile(std::string("[main] Input file from command line: ") + inPath);
-    } else {
-        LogToFile("[main] No command line argument provided. Starting without file.");
-    }
-
-    if (!inPath.empty() && (!fs::exists(inPath) || !fs::is_regular_file(inPath))) {
-        std::string errorMsg = "[main] Input file not found or not a regular file: " + inPath;
-        LogToFile(errorMsg);
-#ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Error - MCRAW Player", MB_OK | MB_ICONERROR);
-#endif
-        std::cerr << errorMsg << std::endl;
-        return 1;
-    }
-    if (!inPath.empty() && fs::path(inPath).extension() != ".mcraw") {
-        std::string errorMsg = "[main] Input file must have a .mcraw extension: " + inPath;
-        LogToFile(errorMsg);
-#ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Error - MCRAW Player", MB_OK | MB_ICONERROR);
-#endif
-        std::cerr << errorMsg << std::endl;
-        return 1;
-    }
-
-    LogToFile(std::string("[main] Initializing App with file: ") + inPath);
     try {
-        App app(inPath);
-        LogToFile("[main] App object created. Calling app.run()...");
-        if (!app.run()) {
-            LogToFile("[main] App::run() returned false. Application will exit.");
-#ifdef _WIN32
-            MessageBoxA(NULL, "Application run failed. See mcraw_player_debug_log.txt for details.", "Runtime Error - MCRAW Player", MB_OK | MB_ICONERROR);
-#endif
-            std::cerr << "[main] App::run() returned false. Application will exit." << std::endl;
+        App app("", true);
+        LogToFile("[main] App object created. Calling runBatcher()...");
+        if (!app.runBatcher()) {
+            LogToFile("[main] runBatcher() returned false. Application will exit.");
             return 1;
         }
-        LogToFile("[main] App::run() finished successfully.");
+        LogToFile("[main] runBatcher() finished successfully.");
     }
     catch (const std::exception& e) {
         std::string errorMsg = "[main] FATAL STD EXCEPTION: " + std::string(e.what());

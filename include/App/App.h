@@ -45,13 +45,16 @@ class Renderer_VK;
 
 class App {
 public:
-    explicit App(const std::string& filePath = "");
+    explicit App(const std::string& filePath = "", bool batcherMode = false);
     ~App();
 
     App(const App&) = delete;
     App& operator=(const App&) = delete;
 
     bool run();
+    bool runBatcher();
+    bool loadFileForBatch(const std::string& path);
+    void drawFrameSimple();
 
     friend GuiOverlay::UIData GuiOverlay::gatherData(App* appInstance);
     friend void GuiOverlay::render(App* appInstance);
@@ -251,6 +254,13 @@ private:
     std::atomic<bool> m_showHevcExportProgressPopup{ false };
     std::thread m_hevcThread;
 #endif
+
+    // Batcher specific
+    bool m_isBatcher = false;
+    int m_selectedIndex = -1;
+    int m_renderFormat = 0; // 0=ProRes,1=DNxHR,2=HEVC
+    std::string m_outputFolder;
+    std::vector<std::string> m_conversionLog;
 
 
 #ifdef _WIN32

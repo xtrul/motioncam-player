@@ -409,7 +409,7 @@ void App::handleDrop(int count, const char** paths) {
         LogToFile("[App::handleDrop] New files added to playlist and sorted.");
     }
 
-    if (!firstValidPathDropped.empty()) {
+    if (!m_isBatcher && !firstValidPathDropped.empty()) {
         auto it = std::find(m_fileList.begin(), m_fileList.end(), firstValidPathDropped);
         if (it != m_fileList.end()) {
             m_firstFileLoaded = false;

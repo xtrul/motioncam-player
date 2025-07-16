@@ -164,6 +164,7 @@ set(APP_SOURCES
 
   src/Gui/GuiSetup.cpp
   src/Gui/GuiRender.cpp
+  src/Gui/BatcherOverlay.cpp
   src/Gui/GuiUtils.cpp
   src/Gui/GuiStyles.cpp
 
@@ -173,6 +174,7 @@ set(APP_SOURCES
   src/Utils/EncodingConfig.cpp
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
+  src/App/AppBatcher.cpp
 
   src/main.cpp
 )
