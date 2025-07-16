@@ -180,6 +180,7 @@ App::App(const std::string& filePath) :
         for (const auto& e : fs::directory_iterator(folder)) {
             if (e.is_regular_file() && e.path().extension() == ".mcraw") {
                 m_fileList.push_back(e.path().string());
+                m_fileExportFormats.push_back(ExportFormat::PRORES_CPU);
             }
         }
         if (!m_fileList.empty()) {
@@ -190,6 +191,7 @@ App::App(const std::string& filePath) :
         if (it == m_fileList.end()) {
             LogToFile("App::App Initial file not found in directory scan, adding it to list: " + target.string());
             m_fileList.push_back(target.string());
+            m_fileExportFormats.push_back(ExportFormat::PRORES_CPU);
             std::sort(m_fileList.begin(), m_fileList.end());
             it = std::find(m_fileList.begin(), m_fileList.end(), target.string());
             if (it == m_fileList.end()) {
