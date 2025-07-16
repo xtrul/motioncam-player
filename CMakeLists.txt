@@ -167,9 +167,6 @@ set(APP_SOURCES
   src/Gui/GuiUtils.cpp
   src/Gui/GuiStyles.cpp
 
-  src/Gui/BatcherGui.cpp
-  src/App/BatchProcessing.cpp
-
   src/Playback/PlaybackController.cpp
 
   src/Utils/DebugLog.cpp
@@ -196,84 +193,6 @@ target_sources(${PROJECT_NAME} PRIVATE ${APP_SOURCES})
 if(WIN32 AND EXISTS "${APP_ROOT_DIR}/icon.rc")
     target_sources(${PROJECT_NAME} PRIVATE "${APP_ROOT_DIR}/icon.rc")
     message(STATUS "Added Windows icon resource: ${APP_ROOT_DIR}/icon.rc")
-endif()
-
-add_executable(MotionCam_Batcher WIN32 "")
-target_sources(MotionCam_Batcher PRIVATE ${APP_SOURCES})
-if(WIN32 AND EXISTS "${APP_ROOT_DIR}/icon.rc")
-    target_sources(MotionCam_Batcher PRIVATE "${APP_ROOT_DIR}/icon.rc")
-endif()
-add_dependencies(MotionCam_Batcher CompileShaders glm motioncam_decoder imgui)
-target_compile_definitions(MotionCam_Batcher PRIVATE SDL_MAIN_HANDLED GLFW_INCLUDE_NONE MOTIONCAM_BATCHER)
-if(HAVE_FFMPEG)
-    target_compile_definitions(MotionCam_Batcher PRIVATE ENABLE_PRORES_EXPORT)
-endif()
-if(MSVC AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    set_target_properties(MotionCam_Batcher PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
-endif()
-target_include_directories(MotionCam_Batcher PRIVATE
-  "${PROJECT_SOURCE_DIR}/include"
-  "${PROJECT_SOURCE_DIR}/include/App"
-  "${PROJECT_SOURCE_DIR}/include/Audio"
-  "${PROJECT_SOURCE_DIR}/include/Decoder"
-  "${PROJECT_SOURCE_DIR}/include/Graphics"
-  "${PROJECT_SOURCE_DIR}/include/Gui"
-  "${PROJECT_SOURCE_DIR}/include/Playback"
-  "${PROJECT_SOURCE_DIR}/include/Utils"
-
-  "${VMA_INCLUDE_DIR}"
-  "${Vulkan_INCLUDE_DIRS}"
-  "${GLFW_PATH}/include"
-  "${SDL2_PATH}/include"
-
-  "${APP_ROOT_DIR}/motioncam-decoder/lib/include"
-  "${APP_ROOT_DIR}/motioncam-decoder/thirdparty"
-
-  "${IMGUI_SOURCE_DIR}"
-  "${IMGUI_SOURCE_DIR}/backends"
-  "${APP_EXTERNAL_DIR}/tinydngwriter"
-)
-target_link_libraries(MotionCam_Batcher PRIVATE
-    motioncam_decoder
-    imgui
-    glm
-    "${GLFW_LIB_PATH_VC_SPECIFIC}"
-    "${SDL2_LIBRARY_DIR}/SDL2.lib"
-    ${Vulkan_LIBRARIES}
-)
-target_include_directories(MotionCam_Batcher PRIVATE ${FFMPEG_INCLUDE_DIR})
-target_link_directories(MotionCam_Batcher PRIVATE ${FFMPEG_LIBRARY_DIR})
-target_link_libraries(MotionCam_Batcher PRIVATE
-    avcodec.lib
-    avformat.lib
-    avutil.lib
-    swscale.lib
-    swresample.lib
-)
-if(WIN32)
-    target_link_libraries(MotionCam_Batcher PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
-endif()
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    target_link_libraries(MotionCam_Batcher PRIVATE Threads::Threads)
-elseif(MSVC)
-endif()
-set_target_properties(MotionCam_Batcher PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-    OUTPUT_NAME "motioncam_batcher"
-)
-add_custom_command(TARGET MotionCam_Batcher POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${SHADER_COMPILED_DIR}"
-        "$<TARGET_FILE_DIR:MotionCam_Batcher>/shaders_spv"
-    VERBATIM
-)
-if(EXISTS "${APP_ASSETS_DIR}")
-    add_custom_command(TARGET MotionCam_Batcher POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${APP_ASSETS_DIR}"
-            "$<TARGET_FILE_DIR:MotionCam_Batcher>/assets"
-        VERBATIM
-    )
 endif()
 
 add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)

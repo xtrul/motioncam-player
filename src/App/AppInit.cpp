@@ -19,12 +19,6 @@
 #include "Decoder/DecoderWrapper.h"
 #include <motioncam/Decoder.hpp>
 
-#ifdef MOTIONCAM_BATCHER
-#include "Gui/BatcherGui.h"
-#else
-#include "Gui/GuiOverlay.h"
-#endif
-
 #include "Playback/PlaybackController.h"
 #include "Graphics/Renderer_VK.h"
 #include "Utils/DebugLog.h"
@@ -871,13 +865,8 @@ void App::initImGuiVulkan() {
     VK_APP_CHECK(vkCreateDescriptorPool(m_device, &pool_info, nullptr, &m_imguiDescriptorPool));
     LogToFile("App::initImGuiVulkan ImGui descriptor pool created.");
 
-#ifdef MOTIONCAM_BATCHER
-    BatcherGui::setup(m_window, this);
-    LogToFile("App::initImGuiVulkan BatcherGui::setup() called.");
-#else
     GuiOverlay::setup(m_window, this);
     LogToFile("App::initImGuiVulkan GuiOverlay::setup() called.");
-#endif
 }
 
 void App::createPersistentStagingBuffers() {
