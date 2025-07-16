@@ -125,13 +125,23 @@ public:
     void showActionMessage(const std::string& msg);
 
 #ifdef MOTIONCAM_BATCHER
-    enum class ExportFormat { PRORES, DNXHR, HEVC };
-    void startBatchConversion(ExportFormat fmt, const std::string& outputDir);
+    enum class ExportFormat {
+        PRORES_CPU,
+        PRORES_GPU,
+        DNXHR_CPU,
+        DNXHR_GPU,
+        HEVC_CPU,
+        HEVC_GPU,
+        DNG
+    };
+    void startBatchConversion();
     std::vector<std::string> m_batchLog;
     std::atomic<bool> m_batchActive{ false };
     std::thread m_batchThread;
     int m_selectedBatchIndex = -1;
     char m_outputFolder[1024] = "";
+    std::vector<ExportFormat> m_fileExportFormats;
+    bool m_previewOpen = true;
 #endif
 
     std::vector<VkImage> m_swapChainImages;
@@ -307,6 +317,7 @@ private:
     std::string openSaveMovDialog();
     std::string openSaveMxfDialog();
     std::string openSaveMp4Dialog();
+    std::string openFolderDialog();
 
     struct SwapChainSupportDetails {
         VkSurfaceCapabilitiesKHR capabilities;
