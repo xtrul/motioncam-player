@@ -68,7 +68,7 @@ public:
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     VkQueue m_presentQueue = VK_NULL_HANDLE;
     VkDescriptorPool m_imguiDescriptorPool = VK_NULL_HANDLE;
-    ImTextureID m_previewTextureSet = 0;
+    VkDescriptorImageInfo m_previewDesc{};
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
 
@@ -90,8 +90,6 @@ public:
 
     int m_decodedWidth = 0;
     int m_decodedHeight = 0;
-    int m_previewImageW = 0;
-    int m_previewImageH = 0;
 
     PlaybackController* m_playbackController_ptr = nullptr;
     DecoderWrapper* m_decoderWrapper_ptr = nullptr;
@@ -122,6 +120,8 @@ public:
     void exportCurrentClipToHEVC_AMD(const std::string& outputPath = "");
     void convertCurrentClipToHEVC_AMD(const std::string& outputPath = "");
     void performSeek(size_t new_frame_index);
+    void play();
+    void stop();
     void triggerOpenFileViaDialog();
     std::vector<std::string> openMultipleMcrawDialog();
     void loadFileForExport(const std::string& path);
@@ -129,6 +129,9 @@ public:
     void showActionMessage(const std::string& msg);
 
 #ifdef MOTIONCAM_CONVERTER
+    ImTextureID  m_previewTex   = 0;
+    int          m_previewWidth = 0;
+    int          m_previewHeight = 0;
     enum class ExportFormat {
         PRORES_CPU,
         PRORES_GPU,
@@ -312,7 +315,7 @@ private:
     void cleanupSwapChain();
     void recreateSwapChain();
 
-    void refreshPreviewTextureDescriptor();
+    void updatePreviewDescriptor();
 
     void drawFrame();
 
