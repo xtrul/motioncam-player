@@ -211,9 +211,9 @@ void App::cleanupVulkan() {
     LogToFile("[App::cleanupVulkan] Cleaning up GuiOverlay (ImGui shutdown)...");
     GuiOverlay::cleanup();
 
-    if (m_previewTex != 0) {
-        ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_previewTex);
-        m_previewTex = 0;
+    if (m_previewTextureSet != 0) {
+        ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_previewTextureSet);
+        m_previewTextureSet = 0;
     }
 
     if (m_imguiDescriptorPool != VK_NULL_HANDLE) {
