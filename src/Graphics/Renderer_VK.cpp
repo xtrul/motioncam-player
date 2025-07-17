@@ -107,7 +107,8 @@ void Renderer_VK::prepareAndUploadFrameData(
     double staticBlack, double staticWhite, int cfaTypeOverride,
     bool forceUpload,
     OrientationTag defaultOrientation,
-    bool containerFlipped
+    bool containerFlipped,
+    App* app
 ) {
     if (frameWidth <= 0 || frameHeight <= 0) {
         LogToFile(std::string("[Renderer_VK::prepareAndUploadFrameData] Invalid dimensions ") + std::to_string(frameWidth) + "x" + std::to_string(frameHeight) + ". Skipping upload.");
@@ -123,7 +124,7 @@ void Renderer_VK::prepareAndUploadFrameData(
             + ". Recreating GPU image resources if necessary.");
 
         ensureRawImageCapacity(static_cast<uint32_t>(frameWidth), static_cast<uint32_t>(frameHeight));
-        Descriptor::updateDescriptorSetsWithNewRawImage(this);
+        Descriptor::updateDescriptorSetsWithNewRawImage(this, app);
         forceUpload = true;
     }
 
