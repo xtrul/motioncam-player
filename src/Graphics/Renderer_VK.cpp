@@ -264,7 +264,9 @@ void Renderer_VK::recordDrawCommands(
     VkCommandBuffer commandBuffer,
     uint32_t uboBindingIndex,
     int windowWidth,
-    int windowHeight
+    int windowHeight,
+    int offsetX,
+    int offsetY
 ) {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
 
@@ -307,6 +309,11 @@ void Renderer_VK::recordDrawCommands(
         scissor.offset = { (int32_t)std::max(0.0f, vpX), (int32_t)std::max(0.0f, vpY) };
         scissor.extent = { (uint32_t)std::max(0.0f, vpWidth), (uint32_t)std::max(0.0f, vpHeight) };
     }
+
+    viewport.x += (float)offsetX;
+    viewport.y += (float)offsetY;
+    scissor.offset.x += offsetX;
+    scissor.offset.y += offsetY;
 
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);

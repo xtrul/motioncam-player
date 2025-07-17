@@ -448,7 +448,11 @@ void App::drawFrame() {
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     if (renderContentFromPacket) {
-        m_rendererVk->recordDrawCommands(cmd, m_currentFrame, m_windowWidth, m_windowHeight);
+        int pw = m_previewRect.w > 0 ? m_previewRect.w : m_windowWidth;
+        int ph = m_previewRect.h > 0 ? m_previewRect.h : m_windowHeight;
+        int px = m_previewRect.x;
+        int py = m_previewRect.y;
+        m_rendererVk->recordDrawCommands(cmd, m_currentFrame, pw, ph, px, py);
     }
 
     if (m_uiOpacity > 0.0f) {
