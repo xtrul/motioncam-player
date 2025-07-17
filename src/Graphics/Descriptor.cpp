@@ -2,6 +2,8 @@
 #include "Graphics/Renderer_VK.h" // To access Renderer_VK members
 #include "Graphics/VulkanHelpers.h" // For VK_CHECK_RENDERER
 #include "Utils/DebugLog.h"
+#include "App/App.h"
+#include "imgui_impl_vulkan.h"
 
 #include <array> // For std::array
 
@@ -197,11 +199,11 @@ namespace Descriptor {
             return false;
         }
 
-        updateDescriptorSetsWithNewRawImage(renderer);
+        updateDescriptorSetsWithNewRawImage(renderer, nullptr);
         return true;
     }
 
-    void updateDescriptorSetsWithNewRawImage(Renderer_VK* renderer) {
+    void updateDescriptorSetsWithNewRawImage(Renderer_VK* renderer, App* app) {
         if (renderer->m_descriptorSets.empty()) {
             LogToFile("[Descriptor::updateDescriptorSetsWithNewRawImage] No descriptor sets to update.");
             return;
@@ -253,6 +255,22 @@ namespace Descriptor {
             descriptorWrites[1].pBufferInfo = &bufferInfo;
 
             vkUpdateDescriptorSets(renderer->m_device_p, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+        }
+
+        if (app) {
+            if (app->m_previewTex) {
+                ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)app->m_previewTex);
+                app->m_previewTex = 0;
+            }
+            app->m_previewTex = (ImTextureID)ImGui_ImplVulkan_AddTexture(
+                renderer->m_rawImageSampler,
+                renderer->m_rawImageView,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            app->m_previewDesc.sampler = renderer->m_rawImageSampler;
+            app->m_previewDesc.imageView = renderer->m_rawImageView;
+            app->m_previewDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            app->m_previewImageW = renderer->getImageWidth();
+            app->m_previewImageH = renderer->getImageHeight();
         }
     }
 

@@ -421,14 +421,10 @@ void App::drawFrame() {
                 m_staticBlack, m_staticWhite, m_cfaOverride.value_or(m_cfaTypeFromMetadata),
                 needsFreshUploadFromStaging,
                 m_containerOrientationTag,
-                m_containerFlipped
+                m_containerFlipped,
+                this
             );
-            if (m_rendererVk->getImageWidth() != m_previewImageW ||
-                m_rendererVk->getImageHeight() != m_previewImageH ||
-                m_previewTextureSet == 0)
-            {
-                refreshPreviewTextureDescriptor();
-            }
+            updatePreviewDescriptor();
             clearColorValue.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
         }
         else {
@@ -457,7 +453,9 @@ void App::drawFrame() {
         int py = m_previewRect.y;
         float blackNorm = static_cast<float>(m_staticBlack) / 65535.0f;
         float whiteNorm = static_cast<float>(m_staticWhite) / 65535.0f;
+#ifndef MOTIONCAM_CONVERTER
         m_rendererVk->recordDrawCommands(cmd, m_currentFrame, pw, ph, px, py, blackNorm, whiteNorm);
+#endif
     }
 
     if (m_uiOpacity > 0.0f) {
@@ -511,17 +509,21 @@ void App::drawFrame() {
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-void App::refreshPreviewTextureDescriptor() {
-    if (m_previewTextureSet != 0) {
-        ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_previewTextureSet);
-        m_previewTextureSet = 0;
-    }
-    if (m_rendererVk) {
-        m_previewTextureSet = (ImTextureID)ImGui_ImplVulkan_AddTexture(
-            m_rendererVk->m_rawImageSampler,
-            m_rendererVk->m_rawImageView,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        m_previewImageW = m_rendererVk->getImageWidth();
-        m_previewImageH = m_rendererVk->getImageHeight();
-    }
+void App::updatePreviewDescriptor() {
+    if (m_previewTex == 0 || !m_rendererVk) return;
+
+    m_previewDesc.sampler = m_rendererVk->m_rawImageSampler;
+    m_previewDesc.imageView = m_rendererVk->m_rawImageView;
+    m_previewDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = (VkDescriptorSet)m_previewTex;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &m_previewDesc;
+    vkUpdateDescriptorSets(m_device, 1, &write, 0, nullptr);
+
+    m_previewImageW = m_rendererVk->getImageWidth();
+    m_previewImageH = m_rendererVk->getImageHeight();
 }
