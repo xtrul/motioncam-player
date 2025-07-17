@@ -6,7 +6,6 @@
 #include "Graphics/Renderer_VK.h"
 #include "Utils/DebugLog.h"
 #include "Gui/GuiOverlay.h"
-#include <imgui_impl_vulkan.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -210,11 +209,6 @@ void App::cleanupVulkan() {
 
     LogToFile("[App::cleanupVulkan] Cleaning up GuiOverlay (ImGui shutdown)...");
     GuiOverlay::cleanup();
-
-    if (m_previewTextureSet != VK_NULL_HANDLE) {
-        ImGui_ImplVulkan_RemoveTexture(m_previewTextureSet);
-        m_previewTextureSet = VK_NULL_HANDLE;
-    }
 
     if (m_imguiDescriptorPool != VK_NULL_HANDLE) {
         LogToFile("[App::cleanupVulkan] Destroying ImGui descriptor pool...");
