@@ -1,6 +1,6 @@
-# MotionCam Batcher Enhancement Specification
+# MotionCam Converter Enhancement Specification
 
-This document describes proposed improvements to the **MotionCam Batcher** addâ€‘on. The goal is to achieve feature parity with the export options available in MotionCam Player and to improve overall usability.
+This document describes proposed improvements to the **MotionCam Converter** addâ€‘on. The goal is to achieve feature parity with the export options available in MotionCam Converter and to improve overall usability.
 
 ## 1. Encoding Options (CPU & GPU)
 
@@ -45,14 +45,14 @@ This document describes proposed improvements to the **MotionCam Batcher** addâ€
 ## 3. Custom Log File Naming
 
 ### Requirements
-- Each batch run writes a log file named `batcher_YYYYMMDD_HHMMSS.log`.
-- Logs are placed under `logs/batcher` and never overwrite MotionCam Player logs.
+- Each batch run writes a log file named `converter_YYYYMMDD_HHMMSS.log`.
+- Logs are placed under `logs/converter` and never overwrite MotionCam Converter logs.
 - Include the start/end time and status per job plus a summary section.
 
 ### Implementation Notes
 - On batch start, generate the timestamped filename using `std::chrono` and `std::put_time`.
 - Append log lines in `App::m_batchLog` to this file in addition to the onâ€‘screen panel.
-- Create the `logs/batcher` folder if it does not exist.
+ - Create the `logs/converter` folder if it does not exist.
 - After `startBatchConversion` finishes, write totals for succeeded/failed jobs and the elapsed time.
 
 ## 4. Usability Improvements
@@ -89,4 +89,4 @@ This document describes proposed improvements to the **MotionCam Batcher** addâ€
 - Header adjustments go into `include/App/App.h` where the enum and member variables are declared.
 
 ## 6. Summary
-These enhancements bring the batcher closer to the functionality of the main MotionCam Player while improving the user experience with previews, better logging and progress tracking. The updated design also enables mixing CPU and GPU tasks in one batch and prepares the application for future encoder additions.
+These enhancements bring the converter closer to the functionality of the main MotionCam Converter while improving the user experience with previews, better logging and progress tracking. The updated design also enables mixing CPU and GPU tasks in one batch and prepares the application for future encoder additions.
