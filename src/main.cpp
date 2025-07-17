@@ -275,7 +275,7 @@ int main(int argc, char* argv[]) {
         std::string errorMsg = "[main] Input file not found or not a regular file: " + inPath;
         LogToFile(errorMsg);
 #ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, errorMsg.c_str(), "Error - MCRAW Converter", MB_OK | MB_ICONERROR);
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
@@ -284,7 +284,7 @@ int main(int argc, char* argv[]) {
         std::string errorMsg = "[main] Input file must have a .mcraw extension: " + inPath;
         LogToFile(errorMsg);
 #ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, errorMsg.c_str(), "Error - MCRAW Converter", MB_OK | MB_ICONERROR);
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
@@ -297,7 +297,7 @@ int main(int argc, char* argv[]) {
         if (!app.run()) {
             LogToFile("[main] App::run() returned false. Application will exit.");
 #ifdef _WIN32
-            MessageBoxA(NULL, "Application run failed. See mcraw_player_debug_log.txt for details.", "Runtime Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
+            MessageBoxA(NULL, "Application run failed. See mcraw_converter_debug_log.txt for details.", "Runtime Error - MCRAW Converter", MB_OK | MB_ICONERROR);
 #endif
             std::cerr << "[main] App::run() returned false. Application will exit." << std::endl;
             return 1;
@@ -308,7 +308,7 @@ int main(int argc, char* argv[]) {
         std::string errorMsg = "[main] FATAL STD EXCEPTION: " + std::string(e.what());
         LogToFile(errorMsg);
 #ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Runtime Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, errorMsg.c_str(), "Runtime Error - MCRAW Converter", MB_OK | MB_ICONERROR);
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
@@ -317,7 +317,7 @@ int main(int argc, char* argv[]) {
         std::string errorMsg = "[main] FATAL UNKNOWN EXCEPTION occurred.";
         LogToFile(errorMsg);
 #ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Runtime Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, errorMsg.c_str(), "Runtime Error - MCRAW Converter", MB_OK | MB_ICONERROR);
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
