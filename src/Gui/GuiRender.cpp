@@ -190,24 +190,75 @@ namespace GuiOverlay {
         ImGuiViewport* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->WorkPos);
         ImGui::SetNextWindowSize(vp->WorkSize);
-        ImGui::Begin("BatcherMain", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
+        ImGui::SetNextWindowBgAlpha(0.f);
+        ImGui::Begin("BatcherMain", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground);
 
         ImGui::BeginChild("FileListPanel", ImVec2(vp->WorkSize.x * 0.5f, vp->WorkSize.y - 150), true);
+        if (appInstance->m_previewOpen && appInstance->m_decoderWrapper_ptr) {
+            ImGui::BeginChild("Preview", ImVec2(0, 200), true, ImGuiWindowFlags_NoBackground);
+            bool paused = true;
+            if (appInstance->m_playbackController_ptr)
+                paused = appInstance->m_playbackController_ptr->isPaused();
+            if (ImGui::Button(paused ? "Play" : "Pause")) {
+                if (appInstance->m_playbackController_ptr)
+                    appInstance->m_playbackController_ptr->togglePause();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Stop")) {
+                if (appInstance->m_playbackController_ptr) {
+                    appInstance->m_playbackController_ptr->setPlaybackMode(PlaybackController::PlaybackMode::REALTIME);
+                    appInstance->performSeek(0);
+                    if (!appInstance->m_playbackController_ptr->isPaused())
+                        appInstance->m_playbackController_ptr->togglePause();
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("<")) {
+                if (appInstance->m_playbackController_ptr)
+                    appInstance->m_playbackController_ptr->stepBackward(appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size());
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(">")) {
+                if (appInstance->m_playbackController_ptr)
+                    appInstance->m_playbackController_ptr->stepForward(appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size());
+            }
+            size_t curIdx = 0, total = 0;
+            if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+                curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
+                total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
+            }
+            float prog = total ? (float)curIdx / (float)total : 0.f;
+            if (ImGui::SliderFloat("Seek", &prog, 0.f, 1.f)) {
+                if (appInstance->m_decoderWrapper_ptr) {
+                    size_t newIdx = static_cast<size_t>(prog * total);
+                    appInstance->performSeek(newIdx);
+                }
+            }
+            ImGui::Text("Frame %zu / %zu", curIdx, total);
+            ImGui::EndChild();
+            ImGui::Separator();
+        }
+
         if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
         ImGui::SameLine();
         if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileList.size()) {
             appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
+            if (appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size())
+                appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
             appInstance->m_selectedBatchIndex = -1;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Clear")) { appInstance->m_fileList.clear(); appInstance->m_selectedBatchIndex = -1; }
+        if (ImGui::Button("Clear")) { appInstance->m_fileList.clear(); appInstance->m_fileExportFormats.clear(); appInstance->m_selectedBatchIndex = -1; }
         ImGui::Separator();
         for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
             bool sel = (i == appInstance->m_selectedBatchIndex);
             std::string name = std::filesystem::path(appInstance->m_fileList[i]).filename().string();
             if (ImGui::Selectable(name.c_str(), sel)) {
                 appInstance->m_selectedBatchIndex = i;
-                appInstance->loadFileForExport(appInstance->m_fileList[i]);
+                bool oldFirst = appInstance->m_firstFileLoaded;
+                appInstance->m_firstFileLoaded = true;
+                appInstance->loadFileAtIndex(i);
+                appInstance->m_firstFileLoaded = oldFirst;
             }
         }
         ImGui::EndChild();
@@ -215,15 +266,29 @@ namespace GuiOverlay {
         ImGui::SameLine();
 
         ImGui::BeginChild("ExportSettings", ImVec2(0, vp->WorkSize.y - 150), true);
-        static int fmt = 0;
-        ImGui::RadioButton("ProRes", &fmt, 0);
-        ImGui::RadioButton("DNxHR", &fmt, 1);
-        ImGui::RadioButton("HEVC (GPU)", &fmt, 2);
+        if (appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size()) {
+            int fmt = static_cast<int>(appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex]);
+            ImGui::Text("Export Format for selected clip:");
+            ImGui::RadioButton("ProRes (CPU)", &fmt, (int)App::ExportFormat::PRORES_CPU); ImGui::SameLine();
+            ImGui::RadioButton("ProRes (GPU)", &fmt, (int)App::ExportFormat::PRORES_GPU);
+            ImGui::RadioButton("DNxHR (CPU)", &fmt, (int)App::ExportFormat::DNXHR_CPU); ImGui::SameLine();
+            ImGui::RadioButton("DNxHR (GPU)", &fmt, (int)App::ExportFormat::DNXHR_GPU);
+            ImGui::RadioButton("HEVC (CPU)", &fmt, (int)App::ExportFormat::HEVC_CPU); ImGui::SameLine();
+            ImGui::RadioButton("HEVC (GPU)", &fmt, (int)App::ExportFormat::HEVC_GPU); ImGui::SameLine();
+            ImGui::RadioButton("DNG", &fmt, (int)App::ExportFormat::DNG);
+            appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = static_cast<App::ExportFormat>(fmt);
+        }
         ImGui::InputText("Output Folder", appInstance->m_outputFolder, IM_ARRAYSIZE(appInstance->m_outputFolder));
+        ImGui::SameLine();
+        if (ImGui::Button("Browse...")) {
+            std::string folder = appInstance->openFolderDialog();
+            if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
+        }
         if (ImGui::Button("Convert All") && !appInstance->m_batchActive.load()) {
-            appInstance->startBatchConversion(static_cast<App::ExportFormat>(fmt), appInstance->m_outputFolder);
+            appInstance->startBatchConversion();
         }
         ImGui::EndChild();
+
 
         ImGui::BeginChild("Log", ImVec2(0, 120), true);
         for (const std::string& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
