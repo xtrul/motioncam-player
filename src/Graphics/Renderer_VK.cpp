@@ -266,9 +266,16 @@ void Renderer_VK::recordDrawCommands(
     int windowWidth,
     int windowHeight,
     int offsetX,
-    int offsetY
+    int offsetY,
+    float blackNorm,
+    float whiteNorm
 ) {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+
+    PreviewPushConstants pc{ blackNorm, whiteNorm };
+    vkCmdPushConstants(commandBuffer, m_pipelineLayout,
+                       VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                       sizeof(PreviewPushConstants), &pc);
 
     VkViewport viewport{};
     VkRect2D scissor{};
