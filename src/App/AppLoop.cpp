@@ -198,10 +198,10 @@ bool App::run() {
             std::string currentTitleString;
 
             std::ostringstream ss;
-#ifdef MOTIONCAM_BATCHER
-            ss << "MotionCam Batcher -  ";
+#ifdef MOTIONCAM_CONVERTER
+            ss << "MotionCam Converter -  ";
 #else
-            ss << "MotionCam Player -  ";
+            ss << "MotionCam Converter -  ";
 #endif
             if (m_currentFileIndex >= 0 && static_cast<size_t>(m_currentFileIndex) < m_fileList.size()) {
                 ss << fs::path(m_fileList[m_currentFileIndex]).filename().string();

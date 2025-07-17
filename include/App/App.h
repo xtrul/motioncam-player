@@ -124,7 +124,7 @@ public:
     void setPlaybackMode(PlaybackController::PlaybackMode mode);
     void showActionMessage(const std::string& msg);
 
-#ifdef MOTIONCAM_BATCHER
+#ifdef MOTIONCAM_CONVERTER
     enum class ExportFormat {
         PRORES_CPU,
         PRORES_GPU,
