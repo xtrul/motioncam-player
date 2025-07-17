@@ -27,7 +27,6 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.h>
-#include <imgui.h>
 #include "Utils/vma_usage.h"
 
 #include "App/AppConfig.h"
@@ -68,7 +67,6 @@ public:
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     VkQueue m_presentQueue = VK_NULL_HANDLE;
     VkDescriptorPool m_imguiDescriptorPool = VK_NULL_HANDLE;
-    ImTextureID m_previewTextureSet = 0;
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
 
@@ -90,8 +88,6 @@ public:
 
     int m_decodedWidth = 0;
     int m_decodedHeight = 0;
-    int m_previewImageW = 0;
-    int m_previewImageH = 0;
 
     PlaybackController* m_playbackController_ptr = nullptr;
     DecoderWrapper* m_decoderWrapper_ptr = nullptr;
@@ -145,6 +141,7 @@ public:
     int m_selectedBatchIndex = -1;
     char m_outputFolder[1024] = "";
     std::vector<ExportFormat> m_fileExportFormats;
+    bool m_previewOpen = true;
     struct PreviewRect {
         int x = 0;
         int y = 0;
@@ -311,8 +308,6 @@ private:
     void cleanupVulkan();
     void cleanupSwapChain();
     void recreateSwapChain();
-
-    void refreshPreviewTextureDescriptor();
 
     void drawFrame();
 

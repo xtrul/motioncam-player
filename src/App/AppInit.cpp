@@ -25,7 +25,6 @@
 #include "Utils/RawFrameBuffer.h"
 
 #include <imgui.h>
-#include <imgui_impl_vulkan.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <iostream>
@@ -870,7 +869,6 @@ void App::initImGuiVulkan() {
 
     GuiOverlay::setup(m_window, this);
     LogToFile("App::initImGuiVulkan GuiOverlay::setup() called.");
-    refreshPreviewTextureDescriptor();
 }
 
 void App::createPersistentStagingBuffers() {
@@ -885,8 +883,7 @@ void App::createPersistentStagingBuffers() {
 
 #ifndef NDEBUG
     LogToFile(std::string("App::createPersistentStagingBuffers Staging buffer individual size: ") + std::to_string(bufferSize) +
-        " bytes (for max " + std::to_string(MAX_EXPECTED_WIDTH) + "x" + std::to_string(MAX_EXPECTED_HEIGHT) +
-        " R16_UNORM images).");
+        " bytes (for max " + std::to_string(MAX_EXPECTED_WIDTH) + "x" + std::to_string(MAX_EXPECTED_HEIGHT) + " R16_UINT images).");
 #endif
 
     if (kNumPersistentStagingBuffers == 0) {
