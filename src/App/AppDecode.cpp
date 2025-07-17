@@ -1,8 +1,9 @@
 #include "App/App.h"
 #include "Utils/DebugLog.h"
-#include <motioncam/RawData.hpp> 
-#include <cstring> 
-#include <chrono>  
+#include <motioncam/RawData.hpp>
+#include <cstring>
+#include <chrono>
+#include <vector>
 
 void App::decodeWorkerLoop() {
     LogToFile("[App::decodeWorkerLoop] Decode thread started.");
@@ -57,7 +58,10 @@ void App::decodeWorkerLoop() {
             m_availableStagingBufferIndices.push(stagingIdx);
             continue;
         }
-        uint16_t* targetStagingU16Ptr = static_cast<uint16_t*>(m_persistentStagingBuffersMappedPtrs[stagingIdx]);
+        float* targetStagingF32Ptr = static_cast<float*>(m_persistentStagingBuffersMappedPtrs[stagingIdx]);
+        std::vector<uint16_t> decodeTemp;
+        decodeTemp.resize(static_cast<size_t>(compressedPacket.width) * compressedPacket.height);
+        uint16_t* decodePtr = decodeTemp.data();
 
         bool decodeSuccess = false;
         nlohmann::json frameMeta;
@@ -69,21 +73,21 @@ void App::decodeWorkerLoop() {
             else if (compressedPacket.compressedPayload.empty() && compressedPacket.compressionType != 0) {
                 LogToFile(std::string("[App::decodeWorkerLoop] Empty compressed payload for TS ") + std::to_string(compressedPacket.timestamp) + " with compression type " + std::to_string(compressedPacket.compressionType));
             }
-            else if (!targetStagingU16Ptr) {
-                LogToFile(std::string("[App::decodeWorkerLoop] Null target staging pointer for TS ") + std::to_string(compressedPacket.timestamp));
+            else if (!decodePtr) {
+                LogToFile(std::string("[App::decodeWorkerLoop] Null decode pointer for TS ") + std::to_string(compressedPacket.timestamp));
             }
             else if (compressedPacket.compressionType == LOCAL_MC_COMPRESSION_TYPE_NEW) {
-                if (motioncam::raw::Decode(targetStagingU16Ptr, compressedPacket.width, compressedPacket.height, compressedPacket.compressedPayload.data(), compressedPacket.compressedPayload.size()) > 0) decodeSuccess = true;
+                if (motioncam::raw::Decode(decodePtr, compressedPacket.width, compressedPacket.height, compressedPacket.compressedPayload.data(), compressedPacket.compressedPayload.size()) > 0) decodeSuccess = true;
                 else LogToFile(std::string("[App::decodeWorkerLoop] motioncam::raw::Decode failed for TS ") + std::to_string(compressedPacket.timestamp));
             }
             else if (compressedPacket.compressionType == LOCAL_MC_COMPRESSION_TYPE_LEGACY) {
-                if (motioncam::raw::DecodeLegacy(targetStagingU16Ptr, compressedPacket.width, compressedPacket.height, compressedPacket.compressedPayload.data(), compressedPacket.compressedPayload.size()) > 0) decodeSuccess = true;
+                if (motioncam::raw::DecodeLegacy(decodePtr, compressedPacket.width, compressedPacket.height, compressedPacket.compressedPayload.data(), compressedPacket.compressedPayload.size()) > 0) decodeSuccess = true;
                 else LogToFile(std::string("[App::decodeWorkerLoop] motioncam::raw::DecodeLegacy failed for TS ") + std::to_string(compressedPacket.timestamp));
             }
             else if (compressedPacket.compressionType == 0) {
                 size_t expected_size = static_cast<size_t>(compressedPacket.width) * compressedPacket.height * sizeof(uint16_t);
                 if (!compressedPacket.compressedPayload.empty() && compressedPacket.compressedPayload.size() == expected_size) {
-                    memcpy(targetStagingU16Ptr, compressedPacket.compressedPayload.data(), expected_size);
+                    memcpy(decodePtr, compressedPacket.compressedPayload.data(), expected_size);
                     decodeSuccess = true;
                 }
                 else if (compressedPacket.compressedPayload.empty() && expected_size == 0) {
@@ -110,6 +114,19 @@ void App::decodeWorkerLoop() {
                         LogToFile(std::string("[App::decodeWorkerLoop] JSON metadata parse error for TS ") + std::to_string(compressedPacket.timestamp) + ": " + e.what());
                         decodeSuccess = false;
                     }
+                }
+
+                // Convert 16-bit samples to normalized float RGBA
+                size_t pixelCount = static_cast<size_t>(compressedPacket.width) * compressedPacket.height;
+                for (size_t i = 0; i < pixelCount; ++i) {
+                    float f = static_cast<float>(decodePtr[i]) / 4095.0f;
+                    if (f < 0.0f) f = 0.0f;
+                    if (f > 1.0f) f = 1.0f;
+                    size_t base = i * 4;
+                    targetStagingF32Ptr[base + 0] = f;
+                    targetStagingF32Ptr[base + 1] = f;
+                    targetStagingF32Ptr[base + 2] = f;
+                    targetStagingF32Ptr[base + 3] = 1.0f;
                 }
 
                 // Flush writes to the staging buffer in case the memory is not HOST_COHERENT

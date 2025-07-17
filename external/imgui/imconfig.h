@@ -26,8 +26,8 @@
 //#define IMGUI_API __declspec( dllimport )
 
 //---- Don't define obsolete functions/enums names. Consider enabling from time to time after updating to avoid using soon-to-be obsolete function/names.
-#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
-#define IMGUI_DISABLE_OBSOLETE_KEYIO // Obsolete key input api. @PendingRemoval
+//#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+//#define IMGUI_DISABLE_OBSOLETE_KEYIO // Obsolete key input api. @PendingRemoval
 
 //---- Disable all of Dear ImGui specific assert macros. Consider enabling if you want to integrate Dear ImGui into your own assertion library.
 //#define IMGUI_DISABLE_IMASSERT
