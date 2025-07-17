@@ -12,6 +12,7 @@
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
+#include <ShlObj.h>
 #include <commdlg.h>
 namespace DebugLogHelper {
     extern std::string wstring_to_utf8(const std::wstring& wstr);
@@ -383,6 +384,7 @@ void App::handleDrop(int count, const char** paths) {
                 }
                 if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) {
                     m_fileList.push_back(s);
+                    m_fileExportFormats.push_back(ExportFormat::PRORES_CPU);
                     newFilesAddedToPlaylist = true;
                 }
             }
@@ -400,6 +402,7 @@ void App::handleDrop(int count, const char** paths) {
                     std::string s = e.path().string();
                     if (std::find(m_fileList.begin(), m_fileList.end(), s) == m_fileList.end()) {
                         m_fileList.push_back(s);
+                        m_fileExportFormats.push_back(ExportFormat::PRORES_CPU);
                         newFilesAddedToPlaylist = true;
                     }
                 }
@@ -641,6 +644,30 @@ std::string App::openSaveMp4Dialog() {
     return {};
 }
 
+std::string App::openFolderDialog() {
+#ifdef _WIN32
+    BROWSEINFOW bi{};
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_USENEWUI;
+    bi.hwndOwner = m_window ? glfwGetWin32Window(m_window) : NULL;
+    PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
+    if (pidl) {
+        wchar_t path[MAX_PATH];
+        if (SHGetPathFromIDListW(pidl, path)) {
+            std::string utf8 = DebugLogHelper::wstring_to_utf8(path);
+            CoTaskMemFree(pidl);
+            return utf8;
+        }
+        CoTaskMemFree(pidl);
+    }
+#else
+    std::string folder;
+    std::cout << "Output folder: " << std::flush;
+    std::getline(std::cin, folder);
+    return folder;
+#endif
+    return {};
+}
+
 void App::triggerOpenFileViaDialog() {
     std::vector<std::string> paths = openMultipleMcrawDialog();
     if (!paths.empty()) {
@@ -648,6 +675,7 @@ void App::triggerOpenFileViaDialog() {
         for (const std::string& p : paths) {
             if (std::find(m_fileList.begin(), m_fileList.end(), p) == m_fileList.end()) {
                 m_fileList.push_back(p);
+                m_fileExportFormats.push_back(ExportFormat::PRORES_CPU);
                 added = true;
             }
         }
@@ -656,8 +684,10 @@ void App::triggerOpenFileViaDialog() {
         }
         if (!m_fileList.empty() && m_selectedBatchIndex == -1) {
             m_selectedBatchIndex = 0;
-            loadFileForExport(m_fileList[0]);
+            bool oldFirst = m_firstFileLoaded;
             m_firstFileLoaded = true;
+            loadFileAtIndex(0);
+            m_firstFileLoaded = oldFirst;
         }
     }
 }
