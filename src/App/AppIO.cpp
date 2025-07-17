@@ -2735,6 +2735,21 @@ void App::setPlaybackMode(PlaybackController::PlaybackMode mode) {
         " to " + std::to_string(static_cast<int>(mode)));
 }
 
+void App::play() {
+    if (m_playbackController_ptr && m_playbackController_ptr->isPaused()) {
+        m_playbackController_ptr->togglePause();
+    }
+}
+
+void App::stop() {
+    if (m_playbackController_ptr) {
+        m_playbackController_ptr->setPlaybackMode(PlaybackController::PlaybackMode::REALTIME);
+        performSeek(0);
+        if (!m_playbackController_ptr->isPaused())
+            m_playbackController_ptr->togglePause();
+    }
+}
+
 void App::loadFileForExport(const std::string& path) {
     using namespace std::chrono;
     namespace fs = std::filesystem;
