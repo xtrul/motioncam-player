@@ -1,6 +1,6 @@
-# MotionCam Player
+# MotionCam Converter
 
-This project builds a desktop player for MotionCam `.mcraw` files.
+This project builds a desktop converter for MotionCam `.mcraw` files.
 
 ## Building
 
@@ -42,7 +42,7 @@ runtime DLLs will be copied automatically.
 
 ## ProRes Export
 
-- Right-click anywhere in the player window to open the context menu.
+- Right-click anywhere in the converter window to open the context menu.
 - Choose **Export to ProRes** and select a `.mov` file path.
 - Encoding uses FFmpeg linked via vcpkg. Make sure the libraries are installed in your vcpkg instance.
  - Progress is shown in a modal popup while the encoding thread runs.
@@ -93,4 +93,4 @@ runtime DLLs will be copied automatically.
 - If the AMD encoder is unavailable the export aborts and logs to `hevc_export_log.txt`.
 - The log file lists these settings so you can verify the parameters used.
 
-See `docs/Batcher_Enhancement_Spec.md` for proposed improvements to the MotionCam Batcher add-on.
+See `docs/Converter_Enhancement_Spec.md` for proposed improvements to the MotionCam Converter add-on.

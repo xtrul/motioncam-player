@@ -184,18 +184,18 @@ namespace GuiOverlay {
 
 
     void render(App* appInstance) {
-#ifdef MOTIONCAM_BATCHER
+#ifdef MOTIONCAM_CONVERTER
         if (!appInstance) return;
         ImGuiIO& io = ImGui::GetIO();
         ImGuiViewport* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->WorkPos);
         ImGui::SetNextWindowSize(vp->WorkSize);
         ImGui::SetNextWindowBgAlpha(0.f);
-        ImGui::Begin("BatcherMain", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground);
+        ImGui::Begin("ConverterMain", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground);
 
         ImGui::BeginChild("FileListPanel", ImVec2(vp->WorkSize.x * 0.5f, vp->WorkSize.y - 150), true);
         if (ImGui::CollapsingHeader("Preview", &appInstance->m_previewOpen, ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::BeginChild("PreviewArea", ImVec2(0, 220), true, ImGuiWindowFlags_NoBackground);
+            ImGui::BeginChild("PreviewArea", ImVec2(0, 220), true);
             ImVec2 innerPos = ImGui::GetWindowPos();
             ImVec2 innerSize = ImGui::GetWindowSize();
             appInstance->m_previewRect.x = (int)(innerPos.x - vp->WorkPos.x);
@@ -333,7 +333,7 @@ namespace GuiOverlay {
         ImGui::EndChild();
 
         ImGui::Separator();
-        ImGui::Text("MotionCam Batcher v0.36.0 — RAW VIDEO CONVERTER");
+        ImGui::Text("MotionCam Converter v0.36.0 — RAW VIDEO CONVERTER");
         ImGui::Text("www.motioncamapp.com");
 
         ImGui::End();
