@@ -27,8 +27,6 @@
 // as their functions are called from Renderer_VK.cpp via namespaces.
 // If Renderer_VK class itself needs types from them, they would be included.
 
-class App;
-
 class Renderer_VK {
 public:
     Renderer_VK(
@@ -54,8 +52,7 @@ public:
         double staticBlack, double staticWhite, int cfaTypeOverride,
         bool forceUpload,
         OrientationTag defaultOrientation,
-        bool containerFlipped,
-        class App* app
+        bool containerFlipped
     );
 
     void recordDrawCommands(
@@ -147,7 +144,7 @@ private:
     friend bool Descriptor::createDescriptorSetLayout(Renderer_VK* renderer);
     friend bool Descriptor::createDescriptorPool(Renderer_VK* renderer);
     friend bool Descriptor::createDescriptorSets(Renderer_VK* renderer);
-    friend void Descriptor::updateDescriptorSetsWithNewRawImage(Renderer_VK* renderer, class App* app);
+    friend void Descriptor::updateDescriptorSetsWithNewRawImage(Renderer_VK* renderer);
     friend bool Descriptor::createUniformBuffers(Renderer_VK* renderer);
     friend void Descriptor::cleanupUniformBuffers(Renderer_VK* renderer);
 };

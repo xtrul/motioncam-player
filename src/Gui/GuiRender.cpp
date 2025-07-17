@@ -188,36 +188,106 @@ namespace GuiOverlay {
         if (!appInstance) return;
         ImGuiIO& io = ImGui::GetIO();
         ImGuiViewport* vp = ImGui::GetMainViewport();
-        ImVec2 workPos = vp->WorkPos;
-        ImVec2 workSize = vp->WorkSize;
-        ImGuiWindowFlags pf =
-            ImGuiWindowFlags_NoTitleBar |
-            ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoScrollbar |
-            ImGuiWindowFlags_AlwaysUseWindowPadding;
-
-        ImGui::SetNextWindowPos(workPos);
-        ImGui::SetNextWindowSize(ImVec2(workSize.x * 0.5f, workSize.y * 0.3f));
-        ImGui::Begin("Preview", nullptr, pf);
-
-        if (appInstance->m_previewTex) {
-            ImGui::Image(appInstance->m_previewTex,
-                        ImVec2((float)appInstance->m_previewWidth,
-                               (float)appInstance->m_previewHeight));
-        } else {
-            ImGui::TextUnformatted("No video loaded");
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Play"))    appInstance->play();
-        ImGui::SameLine();
-        if (ImGui::Button("Stop"))    appInstance->stop();
-
-        ImGui::End();
+        ImGui::SetNextWindowPos(vp->WorkPos);
+        ImGui::SetNextWindowSize(vp->WorkSize);
+        ImGui::SetNextWindowBgAlpha(0.f);
+        ImGui::Begin("ConverterMain", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground);
 
         ImGui::BeginChild("FileListPanel", ImVec2(vp->WorkSize.x * 0.5f, vp->WorkSize.y - 150), true);
+
+        ImGuiChildFlags previewChildFlags =
+            ImGuiChildFlags_Borders |
+            ImGuiChildFlags_AlwaysUseWindowPadding;
+        ImGuiWindowFlags previewFlags =
+            ImGuiWindowFlags_NoTitleBar |
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoMove;
+        ImGui::BeginChild("PreviewArea", ImVec2(0, 300), previewChildFlags, previewFlags);
+            ImVec2 innerPos = ImGui::GetWindowPos();
+            ImVec2 innerSize = ImGui::GetWindowSize();
+            appInstance->m_previewRect.x = (int)(innerPos.x - vp->WorkPos.x);
+            appInstance->m_previewRect.y = (int)(innerPos.y - vp->WorkPos.y);
+            appInstance->m_previewRect.w = (int)innerSize.x;
+            appInstance->m_previewRect.h = (int)innerSize.y;
+            bool paused = true;
+            if (appInstance->m_playbackController_ptr)
+                paused = appInstance->m_playbackController_ptr->isPaused();
+            if (ImGui::Button(paused ? "Play" : "Pause")) {
+                if (appInstance->m_playbackController_ptr)
+                    appInstance->m_playbackController_ptr->togglePause();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Stop")) {
+                if (appInstance->m_playbackController_ptr) {
+                    appInstance->m_playbackController_ptr->setPlaybackMode(PlaybackController::PlaybackMode::REALTIME);
+                    appInstance->performSeek(0);
+                    if (!appInstance->m_playbackController_ptr->isPaused())
+                        appInstance->m_playbackController_ptr->togglePause();
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Prev Clip")) {
+                if (!appInstance->m_fileList.empty()) {
+                    int newIndex = appInstance->m_selectedBatchIndex > 0 ? appInstance->m_selectedBatchIndex - 1 : 0;
+                    if (newIndex != appInstance->m_selectedBatchIndex) {
+                        bool oldFirst = appInstance->m_firstFileLoaded;
+                        appInstance->m_firstFileLoaded = true;
+                        appInstance->m_selectedBatchIndex = newIndex;
+                        appInstance->loadFileAtIndex(newIndex);
+                        appInstance->m_firstFileLoaded = oldFirst;
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Next Clip")) {
+                if (!appInstance->m_fileList.empty()) {
+                    int newIndex = appInstance->m_selectedBatchIndex + 1;
+                    if (newIndex >= (int)appInstance->m_fileList.size()) newIndex = appInstance->m_selectedBatchIndex;
+                    if (newIndex != appInstance->m_selectedBatchIndex) {
+                        bool oldFirst = appInstance->m_firstFileLoaded;
+                        appInstance->m_firstFileLoaded = true;
+                        appInstance->m_selectedBatchIndex = newIndex;
+                        appInstance->loadFileAtIndex(newIndex);
+                        appInstance->m_firstFileLoaded = oldFirst;
+                    }
+                }
+            }
+            size_t curIdx = 0, total = 0;
+            if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+                curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
+                total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
+            }
+            float prog = total ? (float)curIdx / (float)total : 0.f;
+            if (ImGui::SliderFloat("Seek", &prog, 0.f, 1.f)) {
+                if (appInstance->m_decoderWrapper_ptr) {
+                    size_t newIdx = static_cast<size_t>(prog * total);
+                    appInstance->performSeek(newIdx);
+                }
+            }
+            double curTime = 0.0, totalTime = 0.0;
+            if (appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+                const auto& frames = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames();
+                if (!frames.empty()) {
+                    int64_t firstTs = frames.front();
+                    if (curIdx < frames.size()) curTime = static_cast<double>(frames[curIdx] - firstTs) * 1e-9;
+                    totalTime = static_cast<double>(frames.back() - firstTs) * 1e-9;
+                }
+            }
+            std::string curTimeStr = GuiUtils::format_mm_ss(curTime);
+            std::string totalTimeStr = GuiUtils::format_mm_ss(totalTime);
+            ImGui::Text("%s / %s  Frame %zu / %zu", curTimeStr.c_str(), totalTimeStr.c_str(), curIdx, total);
+
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            if (appInstance->m_previewTextureSet != 0 && avail.x > 0 && avail.y > 0)
+            {
+                ImGui::Image(appInstance->m_previewTextureSet,
+                             avail,
+                             ImVec2(0,1), ImVec2(1,0));
+            }
+
+            ImGui::EndChild();
+            ImGui::Separator();
 
         if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
         ImGui::SameLine();
