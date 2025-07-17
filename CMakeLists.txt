@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 cmake_policy(SET CMP0111 NEW)
-project(MotionCam_Batcher VERSION 0.7 LANGUAGES C CXX)
+project(MotionCam_Converter VERSION 0.7 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -199,7 +199,7 @@ add_dependencies(${PROJECT_NAME} CompileShaders glm motioncam_decoder imgui)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE SDL_MAIN_HANDLED)
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
-target_compile_definitions(${PROJECT_NAME} PRIVATE MOTIONCAM_BATCHER)
+target_compile_definitions(${PROJECT_NAME} PRIVATE MOTIONCAM_CONVERTER)
 if(HAVE_FFMPEG)
     target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PRORES_EXPORT)
 endif()
@@ -326,9 +326,9 @@ endif()
 
 message(STATUS "---------------------------------------------------------------------")
 message(STATUS "Final Configuration Summary:")
-message(STATUS "  Target Executable: MotionCam Player")
+message(STATUS "  Target Executable: MotionCam Converter")
 message(STATUS "  Output Directory:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}")
-message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/MotionCam Player${CMAKE_EXECUTABLE_SUFFIX}")
+message(STATUS "  Output Executable: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_CFG_INTDIR}/MotionCam Converter${CMAKE_EXECUTABLE_SUFFIX}")
 message(STATUS "---------------------------------------------------------------------")
 
 # Only enable the optional tests if the directory exists. Some

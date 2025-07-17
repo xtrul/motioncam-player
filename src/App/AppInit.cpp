@@ -291,11 +291,7 @@ bool App::initVulkan() {
     LogToFile("App::initVulkan GLFW initialized.");
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-#ifdef MOTIONCAM_BATCHER
-    m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "MotionCam Batcher", nullptr, nullptr);
-#else
-    m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "MotionCam Player", nullptr, nullptr);
-#endif
+    m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "MotionCam Converter", nullptr, nullptr);
     if (!m_window) {
         LogToFile("App::initVulkan ERROR: Failed to create GLFW window");
         glfwTerminate();
@@ -325,7 +321,7 @@ bool App::initVulkan() {
 #ifdef _WIN32
     {
         LogToFile("App::initVulkan Creating IPC message-only window.");
-        const wchar_t* ipcClassName = L"MOTIONCAM_PLAYER_IPC_WND_CLASS";
+        const wchar_t* ipcClassName = L"MOTIONCAM_CONVERTER_IPC_WND_CLASS";
         WNDCLASSW wc{};
         wc.lpfnWndProc = App::IpcWndProcStatic;
         wc.hInstance = GetModuleHandleW(nullptr);
@@ -336,7 +332,7 @@ bool App::initVulkan() {
         else {
             LogToFile("App::initVulkan IPC Window class registered or already exists.");
         }
-        _ipcWnd = CreateWindowExW(0, ipcClassName, L"MOTIONCAM_PLAYER_IPC_HIDDEN_WINDOW", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), this);
+        _ipcWnd = CreateWindowExW(0, ipcClassName, L"MOTIONCAM_CONVERTER_IPC_HIDDEN_WINDOW", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, GetModuleHandleW(nullptr), this);
         if (!_ipcWnd) LogToFile(std::string("App::initVulkan ERROR: CreateWindowExW for IPC window failed. Error: ") + std::to_string(GetLastError()));
         else LogToFile("App::initVulkan IPC message-only window created successfully.");
     }
@@ -385,11 +381,7 @@ void App::createInstance() {
 
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-#ifdef MOTIONCAM_BATCHER
-    appInfo.pApplicationName = "MotionCam Batcher";
-#else
-    appInfo.pApplicationName = "MotionCam Player";
-#endif
+    appInfo.pApplicationName = "MotionCam Converter";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 2, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);

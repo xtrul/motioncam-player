@@ -162,7 +162,7 @@ namespace {
         dng.SetAsShotNeutral(asShotNeutral.size(), asShotNeutral.data());
         dng.SetCalibrationIlluminant1(21);
         dng.SetCalibrationIlluminant2(17);
-        dng.SetUniqueCameraModel("MotionCam App Player Export");
+        dng.SetUniqueCameraModel("MotionCam Converter Export");
         dng.SetSubfileType(false, false, false);
         const uint32_t activeArea[4] = { 0, 0, height, width };
         dng.SetActiveArea(activeArea);
@@ -2758,7 +2758,7 @@ void App::loadFileForExport(const std::string& path) {
     }
 }
 
-#ifdef MOTIONCAM_BATCHER
+#ifdef MOTIONCAM_CONVERTER
 void App::startBatchConversion() {
     if (m_batchActive.load()) return;
     m_batchActive.store(true);
@@ -2767,7 +2767,7 @@ void App::startBatchConversion() {
     fs::path logDir = fs::path(getLogDirectory());
     std::error_code ec;
     fs::create_directories(logDir, ec);
-    fs::path logPath = logDir / "MotionCamBatcher.txt";
+    fs::path logPath = logDir / "MotionCamConverter.txt";
     std::ofstream logFile(logPath.string());
     m_batchThread = std::thread([this, logFile = std::move(logFile)]() mutable {
         namespace fs = std::filesystem;
