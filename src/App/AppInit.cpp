@@ -25,7 +25,6 @@
 #include "Utils/RawFrameBuffer.h"
 
 #include <imgui.h>
-#include <imgui_impl_vulkan.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <iostream>
@@ -870,7 +869,6 @@ void App::initImGuiVulkan() {
 
     GuiOverlay::setup(m_window, this);
     LogToFile("App::initImGuiVulkan GuiOverlay::setup() called.");
-    refreshPreviewTextureDescriptor();
 }
 
 void App::createPersistentStagingBuffers() {
@@ -881,12 +879,11 @@ void App::createPersistentStagingBuffers() {
 
     const uint32_t MAX_EXPECTED_WIDTH = 8192;
     const uint32_t MAX_EXPECTED_HEIGHT = 4608;
-    VkDeviceSize bufferSize = static_cast<VkDeviceSize>(MAX_EXPECTED_WIDTH) * MAX_EXPECTED_HEIGHT * sizeof(float) * 4;
+    VkDeviceSize bufferSize = static_cast<VkDeviceSize>(MAX_EXPECTED_WIDTH) * MAX_EXPECTED_HEIGHT * sizeof(uint16_t);
 
 #ifndef NDEBUG
     LogToFile(std::string("App::createPersistentStagingBuffers Staging buffer individual size: ") + std::to_string(bufferSize) +
-        " bytes (for max " + std::to_string(MAX_EXPECTED_WIDTH) + "x" + std::to_string(MAX_EXPECTED_HEIGHT) +
-        " R32G32B32A32_SFLOAT images).");
+        " bytes (for max " + std::to_string(MAX_EXPECTED_WIDTH) + "x" + std::to_string(MAX_EXPECTED_HEIGHT) + " R16_UINT images).");
 #endif
 
     if (kNumPersistentStagingBuffers == 0) {
