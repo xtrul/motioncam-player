@@ -67,7 +67,6 @@ public:
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     VkQueue m_presentQueue = VK_NULL_HANDLE;
     VkDescriptorPool m_imguiDescriptorPool = VK_NULL_HANDLE;
-    VkDescriptorSet m_previewTextureSet = VK_NULL_HANDLE;
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
 
@@ -142,6 +141,7 @@ public:
     int m_selectedBatchIndex = -1;
     char m_outputFolder[1024] = "";
     std::vector<ExportFormat> m_fileExportFormats;
+    bool m_previewOpen = true;
     struct PreviewRect {
         int x = 0;
         int y = 0;

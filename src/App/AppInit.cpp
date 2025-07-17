@@ -25,7 +25,6 @@
 #include "Utils/RawFrameBuffer.h"
 
 #include <imgui.h>
-#include <imgui_impl_vulkan.h>
 #include <nlohmann/json.hpp>
 #include <filesystem>
 #include <iostream>
@@ -870,10 +869,6 @@ void App::initImGuiVulkan() {
 
     GuiOverlay::setup(m_window, this);
     LogToFile("App::initImGuiVulkan GuiOverlay::setup() called.");
-    m_previewTextureSet = ImGui_ImplVulkan_AddTexture(
-        m_rendererVk->m_rawImageSampler,
-        m_rendererVk->m_rawImageView,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
 void App::createPersistentStagingBuffers() {
