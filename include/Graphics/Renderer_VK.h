@@ -61,7 +61,9 @@ public:
         int windowWidth,
         int windowHeight,
         int offsetX = 0,
-        int offsetY = 0
+        int offsetY = 0,
+        float blackNorm = 0.0f,
+        float whiteNorm = 1.0f
     );
 
     static int getCfaType(const std::string& cfaString);
@@ -115,6 +117,11 @@ private:
         alignas(16) glm::mat4 CCM;
         alignas(4) float saturationAdjustment;
         alignas(4) int orientationDegrees;
+    };
+
+    struct PreviewPushConstants {
+        float blackNorm;
+        float whiteNorm;
     };
 
     // Internal state not directly manipulated by namespaced helpers

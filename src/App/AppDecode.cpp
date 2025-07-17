@@ -1,8 +1,9 @@
 #include "App/App.h"
 #include "Utils/DebugLog.h"
-#include <motioncam/RawData.hpp> 
-#include <cstring> 
-#include <chrono>  
+#include <motioncam/RawData.hpp>
+#include <cstring>
+#include <chrono>
+#include <vector>
 
 void App::decodeWorkerLoop() {
     LogToFile("[App::decodeWorkerLoop] Decode thread started.");
