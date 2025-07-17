@@ -68,8 +68,7 @@ public:
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     VkQueue m_presentQueue = VK_NULL_HANDLE;
     VkDescriptorPool m_imguiDescriptorPool = VK_NULL_HANDLE;
-    ImTextureID m_previewTex = 0;
-    VkDescriptorImageInfo m_previewDesc{};
+    ImTextureID m_previewTextureSet = 0;
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
 
@@ -313,7 +312,7 @@ private:
     void cleanupSwapChain();
     void recreateSwapChain();
 
-    void updatePreviewDescriptor();
+    void refreshPreviewTextureDescriptor();
 
     void drawFrame();
 
