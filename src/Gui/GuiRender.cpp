@@ -269,13 +269,6 @@ namespace GuiOverlay {
             std::string curTimeStr = GuiUtils::format_mm_ss(curTime);
             std::string totalTimeStr = GuiUtils::format_mm_ss(totalTime);
             ImGui::Text("%s / %s  Frame %zu / %zu", curTimeStr.c_str(), totalTimeStr.c_str(), curIdx, total);
-
-            ImVec2 avail = ImGui::GetContentRegionAvail();
-            if (appInstance->m_previewTextureSet != VK_NULL_HANDLE && avail.x > 0 && avail.y > 0)
-            {
-                ImGui::Image((ImTextureID)appInstance->m_previewTextureSet, avail, ImVec2(0,1), ImVec2(1,0));
-            }
-
             ImGui::EndChild();
             ImGui::Separator();
         } else {
