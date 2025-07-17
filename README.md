@@ -1,6 +1,6 @@
-# MotionCam Converter
+# MotionCam Player
 
-This project builds a desktop converter for MotionCam `.mcraw` files.
+This project builds a desktop player for MotionCam `.mcraw` files.
 
 ## Building
 
@@ -93,4 +93,4 @@ runtime DLLs will be copied automatically.
 - If the AMD encoder is unavailable the export aborts and logs to `hevc_export_log.txt`.
 - The log file lists these settings so you can verify the parameters used.
 
-See `docs/Converter_Enhancement_Spec.md` for proposed improvements to the MotionCam Converter add-on.
+See `docs/Batcher_Enhancement_Spec.md` for proposed improvements to the MotionCam Batcher add-on.

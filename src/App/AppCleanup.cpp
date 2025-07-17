@@ -93,7 +93,7 @@ App::~App() {
         DestroyWindow(_ipcWnd);
         _ipcWnd = nullptr;
     }
-    const wchar_t* ipcClassName = L"MOTIONCAM_CONVERTER_IPC_WND_CLASS";
+    const wchar_t* ipcClassName = L"MOTIONCAM_PLAYER_IPC_WND_CLASS";
     UnregisterClassW(ipcClassName, GetModuleHandleW(nullptr));
     LogToFile("[App::~App] Unregistered IPC window class (attempted).");
 #ifndef NDEBUG

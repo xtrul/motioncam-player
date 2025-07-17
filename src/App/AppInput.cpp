@@ -79,7 +79,7 @@ void App::framebufferSizeCallback(int width, int height) {
 
 
 void App::handleKey(int key, int mods) {
-#ifdef MOTIONCAM_CONVERTER
+#ifdef MOTIONCAM_BATCHER
     (void)key; (void)mods;
     return;
 #else
@@ -363,7 +363,7 @@ void App::handleKey(int key, int mods) {
         // So, this specific else-if branch might not need additional action here, as performSeek should handle it.
         // LogToFile("[App::handleKey] Seek action occurred while paused. Anchor already updated by performSeek. Audio reset by performSeek.");
     }
-#endif // MOTIONCAM_CONVERTER
+#endif // MOTIONCAM_BATCHER
 }
 
 void App::handleDrop(int count, const char** paths) {

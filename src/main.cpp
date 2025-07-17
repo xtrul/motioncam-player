@@ -208,7 +208,7 @@ int main(int argc, char* argv[]) {
 
 
 #ifdef _WIN32
-    static const wchar_t* kMutexName = L"MCRAW_CONVERTER_SINGLE_INSTANCE_MUTEX_V2_UNIQUE";
+    static const wchar_t* kMutexName = L"MCRAW_PLAYER_SINGLE_INSTANCE_MUTEX_V2_UNIQUE";
     SingleInstanceGuard instanceGuard(kMutexName);
 
     LogToFile(std::string("[main] SingleInstanceGuard created. Mutex handle valid: ") + (instanceGuard.getMutexHandle() != NULL && instanceGuard.getMutexHandle() != INVALID_HANDLE_VALUE ? "YES" : "NO") +
@@ -219,7 +219,7 @@ int main(int argc, char* argv[]) {
         LogToFile("[main] Another instance is already running (detected by alreadyRunning() == true).");
 
         if (argc >= 2 && argv[1] != nullptr) {
-            HWND hwnd = FindWindowW(L"MCRAW_CONVERTER_IPC_WND_CLASS", nullptr);
+            HWND hwnd = FindWindowW(L"MCRAW_PLAYER_IPC_WND_CLASS", nullptr);
             if (hwnd) {
                 LogToFile(std::string("[main] Found existing instance window (HWND: ") + std::to_string(reinterpret_cast<uintptr_t>(hwnd)) + "). Sending file: " + argv[1]);
                 std::filesystem::path fsPath(argv[1]);
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]) {
                 LogToFile("[main] WM_COPYDATA sent.");
             }
             else {
-                LogToFile("[main] Could not find existing instance window by class MCRAW_CONVERTER_IPC_WND_CLASS to forward arguments.");
+                LogToFile("[main] Could not find existing instance window by class MCRAW_PLAYER_IPC_WND_CLASS to forward arguments.");
             }
         }
         else {
@@ -275,7 +275,7 @@ int main(int argc, char* argv[]) {
         std::string errorMsg = "[main] Input file not found or not a regular file: " + inPath;
         LogToFile(errorMsg);
 #ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Error - MotionCam Converter", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, errorMsg.c_str(), "Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
@@ -284,7 +284,7 @@ int main(int argc, char* argv[]) {
         std::string errorMsg = "[main] Input file must have a .mcraw extension: " + inPath;
         LogToFile(errorMsg);
 #ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Error - MotionCam Converter", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, errorMsg.c_str(), "Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
@@ -297,7 +297,7 @@ int main(int argc, char* argv[]) {
         if (!app.run()) {
             LogToFile("[main] App::run() returned false. Application will exit.");
 #ifdef _WIN32
-            MessageBoxA(NULL, "Application run failed. See mcraw_converter_debug_log.txt for details.", "Runtime Error - MotionCam Converter", MB_OK | MB_ICONERROR);
+            MessageBoxA(NULL, "Application run failed. See mcraw_player_debug_log.txt for details.", "Runtime Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
 #endif
             std::cerr << "[main] App::run() returned false. Application will exit." << std::endl;
             return 1;
@@ -308,7 +308,7 @@ int main(int argc, char* argv[]) {
         std::string errorMsg = "[main] FATAL STD EXCEPTION: " + std::string(e.what());
         LogToFile(errorMsg);
 #ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Runtime Error - MotionCam Converter", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, errorMsg.c_str(), "Runtime Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
@@ -317,7 +317,7 @@ int main(int argc, char* argv[]) {
         std::string errorMsg = "[main] FATAL UNKNOWN EXCEPTION occurred.";
         LogToFile(errorMsg);
 #ifdef _WIN32
-        MessageBoxA(NULL, errorMsg.c_str(), "Runtime Error - MotionCam Converter", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, errorMsg.c_str(), "Runtime Error - MCRAW Batcher", MB_OK | MB_ICONERROR);
 #endif
         std::cerr << errorMsg << std::endl;
         return 1;
