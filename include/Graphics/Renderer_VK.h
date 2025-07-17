@@ -59,7 +59,9 @@ public:
         VkCommandBuffer commandBuffer,
         uint32_t currentFrameIndex,
         int windowWidth,
-        int windowHeight
+        int windowHeight,
+        int offsetX = 0,
+        int offsetY = 0
     );
 
     static int getCfaType(const std::string& cfaString);
