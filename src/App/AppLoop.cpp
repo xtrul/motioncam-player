@@ -448,7 +448,8 @@ void App::drawFrame() {
         int ph = m_previewRect.h > 0 ? m_previewRect.h : m_windowHeight;
         int px = m_previewRect.x;
         int py = m_previewRect.y;
-        m_rendererVk->recordDrawCommands(cmd, m_currentFrame, pw, ph, px, py);
+        // Video rendering now handled via ImGui texture
+        (void)pw; (void)ph; (void)px; (void)py; // prevent unused warnings
     }
 
     if (m_uiOpacity > 0.0f) {
