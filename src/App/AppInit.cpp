@@ -870,7 +870,10 @@ void App::initImGuiVulkan() {
 
     GuiOverlay::setup(m_window, this);
     LogToFile("App::initImGuiVulkan GuiOverlay::setup() called.");
-    refreshPreviewTextureDescriptor();
+    m_previewTexID = (ImTextureID)ImGui_ImplVulkan_AddTexture(
+        m_rendererVk->m_previewSampler,
+        m_rendererVk->m_previewImageView,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
 void App::createPersistentStagingBuffers() {

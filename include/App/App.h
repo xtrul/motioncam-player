@@ -68,7 +68,9 @@ public:
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;
     VkQueue m_presentQueue = VK_NULL_HANDLE;
     VkDescriptorPool m_imguiDescriptorPool = VK_NULL_HANDLE;
-    ImTextureID m_previewTextureSet = 0;
+    ImTextureID m_previewTexID = 0;
+    VkSampler m_previewSampler = VK_NULL_HANDLE;
+    VkImageView m_previewView = VK_NULL_HANDLE;
     VkCommandPool m_commandPool = VK_NULL_HANDLE;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
 

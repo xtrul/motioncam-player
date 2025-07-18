@@ -54,6 +54,8 @@ bool Renderer_VK::init(VkRenderPass renderPass, uint32_t swapChainImageCount) {
 
     if (!ImageResource::createRawImageResources(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create initial raw image resources."); return false; }
     LogToFile("[Renderer_VK::init] Initial raw image resources created.");
+    if (!ImageResource::createPreviewImage(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create preview image."); return false; }
+    LogToFile("[Renderer_VK::init] Preview image created.");
 
     onSwapChainRecreated(renderPass, swapChainImageCount);
 
@@ -65,6 +67,7 @@ void Renderer_VK::cleanup() {
     LogToFile("[Renderer_VK::cleanup] Starting cleanup...");
     Pipeline::cleanupSwapChainResources(this);
     ImageResource::cleanupRawImageResources(this);
+    ImageResource::cleanupPreviewImage(this);
 
     if (m_descriptorSetLayout != VK_NULL_HANDLE) {
         LogToFile("[Renderer_VK::cleanup] Destroying descriptor set layout.");
@@ -377,4 +380,5 @@ void Renderer_VK::ensureRawImageCapacity(uint32_t w, uint32_t h)
         LogToFile("[Renderer_VK::ensureRawImageCapacity] ERROR: Failed to recreate raw image resources for new capacity.");
         throw std::runtime_error("Failed to ensure raw image capacity by recreating resources.");
     }
+    ImageResource::createPreviewImage(this, static_cast<int>(w), static_cast<int>(h));
 }

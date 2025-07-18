@@ -1,0 +1,83 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+#extension GL_EXT_shader_16bit_storage               : require
+
+layout(set=0,binding=0) uniform sampler2D uRaw;          // R16_UNORM
+layout(set=0,binding=1, rgba8) writeonly uniform image2D uOut; // RGBA8_UNORM
+
+layout(push_constant) uniform PC {
+    uint   width;
+    uint   height;
+    uint   cfaType;           // 0 BGGR |1 RGGB |2 GBRG |3 GRBG
+    uint   _pad0;
+    mat3   colMat;            // sensor -> RGB
+    uint   black;
+    uint   white;
+} pc;
+
+float normRaw(uint x, uint y){
+    float v = texelFetch(uRaw, ivec2(x,y), 0).r * 65535.0;
+    return clamp( (v - float(pc.black)) / float(max(pc.white - pc.black,1u)), 0.0, 1.0);
+}
+
+vec3 bayerToRGB(uint x, uint y){
+    bool xe = (x & 1u) == 0u;
+    bool ye = (y & 1u) == 0u;
+    float r=0.0,g=0.0,b=0.0;
+    switch(pc.cfaType){
+    case 0u:
+        if(ye){
+            if(xe){ b=normRaw(x,y); g=(normRaw(x-1,y)+normRaw(x+1,y)+normRaw(x,y-1)+normRaw(x,y+1))*0.25; r=(normRaw(x-1,y-1)+normRaw(x+1,y-1)+normRaw(x-1,y+1)+normRaw(x+1,y+1))*0.25; }
+            else   { g=normRaw(x,y); b=(normRaw(x-1,y)+normRaw(x+1,y))*0.5; r=(normRaw(x,y-1)+normRaw(x,y+1))*0.5; }
+        }else{
+            if(xe){ g=normRaw(x,y); b=(normRaw(x,y-1)+normRaw(x,y+1))*0.5; r=(normRaw(x-1,y)+normRaw(x+1,y))*0.5; }
+            else   { r=normRaw(x,y); g=(normRaw(x-1,y)+normRaw(x+1,y)+normRaw(x,y-1)+normRaw(x,y+1))*0.25; b=(normRaw(x-1,y-1)+normRaw(x+1,y-1)+normRaw(x-1,y+1)+normRaw(x+1,y+1))*0.25; }
+        }
+        break;
+    case 1u:
+        if(ye){
+            if(xe){ r=normRaw(x,y); g=(normRaw(x-1,y)+normRaw(x+1,y)+normRaw(x,y-1)+normRaw(x,y+1))*0.25; b=(normRaw(x-1,y-1)+normRaw(x+1,y-1)+normRaw(x-1,y+1)+normRaw(x+1,y+1))*0.25; }
+            else   { g=normRaw(x,y); r=(normRaw(x-1,y)+normRaw(x+1,y))*0.5; b=(normRaw(x,y-1)+normRaw(x,y+1))*0.5; }
+        }else{
+            if(xe){ g=normRaw(x,y); r=(normRaw(x,y-1)+normRaw(x,y+1))*0.5; b=(normRaw(x-1,y)+normRaw(x+1,y))*0.5; }
+            else   { b=normRaw(x,y); g=(normRaw(x-1,y)+normRaw(x+1,y)+normRaw(x,y-1)+normRaw(x,y+1))*0.25; r=(normRaw(x-1,y-1)+normRaw(x+1,y-1)+normRaw(x-1,y+1)+normRaw(x+1,y+1))*0.25; }
+        }
+        break;
+    case 2u:
+        if(ye){
+            if(xe){ g=normRaw(x,y); b=(normRaw(x-1,y)+normRaw(x+1,y))*0.5; r=(normRaw(x,y-1)+normRaw(x,y+1))*0.5; }
+            else   { b=normRaw(x,y); g=(normRaw(x-1,y)+normRaw(x+1,y)+normRaw(x,y-1)+normRaw(x,y+1))*0.25; r=(normRaw(x-1,y-1)+normRaw(x+1,y-1)+normRaw(x-1,y+1)+normRaw(x+1,y+1))*0.25; }
+        }else{
+            if(xe){ r=normRaw(x,y); g=(normRaw(x-1,y)+normRaw(x+1,y)+normRaw(x,y-1)+normRaw(x,y+1))*0.25; b=(normRaw(x-1,y-1)+normRaw(x+1,y-1)+normRaw(x-1,y+1)+normRaw(x+1,y+1))*0.25; }
+            else   { g=normRaw(x,y); r=(normRaw(x-1,y)+normRaw(x+1,y))*0.5; b=(normRaw(x,y-1)+normRaw(x,y+1))*0.5; }
+        }
+        break;
+    case 3u:
+        if(ye){
+            if(xe){ g=normRaw(x,y); r=(normRaw(x-1,y)+normRaw(x+1,y))*0.5; b=(normRaw(x,y-1)+normRaw(x,y+1))*0.5; }
+            else   { r=normRaw(x,y); g=(normRaw(x-1,y)+normRaw(x+1,y)+normRaw(x,y-1)+normRaw(x,y+1))*0.25; b=(normRaw(x-1,y-1)+normRaw(x+1,y-1)+normRaw(x-1,y+1)+normRaw(x+1,y+1))*0.25; }
+        }else{
+            if(xe){ b=normRaw(x,y); g=(normRaw(x-1,y)+normRaw(x+1,y)+normRaw(x,y-1)+normRaw(x,y+1))*0.25; r=(normRaw(x-1,y-1)+normRaw(x+1,y-1)+normRaw(x-1,y+1)+normRaw(x+1,y+1))*0.25; }
+            else   { g=normRaw(x,y); b=(normRaw(x-1,y)+normRaw(x+1,y))*0.5; r=(normRaw(x,y-1)+normRaw(x,y+1))*0.5; }
+        }
+        break;
+    }
+    vec3 rgb = vec3(r,g,b);
+    rgb = pc.colMat * rgb;
+    return clamp(rgb,0.0,1.0);
+}
+
+vec3 encodeSRGB(vec3 v){
+    vec3 lo = v*12.92;
+    vec3 hi = 1.055*pow(v,vec3(1.0/2.4)) - 0.055;
+    return mix(hi,lo,lessThanEqual(v,vec3(0.0031308)));
+}
+
+layout(local_size_x=16, local_size_y=16, local_size_z=1) in;
+void main(){
+    uvec2 gid = gl_GlobalInvocationID.xy;
+    if(gid.x>=pc.width || gid.y>=pc.height) return;
+    vec3 rgb = encodeSRGB(bayerToRGB(gid.x, gid.y));
+    imageStore(uOut, ivec2(gid), vec4(rgb,1.0));
+}
+
