@@ -187,31 +187,12 @@ namespace GuiOverlay {
 #ifdef MOTIONCAM_CONVERTER
         if (!appInstance) return;
 
-        // When no file is loaded, show a central prompt and disable video rendering.
-        if (!appInstance->m_firstFileLoaded) {
-            ImGuiViewport* viewport = ImGui::GetMainViewport();
-            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
-                                           viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
-                                   ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-            ImGui::SetNextWindowBgAlpha(0.0f);
-            ImGui::Begin("OPEN_PROMPT", nullptr,
-                        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                            ImGuiWindowFlags_NoSavedSettings |
-                            ImGuiWindowFlags_AlwaysAutoResize);
-            if (ImGui::Button("Add Files or Drag & Drop to Begin", ImVec2(300, 50))) {
-                appInstance->triggerOpenFileViaDialog();
-            }
-            ImGui::End();
-            // Zero out the preview rect to prevent rendering.
-            appInstance->m_previewRect = {0, 0, 0, 0};
-            return;
-        }
-
-        // --- Window 1: File List (Floating) ---
         ImGui::SetNextWindowSize(ImVec2(350, 400), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Files")) {
-            if (ImGui::Button("Add", ImVec2(ImGui::GetContentRegionAvail().x * 0.33f, 0))) { appInstance->triggerOpenFileViaDialog(); }
+            if (ImGui::Button("Add", ImVec2(ImGui::GetContentRegionAvail().x * 0.33f, 0))) {
+                appInstance->triggerOpenFileViaDialog();
+            }
             ImGui::SameLine();
             if (ImGui::Button("Remove", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, 0))) {
                  if (appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileList.size()) {
@@ -223,16 +204,21 @@ namespace GuiOverlay {
             }
             ImGui::SameLine();
             if (ImGui::Button("Clear", ImVec2(-1, 0))) {
-                appInstance->m_fileList.clear(); appInstance->m_fileExportFormats.clear(); appInstance->m_selectedBatchIndex = -1;
+                appInstance->m_fileList.clear();
+                appInstance->m_fileExportFormats.clear();
+                appInstance->m_selectedBatchIndex = -1;
             }
             ImGui::Separator();
+
             ImGui::BeginChild("ScrollingFileList");
             for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
                 bool sel = (i == appInstance->m_selectedBatchIndex);
                 std::string name = std::filesystem::path(appInstance->m_fileList[i]).filename().string();
                 if (ImGui::Selectable(name.c_str(), sel)) {
                     if (appInstance->m_selectedBatchIndex != i) {
-                        appInstance->m_selectedBatchIndex = i; appInstance->loadFileAtIndex(i);
+                        appInstance->m_selectedBatchIndex = i;
+                        appInstance->m_firstFileLoaded = true;
+                        appInstance->loadFileAtIndex(i);
                     }
                 }
             }
@@ -240,29 +226,18 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // --- Window 2: Preview & Controls (Floating) ---
-        ImGui::SetNextWindowSize(ImVec2(640, 600), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(500, 320), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(400, 20), ImGuiCond_FirstUseEver);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
-        if (ImGui::Begin("Preview & Controls")) {
-            // This child region defines the canvas for Vulkan rendering.
-            ImGui::BeginChild("PreviewCanvas", ImVec2(0, -160), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-            ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImVec2 size = ImGui::GetContentRegionAvail();
-            // Update the App's preview rect with the absolute coordinates and size of this canvas.
-            appInstance->m_previewRect = { (int)pos.x, (int)pos.y, (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y) };
-            ImGui::EndChild();
+        if (ImGui::Begin("Controls & Export")) {
+            bool paused = true;
+            if (appInstance->m_playbackController_ptr)
+                paused = appInstance->m_playbackController_ptr->isPaused();
 
-            ImGui::Separator();
-
-            // Playback Controls
-            bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
             if (ImGui::Button(paused ? "Play" : "Pause")) {
-                if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
+                if (appInstance->m_playbackController_ptr)
+                    appInstance->m_playbackController_ptr->togglePause();
             }
             ImGui::SameLine();
-
-            // Timeline/Seeker
             size_t curIdx = 0, total = 1;
             if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
                 curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
@@ -271,44 +246,41 @@ namespace GuiOverlay {
             }
             int current_frame_int = static_cast<int>(curIdx);
             ImGui::PushItemWidth(-1);
-            if (ImGui::SliderInt("##Seek", &current_frame_int, 0, (total > 0) ? static_cast<int>(total) - 1 : 0, "Frame %d / %d")) {
-                if (ImGui::IsItemActive()) {
-                    if (!paused) appInstance->m_playbackController_ptr->togglePause(); // Pause during scrub
-                    appInstance->performSeek(static_cast<size_t>(current_frame_int));
-                }
+            if (ImGui::SliderInt("##Seek", &current_frame_int, 0, static_cast<int>(total) -1, "Frame %d")) {
+                appInstance->performSeek(static_cast<size_t>(current_frame_int));
             }
             ImGui::PopItemWidth();
+
             ImGui::Separator();
 
-            // Export Settings
             if (appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size()) {
                 int fmt = static_cast<int>(appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex]);
+                ImGui::Text("Export Format for selected clip:");
                 ImGui::RadioButton("ProRes (CPU)", &fmt, (int)App::ExportFormat::PRORES_CPU); ImGui::SameLine();
-                ImGui::RadioButton("ProRes (GPU)", &fmt, (int)App::ExportFormat::PRORES_GPU); ImGui::SameLine();
-                ImGui::RadioButton("DNxHR (CPU)", &fmt, (int)App::ExportFormat::DNXHR_CPU);
-                ImGui::RadioButton("DNxHR (GPU)", &fmt, (int)App::ExportFormat::DNXHR_GPU); ImGui::SameLine();
+                ImGui::RadioButton("ProRes (GPU)", &fmt, (int)App::ExportFormat::PRORES_GPU);
+                ImGui::RadioButton("DNxHR (CPU)", &fmt, (int)App::ExportFormat::DNXHR_CPU); ImGui::SameLine();
+                ImGui::RadioButton("DNxHR (GPU)", &fmt, (int)App::ExportFormat::DNXHR_GPU);
                 ImGui::RadioButton("HEVC (GPU)", &fmt, (int)App::ExportFormat::HEVC_GPU); ImGui::SameLine();
                 ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
                 appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = static_cast<App::ExportFormat>(fmt);
             } else {
-                ImGui::TextDisabled("Select a file to set export options.");
+                ImGui::TextDisabled("Select a file to see export options.");
             }
+
             ImGui::InputText("Output Folder", appInstance->m_outputFolder, IM_ARRAYSIZE(appInstance->m_outputFolder));
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
                 std::string folder = appInstance->openFolderDialog();
                 if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
             }
-            if (ImGui::Button("Convert All Files in List", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
+            if (ImGui::Button("Convert All Files in List", ImVec2(-1, 30)) && !appInstance->m_batchActive.load()) {
                 appInstance->startBatchConversion();
             }
         }
         ImGui::End();
-        ImGui::PopStyleVar();
 
-        // --- Window 3: Log (Floating) ---
         ImGui::SetNextWindowSize(ImVec2(500, 200), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowPos(ImVec2(400, 630), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(ImVec2(400, 350), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Log")) {
              ImGui::BeginChild("ScrollingLog");
             for (const std::string& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
