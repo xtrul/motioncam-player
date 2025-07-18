@@ -18,6 +18,14 @@
 #include <filesystem>
 #include <cstdio> // For fprintf, abort
 
+// Provide fallbacks if the bundled ImGui doesn't expose docking/viewports flags
+#ifndef ImGuiConfigFlags_DockingEnable
+#define ImGuiConfigFlags_DockingEnable 0
+#endif
+#ifndef ImGuiConfigFlags_ViewportsEnable
+#define ImGuiConfigFlags_ViewportsEnable 0
+#endif
+
 // For App::QueueFamilyIndices, if not fully defined in App.h
 // Assuming App.h has the full definition or it's accessible.
 
@@ -33,14 +41,9 @@ namespace GuiOverlay {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-#ifdef ImGuiConfigFlags_ViewportsEnable
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;  // Enable multi-viewports if available
-
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowRounding = 0.0f;
-        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-#endif
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;    // Enable Docking
+        io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable; // Ensure Multi-Viewports are disabled
 
         // Explicitly set ini file location so it stays in the application folder
         g_ImGuiIniPath = (std::filesystem::path(g_AppBasePath) / "imgui.ini").string();
