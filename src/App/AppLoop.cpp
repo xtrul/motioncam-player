@@ -445,16 +445,19 @@ void App::drawFrame() {
     rpInfo.pClearValues = &clearColorValue;
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
+    // Only draw the video content if the preview window is visible and has a valid size.
+    // The UI is responsible for setting m_previewRect.
     if (renderContentFromPacket) {
-        m_rendererVk->recordDrawCommands(
-            cmd, m_currentFrame,
-            static_cast<int>(m_swapChainExtent.width),
-            static_cast<int>(m_swapChainExtent.height),
-            0, 0);
+        if (m_previewRect.w > 0 && m_previewRect.h > 0) {
+            m_rendererVk->recordDrawCommands(cmd, m_currentFrame,
+                m_previewRect.w, m_previewRect.h,
+                m_previewRect.x, m_previewRect.y);
+        }
     }
 
     if (m_uiOpacity > 0.0f) {
         GuiOverlay::beginFrame();
+        // Important: render() will update m_previewRect for the *next* frame.
         GuiOverlay::render(this);
         GuiOverlay::endFrame(cmd);
     }
