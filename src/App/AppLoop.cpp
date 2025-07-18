@@ -422,17 +422,15 @@ void App::drawFrame() {
                 m_containerOrientationTag,
                 m_containerFlipped
             );
-            // Always clear to black when there is video content
             clearColorValue.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
         }
         else {
-            // Clear to dark gray when no file is loaded
-            float bg = m_firstFileLoaded ? 0.0f : (40.0f/255.0f);
+            float bg = m_firstFileLoaded ? 0.1f : (40.0f/255.0f);
             clearColorValue.color = { {bg, bg, bg, 1.0f} };
         }
     }
     else {
-        float bg = m_firstFileLoaded ? 0.0f : (40.0f/255.0f);
+        float bg = m_firstFileLoaded ? 0.1f : (40.0f/255.0f);
         clearColorValue.color = { {bg, bg, bg, 1.0f} };
         if (m_inFlightStagingBufferIndices[m_currentFrame].has_value()) {
             m_availableStagingBufferIndices.push(m_inFlightStagingBufferIndices[m_currentFrame].value());
@@ -446,11 +444,11 @@ void App::drawFrame() {
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     if (renderContentFromPacket) {
-        m_rendererVk->recordDrawCommands(
-            cmd, m_currentFrame,
-            static_cast<int>(m_swapChainExtent.width),
-            static_cast<int>(m_swapChainExtent.height),
-            0, 0);
+        int pw = m_previewRect.w > 0 ? m_previewRect.w : m_windowWidth;
+        int ph = m_previewRect.h > 0 ? m_previewRect.h : m_windowHeight;
+        int px = m_previewRect.x;
+        int py = m_previewRect.y;
+        m_rendererVk->recordDrawCommands(cmd, m_currentFrame, pw, ph, px, py);
     }
 
     if (m_uiOpacity > 0.0f) {
