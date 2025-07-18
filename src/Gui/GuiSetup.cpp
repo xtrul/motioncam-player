@@ -33,7 +33,18 @@ namespace GuiOverlay {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+#ifdef ImGuiConfigFlags_ViewportsEnable
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;  // Enable Multi-Viewports
+
+        // When viewports are enabled, we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
+        ImGuiStyle& style = ImGui::GetStyle();
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            style.WindowRounding = 0.0f;
+            style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+        }
+#endif
 
         // Explicitly set ini file location so it stays in the application folder
         g_ImGuiIniPath = (std::filesystem::path(g_AppBasePath) / "imgui.ini").string();
