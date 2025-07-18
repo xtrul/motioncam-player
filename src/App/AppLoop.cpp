@@ -6,7 +6,6 @@
 #include "Graphics/Renderer_VK.h"
 #include "Utils/DebugLog.h"
 #include "Gui/GuiOverlay.h"
-#include <imgui.h>
 
 #include <chrono>
 #include <thread>
@@ -393,10 +392,7 @@ void App::drawFrame() {
     rpInfo.framebuffer = m_swapChainFramebuffers[imageIndex];
     rpInfo.renderArea.offset = { 0,0 };
     rpInfo.renderArea.extent = m_swapChainExtent;
-    
-    // Set the Vulkan clear color to match the ImGui background for a seamless look.
-    ImVec4 imGuiBg = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
-    VkClearValue clearColorValue = {{{imGuiBg.x * imGuiBg.w, imGuiBg.y * imGuiBg.w, imGuiBg.z * imGuiBg.w, imGuiBg.w}}};
+    VkClearValue clearColorValue{};
 
     timePoint_A = steady_clock::now();
     if (renderContentFromPacket) {
@@ -426,15 +422,18 @@ void App::drawFrame() {
                 m_containerOrientationTag,
                 m_containerFlipped
             );
-            // When rendering video, we still clear the whole window with the ImGui BG color.
-            // The video will be drawn on top of it in its designated area.
+            // Always clear to black when there is video content
+            clearColorValue.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
         }
         else {
-            // If no file is loaded, the window will just be the ImGui background color.
+            // Clear to dark gray when no file is loaded
+            float bg = m_firstFileLoaded ? 0.0f : (40.0f/255.0f);
+            clearColorValue.color = { {bg, bg, bg, 1.0f} };
         }
     }
     else {
-        // If no file is loaded, the window will just be the ImGui background color.
+        float bg = m_firstFileLoaded ? 0.0f : (40.0f/255.0f);
+        clearColorValue.color = { {bg, bg, bg, 1.0f} };
         if (m_inFlightStagingBufferIndices[m_currentFrame].has_value()) {
             m_availableStagingBufferIndices.push(m_inFlightStagingBufferIndices[m_currentFrame].value());
             m_inFlightStagingBufferIndices[m_currentFrame] = std::nullopt;
