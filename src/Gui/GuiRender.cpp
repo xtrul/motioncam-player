@@ -192,99 +192,95 @@ namespace GuiOverlay {
 
     void render(App* appInstance) {
 #ifdef MOTIONCAM_CONVERTER
-    if (!appInstance) return;
+        if (!appInstance) return;
 
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::SetNextWindowViewport(viewport->ID);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
-    window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-    window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-    
-    // Make the dockspace window transparent so the Vulkan content can be seen
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::Begin("MainDockSpace", nullptr, window_flags);
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(3);
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+        window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+        window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
-    // Create the dockspace and make the central node a transparent passthrough area for our video
-    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+        ImGui::Begin("MainDockSpace", nullptr, window_flags);
+        ImGui::PopStyleVar(3);
 
-    // Get the position and size of the transparent central node
-    // This is where our video will be rendered by Vulkan.
-    if (ImGui::DockBuilderGetNode(dockspace_id) && ImGui::DockBuilderGetNode(dockspace_id)->GetCentralNode()) {
-         auto* central_node = ImGui::DockBuilderGetCentralNode(dockspace_id);
-         appInstance->m_previewRect = {(int)central_node->Pos.x, (int)central_node->Pos.y, (int)central_node->Size.x, (int)central_node->Size.y};
-    } else {
-         // Fallback if docking isn't set up yet, use full window.
-         appInstance->m_previewRect = {(int)viewport->WorkPos.x, (int)viewport->WorkPos.y, (int)viewport->WorkSize.x, (int)viewport->WorkSize.y};
-    }
-    
-    // --- All other UI windows will now dock into this space ---
-    
-    // 1. Files Panel
-    if (ImGui::Begin("Files", nullptr, ImGuiWindowFlags_NoCollapse)) {
-        if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
-        ImGui::SameLine();
-        if (ImGui::Button("Remove")) {
-             if (appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileList.size()) {
-                appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
-                if (appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size())
-                    appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
-                appInstance->m_selectedBatchIndex = -1;
-            }
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Clear")) {
-            appInstance->m_fileList.clear(); appInstance->m_fileExportFormats.clear(); appInstance->m_selectedBatchIndex = -1;
-        }
-        ImGui::Separator();
-        ImGui::BeginChild("FileListChild");
-        for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
-            bool sel = (i == appInstance->m_selectedBatchIndex);
-            std::string name = std::filesystem::path(appInstance->m_fileList[i]).filename().string();
-            if (ImGui::Selectable(name.c_str(), sel)) {
-                if (appInstance->m_selectedBatchIndex != i) {
-                    appInstance->m_selectedBatchIndex = i; appInstance->loadFileAtIndex(i);
+#if IMGUI_HAS_DOCK
+        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+#endif
+
+        // 1. Files Panel
+        if (ImGui::Begin("Files")) {
+            if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
+            ImGui::SameLine();
+            if (ImGui::Button("Remove")) {
+                 if (appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileList.size()) {
+                    appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
+                    if (appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size())
+                        appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
+                    appInstance->m_selectedBatchIndex = -1;
                 }
             }
-        }
-        ImGui::EndChild();
-    }
-    ImGui::End();
-
-    // 2. Combined Panel for Controls, Export, and Log
-    if (ImGui::Begin("Controls & Log", nullptr, ImGuiWindowFlags_NoCollapse)) {
-        bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
-        if (ImGui::Button(paused ? "Play" : "Pause")) {
-            if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
-        }
-        ImGui::SameLine();
-        size_t curIdx = 0, total = 1;
-        if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
-            curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
-            total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
-            if (total == 0) total = 1;
-        }
-        int frame_int = (int)curIdx;
-        ImGui::PushItemWidth(-1);
-        if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d")) {
-            if (ImGui::IsItemActive()) {
-                if (!paused) appInstance->m_playbackController_ptr->togglePause();
-                appInstance->performSeek(frame_int);
+            ImGui::SameLine();
+            if (ImGui::Button("Clear")) {
+                appInstance->m_fileList.clear(); appInstance->m_fileExportFormats.clear(); appInstance->m_selectedBatchIndex = -1;
             }
+            ImGui::Separator();
+            ImGui::BeginChild("FileListChild");
+            for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
+                bool sel = (i == appInstance->m_selectedBatchIndex);
+                std::string name = std::filesystem::path(appInstance->m_fileList[i]).filename().string();
+                if (ImGui::Selectable(name.c_str(), sel)) {
+                    if (appInstance->m_selectedBatchIndex != i) {
+                        appInstance->m_selectedBatchIndex = i; appInstance->loadFileAtIndex(i);
+                    }
+                }
+            }
+            ImGui::EndChild();
         }
-        ImGui::PopItemWidth();
-        
-        ImGui::Separator();
+        ImGui::End();
 
-        if (ImGui::CollapsingHeader("Export Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // 2. Preview Panel
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        if (ImGui::Begin("Preview")) {
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+            ImVec2 size = ImGui::GetContentRegionAvail();
+            appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y)};
+        } else {
+            appInstance->m_previewRect = {0, 0, 0, 0};
+        }
+        ImGui::End();
+        ImGui::PopStyleVar();
+
+        // 3. Controls & Export Panel
+        if (ImGui::Begin("Controls & Export")) {
+            bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
+            if (ImGui::Button(paused ? "Play" : "Pause")) {
+                if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
+            }
+            ImGui::SameLine();
+            size_t curIdx = 0, total = 1;
+            if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+                curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
+                total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
+                if (total == 0) total = 1;
+            }
+            int frame_int = (int)curIdx;
+            ImGui::PushItemWidth(-1);
+            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d")) {
+                if (ImGui::IsItemActive()) {
+                    if (!paused) appInstance->m_playbackController_ptr->togglePause();
+                    appInstance->performSeek(frame_int);
+                }
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Separator();
+
             if (appInstance->m_selectedBatchIndex != -1) {
                 int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
                 ImGui::Text("Export Format:");
@@ -296,6 +292,7 @@ namespace GuiOverlay {
                 ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
                 appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
             }
+
             ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
@@ -306,19 +303,18 @@ namespace GuiOverlay {
                 appInstance->startBatchConversion();
             }
         }
-        
-        ImGui::Separator();
+        ImGui::End();
 
-        if (ImGui::CollapsingHeader("Log", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // 4. Log Panel
+        if (ImGui::Begin("Log")) {
             ImGui::BeginChild("ScrollingLog");
             for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
             ImGui::EndChild();
         }
-    }
-    ImGui::End();
+        ImGui::End();
 
-    ImGui::End(); // End MainDockSpace
+        ImGui::End(); // End MainDockSpace
 
 #else
         if (!appInstance) return;
