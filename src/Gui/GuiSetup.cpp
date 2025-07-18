@@ -33,9 +33,8 @@ namespace GuiOverlay {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-        // Ensure all ImGui windows stay inside the main GLFW window
-        io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;  // Enable Multi-Viewports
 
         // Explicitly set ini file location so it stays in the application folder
         g_ImGuiIniPath = (std::filesystem::path(g_AppBasePath) / "imgui.ini").string();
@@ -44,6 +43,14 @@ namespace GuiOverlay {
         // Load fonts and apply custom style
         GuiStyles::LoadFonts(io); // This will populate GuiStyles::G_TextFont etc.
         GuiStyles::ApplyCustomStyle();
+
+        // When viewports are enabled, tweak rounding so platform windows match
+        ImGuiStyle& style = ImGui::GetStyle();
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            style.WindowRounding = 0.0f;
+            style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+        }
 
         ImGui_ImplGlfw_InitForVulkan(window, true); // true for install_callbacks
 
