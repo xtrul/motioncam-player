@@ -6,7 +6,6 @@
 #include "Graphics/Renderer_VK.h"
 #include "Utils/DebugLog.h"
 #include "Gui/GuiOverlay.h"
-#include <imgui_impl_vulkan.h>
 
 #include <chrono>
 #include <thread>
@@ -423,12 +422,6 @@ void App::drawFrame() {
                 m_containerOrientationTag,
                 m_containerFlipped
             );
-            if (m_rendererVk->getImageWidth() != m_previewImageW ||
-                m_rendererVk->getImageHeight() != m_previewImageH ||
-                m_previewTexID == 0)
-            {
-                refreshPreviewTextureDescriptor();
-            }
             clearColorValue.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
         }
         else {
@@ -455,9 +448,7 @@ void App::drawFrame() {
         int ph = m_previewRect.h > 0 ? m_previewRect.h : m_windowHeight;
         int px = m_previewRect.x;
         int py = m_previewRect.y;
-        float blackNorm = static_cast<float>(m_staticBlack) / 65535.0f;
-        float whiteNorm = static_cast<float>(m_staticWhite) / 65535.0f;
-        m_rendererVk->recordDrawCommands(cmd, m_currentFrame, pw, ph, px, py, blackNorm, whiteNorm);
+        m_rendererVk->recordDrawCommands(cmd, m_currentFrame, pw, ph, px, py);
     }
 
     if (m_uiOpacity > 0.0f) {
@@ -509,19 +500,4 @@ void App::drawFrame() {
     }
 
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-}
-
-void App::refreshPreviewTextureDescriptor() {
-    if (m_previewTexID != 0) {
-        ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_previewTexID);
-        m_previewTexID = 0;
-    }
-    if (m_rendererVk) {
-        m_previewTexID = (ImTextureID)ImGui_ImplVulkan_AddTexture(
-            m_rendererVk->m_previewSampler,
-            m_rendererVk->m_previewImageView,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        m_previewImageW = m_rendererVk->getImageWidth();
-        m_previewImageH = m_rendererVk->getImageHeight();
-    }
 }

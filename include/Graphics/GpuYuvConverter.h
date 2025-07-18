@@ -20,21 +20,6 @@ public:
 
     bool convertToFrame(const uint16_t* raw, int width, int height, AVFrame* frame,
                         const GpuColorParams& params);
-
-    static void convertRawToRgbPreview(
-        VkDevice device,
-        VkCommandBuffer cmd,
-        VkDescriptorSet descSet,
-        VkPipeline pipeline,
-        VkPipelineLayout layout,
-        VkImageView rawView,
-        VkImageView outView,
-        uint32_t width,
-        uint32_t height,
-        uint32_t cfa,
-        uint32_t black,
-        uint32_t white,
-        const float* colMat);
 private:
     Renderer_VK* m_renderer;
 

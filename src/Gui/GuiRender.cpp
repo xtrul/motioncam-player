@@ -194,16 +194,8 @@ namespace GuiOverlay {
         ImGui::Begin("ConverterMain", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground);
 
         ImGui::BeginChild("FileListPanel", ImVec2(vp->WorkSize.x * 0.5f, vp->WorkSize.y - 150), true);
-
-        ImGuiChildFlags previewChildFlags =
-            ImGuiChildFlags_Borders |
-            ImGuiChildFlags_AlwaysUseWindowPadding;
-        ImGuiWindowFlags previewFlags =
-            ImGuiWindowFlags_NoTitleBar |
-            ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoMove;
-        ImGui::BeginChild("PreviewArea", ImVec2(0, 300), previewChildFlags, previewFlags);
+        if (ImGui::CollapsingHeader("Preview", &appInstance->m_previewOpen, ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::BeginChild("PreviewArea", ImVec2(0, 220), true);
             ImVec2 innerPos = ImGui::GetWindowPos();
             ImVec2 innerSize = ImGui::GetWindowSize();
             appInstance->m_previewRect.x = (int)(innerPos.x - vp->WorkPos.x);
@@ -277,17 +269,12 @@ namespace GuiOverlay {
             std::string curTimeStr = GuiUtils::format_mm_ss(curTime);
             std::string totalTimeStr = GuiUtils::format_mm_ss(totalTime);
             ImGui::Text("%s / %s  Frame %zu / %zu", curTimeStr.c_str(), totalTimeStr.c_str(), curIdx, total);
-
-            ImVec2 avail = ImGui::GetContentRegionAvail();
-            if (appInstance->m_previewTexID != 0 && avail.x > 0 && avail.y > 0)
-            {
-                ImGui::Image(appInstance->m_previewTexID,
-                             avail,
-                             ImVec2(0,1), ImVec2(1,0));
-            }
-
             ImGui::EndChild();
             ImGui::Separator();
+        } else {
+            appInstance->m_previewRect.w = 0;
+            appInstance->m_previewRect.h = 0;
+        }
 
         if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
         ImGui::SameLine();

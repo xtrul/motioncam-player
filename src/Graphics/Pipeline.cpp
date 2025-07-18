@@ -105,17 +105,10 @@ namespace Pipeline {
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicState.pDynamicStates = dynamicStates.data();
 
-        VkPushConstantRange pcRange{};
-        pcRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        pcRange.offset     = 0;
-        pcRange.size       = sizeof(Renderer_VK::PreviewPushConstants);
-
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &renderer->m_descriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 1;
-        pipelineLayoutInfo.pPushConstantRanges = &pcRange;
         VK_CHECK_RENDERER(vkCreatePipelineLayout(renderer->m_device_p, &pipelineLayoutInfo, nullptr, &renderer->m_pipelineLayout));
         LogToFile("[Pipeline::createGraphicsPipeline] Pipeline layout created.");
 
