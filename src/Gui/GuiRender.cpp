@@ -215,8 +215,8 @@ namespace GuiOverlay {
             appInstance->m_previewRect.y = (int)(innerPos.y - vp->WorkPos.y);
             appInstance->m_previewRect.w = (int)avail.x;
             appInstance->m_previewRect.h = (int)avail.y;
-            if (appInstance->m_previewTex)
-                ImGui::Image(appInstance->m_previewTex, avail, ImVec2(0,1), ImVec2(1,0));
+            if (appInstance->m_previewTexID)
+                ImGui::Image(appInstance->m_previewTexID, avail, ImVec2(0,1), ImVec2(1,0));
         ImGui::EndChild();
         ImGui::PopStyleColor();
         ImGui::Separator();

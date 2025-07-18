@@ -76,6 +76,9 @@ public:
     int getImageHeight() const;
     void resetDimensions();
     void ensureRawImageCapacity(uint32_t w, uint32_t h);
+    void runPreviewCompute(VkCommandBuffer cmd, int width, int height,
+                           float black, float white, const glm::mat3& ccm,
+                           float wbR, float wbG, float wbB, int cfa);
 
     // Public members needed by helper namespaces (e.g., ImageResource, Pipeline, Descriptor)
     // These allow the namespaced functions to operate on Renderer_VK's state.
@@ -90,6 +93,11 @@ public:
     VkImageView m_rawImageView = VK_NULL_HANDLE;
     VkSampler m_rawImageSampler = VK_NULL_HANDLE;
 
+    VkImage m_previewImage = VK_NULL_HANDLE;
+    VmaAllocation m_previewImageAlloc = VK_NULL_HANDLE;
+    VkImageView m_previewView = VK_NULL_HANDLE;
+    VkSampler m_previewSampler = VK_NULL_HANDLE;
+
     std::vector<VkBuffer> m_uniformBuffers;
     std::vector<VmaAllocation> m_uniformBufferAllocations;
     std::vector<void*> m_uniformBuffersMapped;
@@ -99,6 +107,12 @@ public:
     VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> m_descriptorSets;
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
+
+    VkPipeline m_previewPipeline = VK_NULL_HANDLE;
+    VkPipelineLayout m_previewPipelineLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_previewSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_previewDescPool = VK_NULL_HANDLE;
+    VkDescriptorSet m_previewDescSet = VK_NULL_HANDLE;
 
     uint32_t m_swapChainImageCount = 0; // Needed by Descriptor helpers
 
@@ -147,6 +161,8 @@ private:
     friend void Descriptor::updateDescriptorSetsWithNewRawImage(Renderer_VK* renderer);
     friend bool Descriptor::createUniformBuffers(Renderer_VK* renderer);
     friend void Descriptor::cleanupUniformBuffers(Renderer_VK* renderer);
+    friend bool ImageResource::createPreviewImage(Renderer_VK* renderer, int width, int height);
+    friend void ImageResource::cleanupPreviewImage(Renderer_VK* renderer);
 };
 
 #endif // RENDERER_VK_H

@@ -16,7 +16,11 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+#include <filesystem>
 #include <glm/gtc/matrix_transform.hpp>
+#include <filesystem>
+
+extern std::string g_AppBasePath;
 
 
 Renderer_VK::Renderer_VK(VkPhysicalDevice physicalDevice, VkDevice device, VmaAllocator allocator, VkQueue graphicsQueue, VkCommandPool commandPool)
@@ -33,6 +37,11 @@ Renderer_VK::Renderer_VK(VkPhysicalDevice physicalDevice, VkDevice device, VmaAl
     m_pipelineLayout(VK_NULL_HANDLE),
     m_graphicsPipeline(VK_NULL_HANDLE),
     m_descriptorPool(VK_NULL_HANDLE),
+    m_previewPipeline(VK_NULL_HANDLE),
+    m_previewPipelineLayout(VK_NULL_HANDLE),
+    m_previewSetLayout(VK_NULL_HANDLE),
+    m_previewDescPool(VK_NULL_HANDLE),
+    m_previewDescSet(VK_NULL_HANDLE),
     m_currentRawW(0), m_currentRawH(0),
     m_zoomNativePixels(false),
     m_panX(0.0f), m_panY(0.0f),
@@ -54,6 +63,70 @@ bool Renderer_VK::init(VkRenderPass renderPass, uint32_t swapChainImageCount) {
 
     if (!ImageResource::createRawImageResources(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create initial raw image resources."); return false; }
     LogToFile("[Renderer_VK::init] Initial raw image resources created.");
+    if (!ImageResource::createPreviewImage(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create preview image."); return false; }
+    LogToFile("[Renderer_VK::init] Preview image created.");
+
+    {
+        namespace fs = std::filesystem;
+        fs::path spv = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_rgba.comp.spv";
+        auto code = VulkanHelpers::readFile(spv.string());
+        VkShaderModule mod = VulkanHelpers::createShaderModule(m_device_p, code);
+
+        VkDescriptorSetLayoutBinding binds[2]{};
+        binds[0].binding = 0;
+        binds[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        binds[0].descriptorCount = 1;
+        binds[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        binds[1].binding = 1;
+        binds[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        binds[1].descriptorCount = 1;
+        binds[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutCreateInfo lci{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+        lci.bindingCount = 2;
+        lci.pBindings = binds;
+        VK_CHECK_RENDERER(vkCreateDescriptorSetLayout(m_device_p, &lci, nullptr, &m_previewSetLayout));
+
+        VkPushConstantRange pcr{};
+        pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pcr.offset = 0;
+        pcr.size = 80;
+
+        VkPipelineLayoutCreateInfo pli{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+        pli.setLayoutCount = 1;
+        pli.pSetLayouts = &m_previewSetLayout;
+        pli.pushConstantRangeCount = 1;
+        pli.pPushConstantRanges = &pcr;
+        VK_CHECK_RENDERER(vkCreatePipelineLayout(m_device_p, &pli, nullptr, &m_previewPipelineLayout));
+
+        VkPipelineShaderStageCreateInfo stage{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+        stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stage.module = mod;
+        stage.pName = "main";
+
+        VkComputePipelineCreateInfo cpi{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+        cpi.stage = stage;
+        cpi.layout = m_previewPipelineLayout;
+        VK_CHECK_RENDERER(vkCreateComputePipelines(m_device_p, VK_NULL_HANDLE, 1, &cpi, nullptr, &m_previewPipeline));
+        vkDestroyShaderModule(m_device_p, mod, nullptr);
+
+        VkDescriptorPoolSize ps[2]{};
+        ps[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        ps[0].descriptorCount = 1;
+        ps[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        ps[1].descriptorCount = 1;
+        VkDescriptorPoolCreateInfo pci{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+        pci.maxSets = 1;
+        pci.poolSizeCount = 2;
+        pci.pPoolSizes = ps;
+        VK_CHECK_RENDERER(vkCreateDescriptorPool(m_device_p, &pci, nullptr, &m_previewDescPool));
+
+        VkDescriptorSetAllocateInfo ai{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+        ai.descriptorPool = m_previewDescPool;
+        ai.descriptorSetCount = 1;
+        ai.pSetLayouts = &m_previewSetLayout;
+        VK_CHECK_RENDERER(vkAllocateDescriptorSets(m_device_p, &ai, &m_previewDescSet));
+    }
 
     onSwapChainRecreated(renderPass, swapChainImageCount);
 
@@ -65,11 +138,29 @@ void Renderer_VK::cleanup() {
     LogToFile("[Renderer_VK::cleanup] Starting cleanup...");
     Pipeline::cleanupSwapChainResources(this);
     ImageResource::cleanupRawImageResources(this);
+    ImageResource::cleanupPreviewImage(this);
 
     if (m_descriptorSetLayout != VK_NULL_HANDLE) {
         LogToFile("[Renderer_VK::cleanup] Destroying descriptor set layout.");
         vkDestroyDescriptorSetLayout(m_device_p, m_descriptorSetLayout, nullptr);
         m_descriptorSetLayout = VK_NULL_HANDLE;
+    }
+
+    if (m_previewPipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(m_device_p, m_previewPipeline, nullptr);
+        m_previewPipeline = VK_NULL_HANDLE;
+    }
+    if (m_previewPipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(m_device_p, m_previewPipelineLayout, nullptr);
+        m_previewPipelineLayout = VK_NULL_HANDLE;
+    }
+    if (m_previewSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(m_device_p, m_previewSetLayout, nullptr);
+        m_previewSetLayout = VK_NULL_HANDLE;
+    }
+    if (m_previewDescPool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(m_device_p, m_previewDescPool, nullptr);
+        m_previewDescPool = VK_NULL_HANDLE;
     }
     LogToFile("[Renderer_VK::cleanup] Cleanup complete.");
 }
@@ -258,6 +349,11 @@ void Renderer_VK::prepareAndUploadFrameData(
     m_currentOrientationDegrees = ubo.orientationDegrees;
 
     updateUniformBuffer(uboBindingIndex, ubo);
+
+    runPreviewCompute(commandBuffer, frameWidth, frameHeight,
+                      blackLvl, whiteLvl, ccm3x3_glm,
+                      ubo.gainR, ubo.gainG, ubo.gainB,
+                      cfaTypeOverride);
 }
 
 void Renderer_VK::recordDrawCommands(
@@ -377,4 +473,78 @@ void Renderer_VK::ensureRawImageCapacity(uint32_t w, uint32_t h)
         LogToFile("[Renderer_VK::ensureRawImageCapacity] ERROR: Failed to recreate raw image resources for new capacity.");
         throw std::runtime_error("Failed to ensure raw image capacity by recreating resources.");
     }
+    ImageResource::createPreviewImage(this, static_cast<int>(w), static_cast<int>(h));
+}
+
+void Renderer_VK::runPreviewCompute(VkCommandBuffer cmd, int width, int height,
+                                    float black, float white,
+                                    const glm::mat3& ccm,
+                                    float wbR, float wbG, float wbB,
+                                    int cfa)
+{
+    VkDescriptorImageInfo inInfo{};
+    inInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    inInfo.imageView = m_rawImageView;
+
+    VkDescriptorImageInfo outInfo{};
+    outInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    outInfo.imageView = m_previewView;
+
+    VkWriteDescriptorSet wr[2]{};
+    wr[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    wr[0].dstSet = m_previewDescSet;
+    wr[0].dstBinding = 0;
+    wr[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    wr[0].descriptorCount = 1;
+    wr[0].pImageInfo = &inInfo;
+    wr[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    wr[1].dstSet = m_previewDescSet;
+    wr[1].dstBinding = 1;
+    wr[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    wr[1].descriptorCount = 1;
+    wr[1].pImageInfo = &outInfo;
+    vkUpdateDescriptorSets(m_device_p, 2, wr, 0, nullptr);
+
+    VkImageMemoryBarrier barriers[2]{};
+    barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barriers[0].image = m_rawImage;
+    barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barriers[0].subresourceRange.levelCount = 1;
+    barriers[0].subresourceRange.layerCount = 1;
+    barriers[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    barriers[1] = barriers[0];
+    barriers[1].image = m_previewImage;
+    barriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         0, 0, nullptr, 0, nullptr, 2, barriers);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_previewPipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_previewPipelineLayout,
+                            0, 1, &m_previewDescSet, 0, nullptr);
+
+    struct PC {
+        uint32_t w, h, cfa;
+        float wbR, wbG, wbB;
+        glm::mat3 ccm;
+        uint32_t black, white;
+    } pc{ (uint32_t)width,(uint32_t)height,(uint32_t)cfa, wbR, wbG, wbB, ccm, (uint32_t)black, (uint32_t)white };
+
+    vkCmdPushConstants(cmd, m_previewPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PC), &pc);
+    vkCmdDispatch(cmd, (uint32_t)((width + 15)/16), (uint32_t)((height + 15)/16), 1);
+
+    barriers[1].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    barriers[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barriers[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0, 0,nullptr,0,nullptr,1,&barriers[1]);
 }
