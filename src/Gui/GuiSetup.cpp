@@ -18,6 +18,9 @@
 #include <filesystem>
 #include <cstdio> // For fprintf, abort
 
+#ifndef ImGuiConfigFlags_ViewportsEnable
+#define ImGuiConfigFlags_ViewportsEnable (1 << 10)
+#endif
 // For App::QueueFamilyIndices, if not fully defined in App.h
 // Assuming App.h has the full definition or it's accessible.
 
@@ -35,7 +38,14 @@ namespace GuiOverlay {
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
         // Ensure all ImGui windows stay inside the main GLFW window
-        io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+        ImGuiStyle& style = ImGui::GetStyle();
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            style.WindowRounding = 0.0f;
+            style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+        }
 
         // Explicitly set ini file location so it stays in the application folder
         g_ImGuiIniPath = (std::filesystem::path(g_AppBasePath) / "imgui.ini").string();
