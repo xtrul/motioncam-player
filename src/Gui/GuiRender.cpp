@@ -197,24 +197,37 @@ namespace GuiOverlay {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::SetNextWindowViewport(viewport->ID);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
         window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
         window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-
+        
+        // Make the dockspace window transparent so the Vulkan content can be seen
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::Begin("MainDockSpace", nullptr, window_flags);
+        ImGui::PopStyleColor();
         ImGui::PopStyleVar(3);
 
-#if IMGUI_HAS_DOCK
+        // Create the dockspace and make the central node a transparent passthrough area for our video
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-#endif
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 
+        // Update the preview rect to match the central node of the dockspace
+        if (auto* central_node = ImGui::DockBuilderGetCentralNode(dockspace_id)) {
+            appInstance->m_previewRect = {(int)central_node->Pos.x, (int)central_node->Pos.y, (int)central_node->Size.x, (int)central_node->Size.y};
+        } else {
+            appInstance->m_previewRect = {0,0,0,0}; // No central node, no preview
+        }
+
+        // --- All other UI windows will now dock into this space ---
+        
         // 1. Files Panel
         if (ImGui::Begin("Files")) {
+            // ... (contents of the Files panel are unchanged) ...
             if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
             if (ImGui::Button("Remove")) {
@@ -244,20 +257,9 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Preview Panel
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-        if (ImGui::Begin("Preview")) {
-            ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImVec2 size = ImGui::GetContentRegionAvail();
-            appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y)};
-        } else {
-            appInstance->m_previewRect = {0, 0, 0, 0};
-        }
-        ImGui::End();
-        ImGui::PopStyleVar();
-
-        // 3. Controls & Export Panel
-        if (ImGui::Begin("Controls & Export")) {
+        // 2. Controls, Export, and Log Panel (combined for simplicity)
+        if (ImGui::Begin("Controls, Export & Log")) {
+            // Playback Controls
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
             if (ImGui::Button(paused ? "Play" : "Pause")) {
                 if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
@@ -281,6 +283,7 @@ namespace GuiOverlay {
 
             ImGui::Separator();
 
+            // Export Settings
             if (appInstance->m_selectedBatchIndex != -1) {
                 int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
                 ImGui::Text("Export Format:");
@@ -292,7 +295,6 @@ namespace GuiOverlay {
                 ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
                 appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
             }
-
             ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
@@ -302,11 +304,10 @@ namespace GuiOverlay {
             if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
                 appInstance->startBatchConversion();
             }
-        }
-        ImGui::End();
+            ImGui::Separator();
 
-        // 4. Log Panel
-        if (ImGui::Begin("Log")) {
+            // Log Panel
+            ImGui::Text("Log:");
             ImGui::BeginChild("ScrollingLog");
             for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
@@ -317,6 +318,7 @@ namespace GuiOverlay {
         ImGui::End(); // End MainDockSpace
 
 #else
+       // Player UI (unchanged)
         if (!appInstance) return;
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appInstance->m_uiOpacity);
         UIData ui = GuiOverlay::gatherData(appInstance);
