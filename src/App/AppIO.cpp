@@ -538,6 +538,12 @@ void App::loadFileAtIndex(int index) {
 
     if (m_playbackController_ptr && m_audio) {
         m_audio->setPaused(m_playbackController_ptr->isPaused());
+        // Explicitly ensure we are paused after loading a new file.
+        if (!m_playbackController_ptr->isPaused()) {
+            LogToFile("[App::loadFileAtIndex] Forcing pause state after load.");
+            m_playbackController_ptr->togglePause();
+            m_audio->setPaused(true);
+        }
     }
 
     m_ioThreadFileCv.notify_all();
