@@ -6,6 +6,7 @@
 #include "Graphics/Pipeline.h"
 #include "Graphics/Descriptor.h"
 #include "Graphics/VulkanHelpers.h"
+#include "Graphics/ShaderTypes.h"
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 #include "Utils/OrientationUtils.h"

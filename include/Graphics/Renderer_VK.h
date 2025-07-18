@@ -16,11 +16,11 @@
 #include "vma_usage.h" 
 #include "Utils/RawFrameBuffer.h" // For RawBytes
 
-// Include new sub-module headers
 #include "Graphics/VulkanHelpers.h"
-#include "Graphics/ImageResource.h" // ADD THIS LINE
-#include "Graphics/Pipeline.h"      // ADD THIS LINE
-#include "Graphics/Descriptor.h"    // ADD THIS LINE
+#include "Graphics/ImageResource.h"
+#include "Graphics/Pipeline.h"
+#include "Graphics/Descriptor.h"
+#include "Graphics/ShaderTypes.h"
 #include "Utils/OrientationUtils.h"
 // For VK_CHECK_RENDERER, if used, and helper function declarations
 // Other headers like ImageResource.h, Pipeline.h, Descriptor.h are not directly included here
@@ -101,21 +101,6 @@ public:
     uint32_t m_swapChainImageCount = 0; // Needed by Descriptor helpers
 
 private:
-    struct ShaderParamsUBO {
-        alignas(4) int W;
-        alignas(4) int H;
-        alignas(4) int cfaType;
-        alignas(4) float exposure;
-        alignas(4) float blackLevel;
-        alignas(4) float whiteLevel;
-        alignas(4) float invBlackWhiteRange;
-        alignas(4) float gainR;
-        alignas(4) float gainG;
-        alignas(4) float gainB;
-        alignas(16) glm::mat4 CCM;
-        alignas(4) float saturationAdjustment;
-        alignas(4) int orientationDegrees;
-    };
 
     // Internal state not directly manipulated by namespaced helpers
     int m_currentRawW = 0;

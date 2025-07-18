@@ -253,41 +253,19 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
-set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
-
-target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
-
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    avcodec.lib
-    avformat.lib
-    avutil.lib
-    swscale.lib
-    swresample.lib
-)
+if(HAVE_FFMPEG)
+    message(STATUS "Linking FFmpeg libraries...")
+    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
+else()
+    message(STATUS "FFmpeg not found, linking will be skipped.")
+endif()
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
     if(HAVE_FFMPEG)
-        # Copy required FFmpeg runtime DLLs next to the executable
-        set(FFMPEG_RUNTIME_DIR "C:/dev/vcpkg/installed/x64-windows/bin")
-        foreach(dll IN ITEMS avcodec-61.dll avformat-61.dll avutil-59.dll swscale-8.dll swresample-5.dll avfilter-10.dll)
-            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${FFMPEG_RUNTIME_DIR}/${dll}"
-                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${dll}"
-                COMMENT "Copying ${dll}"
-            )
-        endforeach()
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${FFMPEG_RUNTIME_DIR}/avfilter-10.pdb"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/avfilter-10.pdb"
-            COMMENT "Copying avfilter-10.pdb"
-        )
+        message(STATUS "Windows Build with FFmpeg: Ensure FFmpeg DLLs are in the runtime directory or PATH.")
     endif()
 endif()
 
