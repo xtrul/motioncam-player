@@ -10,10 +10,10 @@
 
 double PlaybackController::s_displayFps = 0.0;
 
-PlaybackController::PlaybackController() : m_isPaused(false) {
+PlaybackController::PlaybackController() : m_isPaused(true) {
     m_fpsAvgStart = std::chrono::steady_clock::now();
     m_lastBenchmarkTime = m_fpsAvgStart;
-    LogToFile("[PlaybackController] Constructor: Initialized, paused = false.");
+    LogToFile("[PlaybackController] Constructor: Initialized, paused = true (default).");
 }
 
 void PlaybackController::handleKey(int key, GLFWwindow* /*window*/) {
