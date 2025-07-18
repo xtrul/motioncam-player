@@ -34,6 +34,10 @@ namespace GuiOverlay {
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+        // Ensure all ImGui windows stay inside the main GLFW window.
+#ifdef ImGuiConfigFlags_ViewportsEnable
+        io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
+#endif
 
         // Explicitly set ini file location so it stays in the application folder
         g_ImGuiIniPath = (std::filesystem::path(g_AppBasePath) / "imgui.ini").string();
