@@ -74,6 +74,8 @@ public:
     float getPanY() const;
     int getImageWidth() const;
     int getImageHeight() const;
+    int getPreviewWidth() const { return m_previewW; }
+    int getPreviewHeight() const { return m_previewH; }
     void resetDimensions();
     void ensureRawImageCapacity(uint32_t w, uint32_t h);
 
@@ -89,6 +91,13 @@ public:
     VmaAllocation m_rawImageAllocation = VK_NULL_HANDLE;
     VkImageView m_rawImageView = VK_NULL_HANDLE;
     VkSampler m_rawImageSampler = VK_NULL_HANDLE;
+
+    VkImage m_previewImage = VK_NULL_HANDLE;
+    VmaAllocation m_previewAllocation = VK_NULL_HANDLE;
+    VkImageView m_previewView = VK_NULL_HANDLE;
+    VkSampler m_previewSampler = VK_NULL_HANDLE;
+    int m_previewW = 0;
+    int m_previewH = 0;
 
     std::vector<VkBuffer> m_uniformBuffers;
     std::vector<VmaAllocation> m_uniformBufferAllocations;

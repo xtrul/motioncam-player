@@ -6,6 +6,9 @@
 #include "Graphics/Pipeline.h"
 #include "Graphics/Descriptor.h"
 #include "Graphics/VulkanHelpers.h"
+#include "Graphics/GpuYuvConverter.h"
+#include "Graphics/GpuColorParams.h"
+#include "Graphics/GpuColorParams.h"
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 #include "Utils/OrientationUtils.h"
@@ -54,6 +57,7 @@ bool Renderer_VK::init(VkRenderPass renderPass, uint32_t swapChainImageCount) {
 
     if (!ImageResource::createRawImageResources(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create initial raw image resources."); return false; }
     LogToFile("[Renderer_VK::init] Initial raw image resources created.");
+    if (!ImageResource::createPreviewImage(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create initial preview image."); return false; }
 
     onSwapChainRecreated(renderPass, swapChainImageCount);
 
@@ -65,6 +69,7 @@ void Renderer_VK::cleanup() {
     LogToFile("[Renderer_VK::cleanup] Starting cleanup...");
     Pipeline::cleanupSwapChainResources(this);
     ImageResource::cleanupRawImageResources(this);
+    ImageResource::cleanupPreviewImage(this);
 
     if (m_descriptorSetLayout != VK_NULL_HANDLE) {
         LogToFile("[Renderer_VK::cleanup] Destroying descriptor set layout.");
@@ -258,6 +263,21 @@ void Renderer_VK::prepareAndUploadFrameData(
     m_currentOrientationDegrees = ubo.orientationDegrees;
 
     updateUniformBuffer(uboBindingIndex, ubo);
+
+    bool previewSizeChanged = (m_previewImage == VK_NULL_HANDLE || frameWidth != m_previewW || frameHeight != m_previewH);
+    if (previewSizeChanged) {
+        ImageResource::createPreviewImage(this, frameWidth, frameHeight);
+    }
+
+    GpuColorParams p{};
+    p.wbR = ubo.gainR; p.wbG = ubo.gainG; p.wbB = ubo.gainB;
+    for(int c=0;c<3;++c) for(int r=0;r<3;++r) p.colorMatrix[c*3+r] = ccm3x3_glm[r][c];
+    p.cfaType = cfaTypeOverride;
+    p.black = static_cast<unsigned int>(ubo.blackLevel);
+    p.white = static_cast<unsigned int>(ubo.whiteLevel);
+    GpuYuvConverter::convertRawToRgbPreview(commandBuffer, this,
+                                            m_rawImage, m_previewImage,
+                                            frameWidth, frameHeight, p);
 }
 
 void Renderer_VK::recordDrawCommands(

@@ -207,8 +207,8 @@ namespace Descriptor {
             LogToFile("[Descriptor::updateDescriptorSetsWithNewRawImage] No descriptor sets to update.");
             return;
         }
-        if (renderer->m_rawImageView == VK_NULL_HANDLE || renderer->m_rawImageSampler == VK_NULL_HANDLE) {
-            LogToFile("[Descriptor::updateDescriptorSetsWithNewRawImage] ERROR: Cannot update. Raw image view or sampler is invalid.");
+        if (renderer->m_previewView == VK_NULL_HANDLE || renderer->m_previewSampler == VK_NULL_HANDLE) {
+            LogToFile("[Descriptor::updateDescriptorSetsWithNewRawImage] ERROR: Cannot update. Preview image view or sampler is invalid.");
             return;
         }
         LogToFile(std::string("[Descriptor::updateDescriptorSetsWithNewRawImage] Updating ") + std::to_string(renderer->m_descriptorSets.size()) + " descriptor sets.");
@@ -228,8 +228,8 @@ namespace Descriptor {
 
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = renderer->m_rawImageView;
-            imageInfo.sampler = renderer->m_rawImageSampler;
+            imageInfo.imageView = renderer->m_previewView;
+            imageInfo.sampler = renderer->m_previewSampler;
 
             VkDescriptorBufferInfo bufferInfo{};
             bufferInfo.buffer = renderer->m_uniformBuffers[i];

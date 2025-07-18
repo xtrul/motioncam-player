@@ -198,27 +198,15 @@ namespace GuiOverlay {
 
         ImGui::BeginChild("FileListPanel", ImVec2(vp->WorkSize.x * 0.5f, vp->WorkSize.y - 150), true);
 
-        ImGuiChildFlags previewChildFlags =
-            ImGuiChildFlags_AlwaysUseWindowPadding;
-        ImGuiWindowFlags previewFlags =
-            ImGuiWindowFlags_NoTitleBar |
-            ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoScrollbar;
-
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.1f, 1.0f));
-        ImGui::BeginChild("PreviewArea", ImVec2(0, 0), previewChildFlags, previewFlags);
-            ImVec2 innerPos  = ImGui::GetWindowPos();
-            ImVec2 avail     = ImGui::GetContentRegionAvail();
-            appInstance->m_previewRect.x = (int)(innerPos.x - vp->WorkPos.x);
-            appInstance->m_previewRect.y = (int)(innerPos.y - vp->WorkPos.y);
-            appInstance->m_previewRect.w = (int)avail.x;
-            appInstance->m_previewRect.h = (int)avail.y;
-            if (appInstance->m_previewTex)
-                ImGui::Image(appInstance->m_previewTex, avail, ImVec2(0,1), ImVec2(1,0));
+        ImGui::BeginChild("Preview", ImVec2(0, 240), true,
+                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                       ImGuiWindowFlags_AlwaysUseWindowPadding);
+        if (appInstance->m_previewTex)
+            ImGui::Image(appInstance->m_previewTex,
+                         ImGui::GetContentRegionAvail(),
+                         ImVec2(0,1), ImVec2(1,0));
         ImGui::EndChild();
-        ImGui::PopStyleColor();
         ImGui::Separator();
 
         if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }

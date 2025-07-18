@@ -511,13 +511,13 @@ void App::drawFrame() {
 void App::updatePreviewDescriptor() {
     if (m_previewTex == 0 || !m_rendererVk) return;
 
-    int newW = m_rendererVk->getImageWidth();
-    int newH = m_rendererVk->getImageHeight();
+    int newW = m_rendererVk->getPreviewWidth();
+    int newH = m_rendererVk->getPreviewHeight();
     if (newW == m_previewWidth && newH == m_previewHeight)
         return;
 
-    m_previewDesc.sampler = m_rendererVk->m_rawImageSampler;
-    m_previewDesc.imageView = m_rendererVk->m_rawImageView;
+    m_previewDesc.sampler = m_rendererVk->m_previewSampler;
+    m_previewDesc.imageView = m_rendererVk->m_previewView;
     m_previewDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkWriteDescriptorSet write{};

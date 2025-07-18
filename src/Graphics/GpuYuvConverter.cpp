@@ -458,3 +458,96 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
     return true;
 }
+
+void GpuYuvConverter::convertRawToRgbPreview(VkCommandBuffer cmd,
+                                             Renderer_VK* renderer,
+                                             VkImage rawImage, VkImage outImage,
+                                             int width, int height,
+                                             const GpuColorParams& params) {
+    struct PCData {
+        uint32_t width, height, cfaType, pad0;
+        float wbR, wbG, wbB, pad1;
+        float colMat[12];
+        uint32_t black, white;
+    };
+
+    static VkPipeline pipeline = VK_NULL_HANDLE;
+    static VkPipelineLayout layout = VK_NULL_HANDLE;
+    static VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
+    static VkDescriptorPool pool = VK_NULL_HANDLE;
+    static VkDescriptorSet set = VK_NULL_HANDLE;
+
+    if (pipeline == VK_NULL_HANDLE) {
+        namespace fs = std::filesystem;
+        fs::path shaderPath = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_rgba.comp.spv";
+        auto code = VulkanHelpers::readFile(shaderPath.string());
+        VkShaderModule module = VulkanHelpers::createShaderModule(renderer->m_device_p, code);
+
+        VkDescriptorSetLayoutBinding b[2]{};
+        b[0].binding = 0; b[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; b[0].descriptorCount = 1; b[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        b[1].binding = 1; b[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; b[1].descriptorCount = 1; b[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        VkDescriptorSetLayoutCreateInfo dslci{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+        dslci.bindingCount = 2; dslci.pBindings = b;
+        VK_CHECK_RENDERER(vkCreateDescriptorSetLayout(renderer->m_device_p, &dslci, nullptr, &dsl));
+
+        VkPushConstantRange pc{ VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PCData) };
+        VkPipelineLayoutCreateInfo plci{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+        plci.setLayoutCount = 1; plci.pSetLayouts = &dsl; plci.pushConstantRangeCount = 1; plci.pPushConstantRanges = &pc;
+        VK_CHECK_RENDERER(vkCreatePipelineLayout(renderer->m_device_p, &plci, nullptr, &layout));
+
+        VkPipelineShaderStageCreateInfo stage{ VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO };
+        stage.stage = VK_SHADER_STAGE_COMPUTE_BIT; stage.module = module; stage.pName = "main";
+
+        VkComputePipelineCreateInfo ci{ VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO };
+        ci.stage = stage; ci.layout = layout;
+        VK_CHECK_RENDERER(vkCreateComputePipelines(renderer->m_device_p, VK_NULL_HANDLE, 1, &ci, nullptr, &pipeline));
+        vkDestroyShaderModule(renderer->m_device_p, module, nullptr);
+
+        VkDescriptorPoolSize ps[2]{};
+        ps[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; ps[0].descriptorCount = 1;
+        ps[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; ps[1].descriptorCount = 1;
+        VkDescriptorPoolCreateInfo pci{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+        pci.maxSets = 1; pci.poolSizeCount = 2; pci.pPoolSizes = ps;
+        VK_CHECK_RENDERER(vkCreateDescriptorPool(renderer->m_device_p, &pci, nullptr, &pool));
+
+        VkDescriptorSetAllocateInfo ai{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+        ai.descriptorPool = pool; ai.descriptorSetCount = 1; ai.pSetLayouts = &dsl;
+        VK_CHECK_RENDERER(vkAllocateDescriptorSets(renderer->m_device_p, &ai, &set));
+    }
+
+    VkDescriptorImageInfo inInfo{ renderer->m_rawImageSampler, renderer->m_rawImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+    VkDescriptorImageInfo outInfo{ nullptr, renderer->m_previewView, VK_IMAGE_LAYOUT_GENERAL };
+    VkWriteDescriptorSet writes[2]{};
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; writes[0].dstSet = set; writes[0].dstBinding = 0; writes[0].descriptorCount = 1; writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; writes[0].pImageInfo = &inInfo;
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; writes[1].dstSet = set; writes[1].dstBinding = 1; writes[1].descriptorCount = 1; writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; writes[1].pImageInfo = &outInfo;
+    vkUpdateDescriptorSets(renderer->m_device_p, 2, writes, 0, nullptr);
+
+    VkImageMemoryBarrier pre{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+    pre.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    pre.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    pre.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    pre.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    pre.image = outImage;
+    pre.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
+    pre.srcAccessMask = 0; pre.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,0,nullptr,0,nullptr,1,&pre);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, 1, &set, 0, nullptr);
+
+    PCData pc{};
+    pc.width = width; pc.height = height; pc.cfaType = params.cfaType; pc.pad0 = 0;
+    pc.wbR = params.wbR; pc.wbG = params.wbG; pc.wbB = params.wbB; pc.pad1 = 0.0f;
+    for(int c=0;c<3;++c){ for(int r=0;r<3;++r){ pc.colMat[c*4+r] = params.colorMatrix[c*3+r]; } pc.colMat[c*4+3]=0.0f; }
+    pc.black = params.black; pc.white = params.white;
+
+    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PCData), &pc);
+    vkCmdDispatch(cmd, (uint32_t)((width+15)/16), (uint32_t)((height+15)/16), 1);
+
+    VkImageMemoryBarrier post{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+    post.oldLayout = VK_IMAGE_LAYOUT_GENERAL; post.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    post.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; post.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    post.image = outImage; post.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1 };
+    post.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; post.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&post);
+}
