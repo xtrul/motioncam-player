@@ -129,9 +129,11 @@ public:
     void showActionMessage(const std::string& msg);
 
 #ifdef MOTIONCAM_CONVERTER
-    ImTextureID  m_previewTex   = 0;
-    int          m_previewWidth = 0;
-    int          m_previewHeight = 0;
+    ImTextureID  m_previewTexID   = 0;
+    int          m_previewWidth   = 0;
+    int          m_previewHeight  = 0;
+    VkSampler    m_previewSampler = VK_NULL_HANDLE;
+    VkImageView  m_previewView    = VK_NULL_HANDLE;
     enum class ExportFormat {
         PRORES_CPU,
         PRORES_GPU,
