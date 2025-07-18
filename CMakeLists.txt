@@ -109,6 +109,7 @@ set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
     "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
+    "${APP_SHADERS_SRC_DIR}/raw_to_rgba.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})

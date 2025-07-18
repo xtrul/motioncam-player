@@ -279,9 +279,9 @@ namespace GuiOverlay {
             ImGui::Text("%s / %s  Frame %zu / %zu", curTimeStr.c_str(), totalTimeStr.c_str(), curIdx, total);
 
             ImVec2 avail = ImGui::GetContentRegionAvail();
-            if (appInstance->m_previewTextureSet != 0 && avail.x > 0 && avail.y > 0)
+            if (appInstance->m_previewTexID != 0 && avail.x > 0 && avail.y > 0)
             {
-                ImGui::Image(appInstance->m_previewTextureSet,
+                ImGui::Image(appInstance->m_previewTexID,
                              avail,
                              ImVec2(0,1), ImVec2(1,0));
             }

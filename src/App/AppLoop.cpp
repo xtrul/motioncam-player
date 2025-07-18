@@ -425,7 +425,7 @@ void App::drawFrame() {
             );
             if (m_rendererVk->getImageWidth() != m_previewImageW ||
                 m_rendererVk->getImageHeight() != m_previewImageH ||
-                m_previewTextureSet == 0)
+                m_previewTexID == 0)
             {
                 refreshPreviewTextureDescriptor();
             }
@@ -512,14 +512,14 @@ void App::drawFrame() {
 }
 
 void App::refreshPreviewTextureDescriptor() {
-    if (m_previewTextureSet != 0) {
-        ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_previewTextureSet);
-        m_previewTextureSet = 0;
+    if (m_previewTexID != 0) {
+        ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_previewTexID);
+        m_previewTexID = 0;
     }
     if (m_rendererVk) {
-        m_previewTextureSet = (ImTextureID)ImGui_ImplVulkan_AddTexture(
-            m_rendererVk->m_rawImageSampler,
-            m_rendererVk->m_rawImageView,
+        m_previewTexID = (ImTextureID)ImGui_ImplVulkan_AddTexture(
+            m_rendererVk->m_previewSampler,
+            m_rendererVk->m_previewImageView,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         m_previewImageW = m_rendererVk->getImageWidth();
         m_previewImageH = m_rendererVk->getImageHeight();
