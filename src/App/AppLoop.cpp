@@ -444,11 +444,10 @@ void App::drawFrame() {
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     if (renderContentFromPacket) {
-        int pw = m_previewRect.w > 0 ? m_previewRect.w : m_windowWidth;
-        int ph = m_previewRect.h > 0 ? m_previewRect.h : m_windowHeight;
-        int px = m_previewRect.x;
-        int py = m_previewRect.y;
-        m_rendererVk->recordDrawCommands(cmd, m_currentFrame, pw, ph, px, py);
+        // Draw the video to the entire swapchain (the main window background).
+        // The UI will be rendered on top of this by ImGui.
+        // We no longer use m_previewRect for positioning.
+        m_rendererVk->recordDrawCommands(cmd, m_currentFrame, m_swapChainExtent.width, m_swapChainExtent.height, 0, 0);
     }
 
     if (m_uiOpacity > 0.0f) {
