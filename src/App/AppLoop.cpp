@@ -449,7 +449,8 @@ void App::drawFrame() {
         int pw = m_previewRect.w > 0 ? m_previewRect.w : m_windowWidth;
         int ph = m_previewRect.h > 0 ? m_previewRect.h : m_windowHeight;
         int px = m_previewRect.x;
-        int py = m_previewRect.y;
+        int py_top = m_previewRect.y;
+        int py = m_windowHeight - (py_top + ph);
         float blackNorm = static_cast<float>(m_staticBlack) / 65535.0f;
         float whiteNorm = static_cast<float>(m_staticWhite) / 65535.0f;
 #ifndef MOTIONCAM_CONVERTER

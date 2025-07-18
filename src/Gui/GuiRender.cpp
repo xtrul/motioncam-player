@@ -199,6 +199,7 @@ namespace GuiOverlay {
         ImGui::BeginChild("FileListPanel", ImVec2(vp->WorkSize.x * 0.5f, vp->WorkSize.y - 150), true);
 
         ImGuiChildFlags previewChildFlags =
+            ImGuiChildFlags_Borders |
             ImGuiChildFlags_AlwaysUseWindowPadding;
         ImGuiWindowFlags previewFlags =
             ImGuiWindowFlags_NoTitleBar |
