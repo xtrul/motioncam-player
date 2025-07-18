@@ -4,6 +4,7 @@
 #include "Decoder/DecoderWrapper.h"
 #include "Playback/PlaybackController.h"
 #include "Graphics/Renderer_VK.h"
+#include "Graphics/ImageResource.h"
 #include "Utils/DebugLog.h"
 #include "Gui/GuiOverlay.h"
 #include <imgui_impl_vulkan.h>
@@ -215,6 +216,7 @@ void App::cleanupVulkan() {
         ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_previewTex);
         m_previewTex = 0;
     }
+    ImageResource::cleanupPreviewImage(m_rendererVk.get());
 
     if (m_imguiDescriptorPool != VK_NULL_HANDLE) {
         LogToFile("[App::cleanupVulkan] Destroying ImGui descriptor pool...");

@@ -228,8 +228,8 @@ namespace Descriptor {
 
             VkDescriptorImageInfo imageInfo{};
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = renderer->m_rawImageView;
-            imageInfo.sampler = renderer->m_rawImageSampler;
+            imageInfo.imageView = renderer->m_previewView;
+            imageInfo.sampler = renderer->m_previewSampler;
 
             VkDescriptorBufferInfo bufferInfo{};
             bufferInfo.buffer = renderer->m_uniformBuffers[i];

@@ -21,6 +21,7 @@
 
 #include "Playback/PlaybackController.h"
 #include "Graphics/Renderer_VK.h"
+#include "Graphics/ImageResource.h"
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 
@@ -237,6 +238,10 @@ App::App(const std::string& filePath) :
         throw std::runtime_error("Failed to initialize Renderer_VK in App constructor.");
     }
     LogToFile("App::App constr Renderer_VK initialized.");
+
+    ImageResource::createPreviewImage(m_rendererVk.get(), 1, 1);
+    m_previewWidth = 1;
+    m_previewHeight = 1;
 
     LogToFile("App::App constr Initializing ImGui Vulkan...");
     this->initImGuiVulkan();
@@ -872,11 +877,11 @@ void App::initImGuiVulkan() {
     LogToFile("App::initImGuiVulkan GuiOverlay::setup() called.");
 
     m_previewTex = (ImTextureID)ImGui_ImplVulkan_AddTexture(
-        m_rendererVk->m_rawImageSampler,
-        m_rendererVk->m_rawImageView,
+        m_rendererVk->m_previewSampler,
+        m_rendererVk->m_previewView,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    m_previewDesc.sampler = m_rendererVk->m_rawImageSampler;
-    m_previewDesc.imageView = m_rendererVk->m_rawImageView;
+    m_previewDesc.sampler = m_rendererVk->m_previewSampler;
+    m_previewDesc.imageView = m_rendererVk->m_previewView;
     m_previewDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     m_previewWidth = m_rendererVk->getImageWidth();
     m_previewHeight = m_rendererVk->getImageHeight();

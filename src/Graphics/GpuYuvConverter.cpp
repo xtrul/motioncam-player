@@ -3,6 +3,7 @@
 #include "Graphics/Renderer_VK.h"
 #include "Graphics/VulkanHelpers.h"
 #include "Graphics/ImageResource.h"
+#include <libavutil/frame.h>
 #include "Utils/DebugLog.h"
 #include <vector>
 #include <filesystem>
@@ -457,4 +458,138 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     vmaDestroyBuffer(m_renderer->m_allocator_p, stagingBuf, stagingAlloc);
     vmaDestroyBuffer(m_renderer->m_allocator_p, readbackBuf, readbackAlloc);
     return true;
+}
+
+namespace {
+struct PreviewPipeline {
+    VkPipeline pipeline{VK_NULL_HANDLE};
+    VkPipelineLayout layout{VK_NULL_HANDLE};
+    VkDescriptorSetLayout setLayout{VK_NULL_HANDLE};
+    VkDescriptorPool pool{VK_NULL_HANDLE};
+    VkDescriptorSet set{VK_NULL_HANDLE};
+    Renderer_VK* owner{nullptr};
+} g_preview;
+}
+
+static void ensurePreviewPipeline(Renderer_VK* r) {
+    if (g_preview.pipeline != VK_NULL_HANDLE && g_preview.owner == r) return;
+    if (g_preview.pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(r->m_device_p, g_preview.pipeline, nullptr);
+        vkDestroyPipelineLayout(r->m_device_p, g_preview.layout, nullptr);
+        vkDestroyDescriptorSetLayout(r->m_device_p, g_preview.setLayout, nullptr);
+        vkDestroyDescriptorPool(r->m_device_p, g_preview.pool, nullptr);
+    }
+
+    namespace fs = std::filesystem;
+    auto path = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_rgba.comp.spv";
+    auto code = VulkanHelpers::readFile(path.string());
+    VkShaderModule module = VulkanHelpers::createShaderModule(r->m_device_p, code);
+
+    VkDescriptorSetLayoutBinding b0{}; b0.binding = 0; b0.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; b0.descriptorCount = 1; b0.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    VkDescriptorSetLayoutBinding b1{}; b1.binding = 1; b1.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; b1.descriptorCount = 1; b1.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    VkDescriptorSetLayoutBinding binds[2] = {b0,b1};
+    VkDescriptorSetLayoutCreateInfo lci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    lci.bindingCount = 2; lci.pBindings = binds;
+    VK_CHECK_RENDERER(vkCreateDescriptorSetLayout(r->m_device_p, &lci, nullptr, &g_preview.setLayout));
+
+    VkPushConstantRange pc{}; pc.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT; pc.offset = 0; pc.size = 88;
+    VkPipelineLayoutCreateInfo pli{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+    pli.setLayoutCount = 1; pli.pSetLayouts = &g_preview.setLayout; pli.pushConstantRangeCount = 1; pli.pPushConstantRanges = &pc;
+    VK_CHECK_RENDERER(vkCreatePipelineLayout(r->m_device_p, &pli, nullptr, &g_preview.layout));
+
+    VkPipelineShaderStageCreateInfo stage{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    stage.stage = VK_SHADER_STAGE_COMPUTE_BIT; stage.module = module; stage.pName = "main";
+    VkComputePipelineCreateInfo cpi{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+    cpi.stage = stage; cpi.layout = g_preview.layout;
+    VK_CHECK_RENDERER(vkCreateComputePipelines(r->m_device_p, VK_NULL_HANDLE, 1, &cpi, nullptr, &g_preview.pipeline));
+    vkDestroyShaderModule(r->m_device_p, module, nullptr);
+
+    VkDescriptorPoolSize ps[2]{}; ps[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; ps[0].descriptorCount = 1; ps[1].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; ps[1].descriptorCount = 1;
+    VkDescriptorPoolCreateInfo pci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    pci.maxSets = 1; pci.poolSizeCount = 2; pci.pPoolSizes = ps;
+    VK_CHECK_RENDERER(vkCreateDescriptorPool(r->m_device_p, &pci, nullptr, &g_preview.pool));
+
+    VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    ai.descriptorPool = g_preview.pool; ai.descriptorSetCount = 1; ai.pSetLayouts = &g_preview.setLayout;
+    VK_CHECK_RENDERER(vkAllocateDescriptorSets(r->m_device_p, &ai, &g_preview.set));
+
+    g_preview.owner = r;
+}
+
+void convertRawToRgbPreview(Renderer_VK* renderer, VkCommandBuffer cmd,
+                                             VkImage rawImage, VkImage outImage,
+                                             int width, int height,
+                                             int cfaType,
+                                             float wbR, float wbG, float wbB,
+                                             const float colorMatrix[9],
+                                             uint32_t black, uint32_t white) {
+    ensurePreviewPipeline(renderer);
+
+    VkImageMemoryBarrier bar{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    bar.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    bar.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    bar.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bar.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bar.image = outImage;
+    bar.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    bar.subresourceRange.baseMipLevel = 0;
+    bar.subresourceRange.levelCount = 1;
+    bar.subresourceRange.baseArrayLayer = 0;
+    bar.subresourceRange.layerCount = 1;
+    bar.srcAccessMask = 0;
+    bar.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &bar);
+
+    VkDescriptorImageInfo inInfo{};
+    inInfo.imageView = renderer->m_rawImageView;
+    inInfo.sampler = renderer->m_rawImageSampler;
+    inInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkDescriptorImageInfo outInfo{};
+    outInfo.imageView = renderer->m_previewView;
+    outInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkWriteDescriptorSet wr[2]{};
+    wr[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    wr[0].dstSet = g_preview.set;
+    wr[0].dstBinding = 0;
+    wr[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    wr[0].descriptorCount = 1;
+    wr[0].pImageInfo = &inInfo;
+    wr[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    wr[1].dstSet = g_preview.set;
+    wr[1].dstBinding = 1;
+    wr[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    wr[1].descriptorCount = 1;
+    wr[1].pImageInfo = &outInfo;
+    vkUpdateDescriptorSets(renderer->m_device_p, 2, wr, 0, nullptr);
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_preview.pipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g_preview.layout, 0, 1, &g_preview.set, 0, nullptr);
+
+    struct Push {
+        uint32_t width, height, cfaType, fullSwing;
+        float wbR, wbG, wbB, _pad;
+        float colMat[12];
+        uint32_t black, white;
+    } push{};
+    push.width = width; push.height = height; push.cfaType = static_cast<uint32_t>(cfaType); push.fullSwing = 1;
+    push.wbR = wbR; push.wbG = wbG; push.wbB = wbB;
+    for(int c=0;c<3;++c){
+        for(int r=0;r<3;++r){
+            push.colMat[c*4+r] = colorMatrix[c*3+r];
+        }
+        push.colMat[c*4+3] = 0.0f;
+    }
+    push.black = black; push.white = white;
+    vkCmdPushConstants(cmd, g_preview.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
+
+    vkCmdDispatch(cmd, (uint32_t)((width+15)/16), (uint32_t)((height+15)/16), 1);
+
+    bar.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    bar.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    bar.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    bar.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &bar);
 }

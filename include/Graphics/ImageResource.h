@@ -11,6 +11,9 @@ namespace ImageResource {
     bool createRawImageResources(Renderer_VK* renderer, int width, int height);
     void cleanupRawImageResources(Renderer_VK* renderer);
 
+    bool createPreviewImage(Renderer_VK* renderer, int width, int height);
+    void cleanupPreviewImage(Renderer_VK* renderer);
+
     void transitionImageLayout(
         VkDevice device,
         VkCommandPool commandPool,

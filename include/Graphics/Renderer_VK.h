@@ -90,6 +90,11 @@ public:
     VkImageView m_rawImageView = VK_NULL_HANDLE;
     VkSampler m_rawImageSampler = VK_NULL_HANDLE;
 
+    VkImage m_previewImage = VK_NULL_HANDLE;
+    VmaAllocation m_previewAlloc = VK_NULL_HANDLE;
+    VkImageView m_previewView = VK_NULL_HANDLE;
+    VkSampler m_previewSampler = VK_NULL_HANDLE;
+
     std::vector<VkBuffer> m_uniformBuffers;
     std::vector<VmaAllocation> m_uniformBufferAllocations;
     std::vector<void*> m_uniformBuffersMapped;
@@ -139,6 +144,8 @@ private:
     // or make members they need public (as done above with _p suffix).
     friend bool ImageResource::createRawImageResources(Renderer_VK* renderer, int width, int height);
     friend void ImageResource::cleanupRawImageResources(Renderer_VK* renderer);
+    friend bool ImageResource::createPreviewImage(Renderer_VK* renderer, int width, int height);
+    friend void ImageResource::cleanupPreviewImage(Renderer_VK* renderer);
     friend bool Pipeline::createGraphicsPipeline(Renderer_VK* renderer, VkRenderPass renderPass);
     friend void Pipeline::cleanupSwapChainResources(Renderer_VK* renderer);
     friend bool Descriptor::createDescriptorSetLayout(Renderer_VK* renderer);

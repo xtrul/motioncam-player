@@ -201,4 +201,80 @@ namespace ImageResource {
         }
     }
 
+    bool createPreviewImage(Renderer_VK* renderer, int width, int height) {
+        if (!renderer) return false;
+
+        cleanupPreviewImage(renderer);
+
+        VkImageCreateInfo info{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+        info.imageType = VK_IMAGE_TYPE_2D;
+        info.extent.width = static_cast<uint32_t>(width);
+        info.extent.height = static_cast<uint32_t>(height);
+        info.extent.depth = 1;
+        info.mipLevels = 1;
+        info.arrayLayers = 1;
+        info.format = VK_FORMAT_R8G8B8A8_UNORM;
+        info.tiling = VK_IMAGE_TILING_OPTIMAL;
+        info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                     VK_IMAGE_USAGE_STORAGE_BIT |
+                     VK_IMAGE_USAGE_SAMPLED_BIT;
+        info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        info.samples = VK_SAMPLE_COUNT_1_BIT;
+
+        VmaAllocationCreateInfo ainfo{};
+        ainfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+        VK_CHECK_RENDERER(vmaCreateImage(renderer->m_allocator_p, &info, &ainfo,
+                                         &renderer->m_previewImage, &renderer->m_previewAlloc, nullptr));
+
+        VkImageViewCreateInfo vi{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+        vi.image = renderer->m_previewImage;
+        vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        vi.format = VK_FORMAT_R8G8B8A8_UNORM;
+        vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        vi.subresourceRange.baseMipLevel = 0;
+        vi.subresourceRange.levelCount = 1;
+        vi.subresourceRange.baseArrayLayer = 0;
+        vi.subresourceRange.layerCount = 1;
+        VK_CHECK_RENDERER(vkCreateImageView(renderer->m_device_p, &vi, nullptr, &renderer->m_previewView));
+
+        VkSamplerCreateInfo si{ VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+        si.magFilter = VK_FILTER_NEAREST;
+        si.minFilter = VK_FILTER_NEAREST;
+        si.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        si.mipLodBias = 0.0f;
+        si.minLod = 0.0f;
+        si.maxLod = 0.0f;
+        VK_CHECK_RENDERER(vkCreateSampler(renderer->m_device_p, &si, nullptr, &renderer->m_previewSampler));
+
+        transitionImageLayout(renderer->m_device_p,
+                              renderer->m_hostSiteCommandPool_p,
+                              renderer->m_graphicsQueue_p,
+                              renderer->m_previewImage,
+                              VK_IMAGE_LAYOUT_UNDEFINED,
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        return true;
+    }
+
+    void cleanupPreviewImage(Renderer_VK* renderer) {
+        if (!renderer) return;
+        if (renderer->m_previewSampler != VK_NULL_HANDLE) {
+            vkDestroySampler(renderer->m_device_p, renderer->m_previewSampler, nullptr);
+            renderer->m_previewSampler = VK_NULL_HANDLE;
+        }
+        if (renderer->m_previewView != VK_NULL_HANDLE) {
+            vkDestroyImageView(renderer->m_device_p, renderer->m_previewView, nullptr);
+            renderer->m_previewView = VK_NULL_HANDLE;
+        }
+        if (renderer->m_previewImage != VK_NULL_HANDLE && renderer->m_allocator_p != VK_NULL_HANDLE) {
+            vmaDestroyImage(renderer->m_allocator_p, renderer->m_previewImage, renderer->m_previewAlloc);
+            renderer->m_previewImage = VK_NULL_HANDLE;
+            renderer->m_previewAlloc = VK_NULL_HANDLE;
+        }
+    }
+
 }

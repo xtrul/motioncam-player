@@ -4,6 +4,8 @@
 #include "Decoder/DecoderWrapper.h"
 #include "Playback/PlaybackController.h"
 #include "Graphics/Renderer_VK.h"
+#include "Graphics/ImageResource.h"
+#include "Graphics/GpuYuvConverter.h"
 #include "Utils/DebugLog.h"
 #include "Gui/GuiOverlay.h"
 #include <imgui_impl_vulkan.h>
@@ -423,6 +425,41 @@ void App::drawFrame() {
                 m_containerOrientationTag,
                 m_containerFlipped
             );
+
+            bool sizeChanged = (packetToRender.width != m_previewWidth || packetToRender.height != m_previewHeight);
+            if (m_rendererVk->m_previewImage == VK_NULL_HANDLE || sizeChanged) {
+                ImageResource::createPreviewImage(m_rendererVk.get(), packetToRender.width, packetToRender.height);
+                if (m_previewTex != 0) ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)m_previewTex);
+                m_previewTex = (ImTextureID)ImGui_ImplVulkan_AddTexture(m_rendererVk->m_previewSampler,
+                                                          m_rendererVk->m_previewView,
+                                                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                m_previewWidth = packetToRender.width;
+                m_previewHeight = packetToRender.height;
+            }
+
+            // parse parameters
+            auto meta = packetToRender.metadata;
+            std::vector<double> asn = meta.value("asShotNeutral", std::vector<double>{1.0,1.0,1.0});
+            float wbR = 1.0f, wbB = 1.0f;
+            if(asn.size() >=3 && asn[0]>1e-6 && asn[2]>1e-6){
+                wbR = (float)(asn[1]/asn[0]);
+                wbB = (float)(asn[1]/asn[2]);
+            }
+            auto ccm_json = meta.value("ColorMatrix2", meta.value("ColorMatrix", std::vector<double>{1,0,0,0,1,0,0,0,1}));
+            float ccm[9];
+            for(int i=0;i<9;++i) ccm[i] = (ccm_json.size()>i)? (float)ccm_json[i] : (i%4==0?1.0f:0.0f);
+            uint32_t black = (uint32_t)m_staticBlack;
+            if(meta.contains("dynamicBlackLevel") && meta["dynamicBlackLevel"].is_number()) black = (uint32_t)meta["dynamicBlackLevel"].get<double>();
+            uint32_t white = (uint32_t)m_staticWhite;
+            if(meta.contains("dynamicWhiteLevel") && meta["dynamicWhiteLevel"].is_number()) white = (uint32_t)meta["dynamicWhiteLevel"].get<double>();
+
+            convertRawToRgbPreview(m_rendererVk.get(), cmd,
+                                                   m_rendererVk->m_rawImage, m_rendererVk->m_previewImage,
+                                                   packetToRender.width, packetToRender.height,
+                                                   m_cfaOverride.value_or(m_cfaTypeFromMetadata),
+                                                   wbR, 1.0f, wbB, ccm,
+                                                   black, white);
+
             updatePreviewDescriptor();
             clearColorValue.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
         }
@@ -511,13 +548,13 @@ void App::drawFrame() {
 void App::updatePreviewDescriptor() {
     if (m_previewTex == 0 || !m_rendererVk) return;
 
-    int newW = m_rendererVk->getImageWidth();
-    int newH = m_rendererVk->getImageHeight();
+    int newW = m_previewWidth;
+    int newH = m_previewHeight;
     if (newW == m_previewWidth && newH == m_previewHeight)
         return;
 
-    m_previewDesc.sampler = m_rendererVk->m_rawImageSampler;
-    m_previewDesc.imageView = m_rendererVk->m_rawImageView;
+    m_previewDesc.sampler = m_rendererVk->m_previewSampler;
+    m_previewDesc.imageView = m_rendererVk->m_previewView;
     m_previewDesc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkWriteDescriptorSet write{};

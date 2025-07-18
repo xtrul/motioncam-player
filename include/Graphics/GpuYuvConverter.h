@@ -4,11 +4,12 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <cstdint>
-#include <libavutil/frame.h>
+#include <cstddef>
 #include "Utils/vma_usage.h"
 #include "Graphics/GpuColorParams.h"
 
 class Renderer_VK;
+struct AVFrame;
 
 class GpuYuvConverter {
 public:
@@ -39,5 +40,14 @@ private:
     VmaAllocation m_rawAlloc{VK_NULL_HANDLE};
     VkImageView m_rawView{VK_NULL_HANDLE};
 };
+
+// Lightweight dispatch used for preview generation
+void convertRawToRgbPreview(Renderer_VK* renderer, VkCommandBuffer cmd,
+                            VkImage rawImage, VkImage outImage,
+                            int width, int height,
+                            int cfaType,
+                            float wbR, float wbG, float wbB,
+                            const float colorMatrix[9],
+                            uint32_t blackLevel, uint32_t whiteLevel);
 
 #endif // GPU_YUV_CONVERTER_H
