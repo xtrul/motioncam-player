@@ -247,9 +247,11 @@ namespace GuiOverlay {
         // 2. Preview Panel
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         if (ImGui::Begin("Preview")) {
-            VkDescriptorSet tex = appInstance->getRenderer()->getPreviewDescriptorSet();
+            ImVec2 pos = ImGui::GetCursorScreenPos();
             ImVec2 size = ImGui::GetContentRegionAvail();
-            ImGui::Image((ImTextureID)tex, size);
+            appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y)};
+        } else {
+            appInstance->m_previewRect = {0, 0, 0, 0};
         }
         ImGui::End();
         ImGui::PopStyleVar();
