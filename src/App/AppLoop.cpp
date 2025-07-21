@@ -446,11 +446,20 @@ void App::drawFrame() {
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     if (renderContentFromPacket) {
+#ifdef MOTIONCAM_CONVERTER
+        m_rendererVk->recordDrawCommands(
+            cmd, m_currentFrame,
+            m_previewRect.w,
+            m_previewRect.h,
+            m_previewRect.x,
+            m_previewRect.y);
+#else
         m_rendererVk->recordDrawCommands(
             cmd, m_currentFrame,
             static_cast<int>(m_swapChainExtent.width),
             static_cast<int>(m_swapChainExtent.height),
             0, 0);
+#endif
     }
 
     if (m_uiOpacity > 0.0f) {
