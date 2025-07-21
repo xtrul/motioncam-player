@@ -253,21 +253,20 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-if(WIN32)
-    set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
-    set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
+set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
+set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
 
-    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
-    target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
+target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        avcodec.lib
-        avformat.lib
-        avutil.lib
-        swscale.lib
-        swresample.lib
-    )
-endif()
+target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    avcodec.lib
+    avformat.lib
+    avutil.lib
+    swscale.lib
+    swresample.lib
+)
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
