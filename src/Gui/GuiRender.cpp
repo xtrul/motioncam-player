@@ -193,23 +193,6 @@ namespace GuiOverlay {
         return data;
     }
 
-    static void SubmitDefaultDockLayout(ImGuiID dockspace_id, const ImVec2& size) {
-        ImGui::DockBuilderRemoveNode(dockspace_id);
-        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-        ImGui::DockBuilderSetNodeSize(dockspace_id, size);
-
-        ImGuiID dock_main_id = dockspace_id;
-        ImGuiID dock_id_log = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.25f, nullptr, &dock_main_id);
-        ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
-        ImGuiID dock_id_files = ImGui::DockBuilderSplitNode(dock_id_right, ImGuiDir_Up, 0.50f, nullptr, &dock_id_right);
-
-        ImGui::DockBuilderDockWindow("Log", dock_id_log);
-        ImGui::DockBuilderDockWindow("Files", dock_id_files);
-        ImGui::DockBuilderDockWindow("Controls & Export", dock_id_right);
-        ImGui::DockBuilderDockWindow("Preview", dock_main_id);
-
-        ImGui::DockBuilderFinish(dockspace_id);
-    }
 
     void render(App* appInstance) {
 #ifdef MOTIONCAM_CONVERTER
@@ -218,7 +201,6 @@ namespace GuiOverlay {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
-        ImGui::SetNextWindowViewport(viewport->ID);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -230,40 +212,35 @@ namespace GuiOverlay {
         ImGui::Begin("MainDockSpace", nullptr, window_flags);
         ImGui::PopStyleVar(3);
 
+#if IMGUI_HAS_DOCK
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-
-        static bool first_time = true;
-        if (first_time) {
-            first_time = false;
-            SubmitDefaultDockLayout(dockspace_id, viewport->WorkSize);
-        }
-
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+#endif
 
         // 1. Files Panel
         if (ImGui::Begin("Files")) {
             if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
-            if (ImGui::Button("Remove")) {
-                if (appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileList.size()) {
-                    appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
-                    if (appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size())
-                        appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
-                    appInstance->m_selectedBatchIndex = -1;
-                }
+            if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex != -1) {
+                appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
+                appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
+                appInstance->m_selectedBatchIndex = -1;
             }
             ImGui::SameLine();
             if (ImGui::Button("Clear")) {
-                appInstance->m_fileList.clear(); appInstance->m_fileExportFormats.clear(); appInstance->m_selectedBatchIndex = -1;
+                appInstance->m_fileList.clear();
+                appInstance->m_fileExportFormats.clear();
+                appInstance->m_selectedBatchIndex = -1;
             }
             ImGui::Separator();
-            ImGui::BeginChild("FileListChild");
+            ImGui::BeginChild("FileListScrollingRegion");
             for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
-                bool sel = (i == appInstance->m_selectedBatchIndex);
-                std::string name = std::filesystem::path(appInstance->m_fileList[i]).filename().string();
-                if (ImGui::Selectable(name.c_str(), sel)) {
+                bool is_selected = (i == appInstance->m_selectedBatchIndex);
+                std::string name = fs::path(appInstance->m_fileList[i]).filename().string();
+                if (ImGui::Selectable(name.c_str(), is_selected)) {
                     if (appInstance->m_selectedBatchIndex != i) {
-                        appInstance->m_selectedBatchIndex = i; appInstance->loadFileAtIndex(i);
+                        appInstance->m_selectedBatchIndex = i;
+                        appInstance->loadFileAtIndex(i);
                     }
                 }
             }
@@ -271,15 +248,14 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Preview Panel - This is where the video will be drawn.
+        // 2. Preview Panel - display the rendered texture
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-        ImGui::Begin("Preview");
-        if (appInstance->getRenderer()) {
+        ImGuiWindowFlags preview_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground;
+        if (ImGui::Begin("Preview", nullptr, preview_flags)) {
+            ImVec2 size = ImGui::GetContentRegionAvail();
             ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
-            if (texID) {
-                ImVec2 size = ImGui::GetContentRegionAvail();
+            if (texID)
                 ImGui::Image(texID, size);
-            }
         }
         ImGui::End();
         ImGui::PopStyleVar();
@@ -291,24 +267,21 @@ namespace GuiOverlay {
                 if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
             }
             ImGui::SameLine();
-            size_t curIdx = 0, total = 1;
+            size_t curIdx = 0, total = 0;
             if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
                 curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
                 total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
-                if (total == 0) total = 1;
             }
             int frame_int = (int)curIdx;
             ImGui::PushItemWidth(-1);
-            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d")) {
+            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d / %d")) {
                 if (ImGui::IsItemActive()) {
                     if (!paused) appInstance->m_playbackController_ptr->togglePause();
                     appInstance->performSeek(frame_int);
                 }
             }
             ImGui::PopItemWidth();
-
             ImGui::Separator();
-
             if (appInstance->m_selectedBatchIndex != -1) {
                 int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
                 ImGui::Text("Export Format:");
@@ -320,7 +293,6 @@ namespace GuiOverlay {
                 ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
                 appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
             }
-
             ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
@@ -330,15 +302,13 @@ namespace GuiOverlay {
             if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
                 appInstance->startBatchConversion();
             }
-        }
-        ImGui::End();
-
-        // 4. Log Panel
-        if (ImGui::Begin("Log")) {
-            ImGui::BeginChild("ScrollingLog");
-            for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
-            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
-            ImGui::EndChild();
+            ImGui::Separator();
+            if (ImGui::CollapsingHeader("Log")) {
+                ImGui::BeginChild("LogScrollingRegion");
+                for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
+                if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
+                ImGui::EndChild();
+            }
         }
         ImGui::End();
 
