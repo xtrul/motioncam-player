@@ -193,6 +193,21 @@ namespace GuiOverlay {
         return data;
     }
 
+    // Helper to build the default dock layout on first run
+    void SubmitDockspaceLayout(ImGuiID dockspace_id) {
+        ImGui::DockBuilderRemoveNode(dockspace_id);
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+
+        ImGuiID dock_main_id = dockspace_id;
+        ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.25f, nullptr, &dock_main_id);
+        ImGuiID dock_id_right_top = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.65f, nullptr, &dock_main_id);
+
+        ImGui::DockBuilderDockWindow("Files", dock_id_left);
+        ImGui::DockBuilderDockWindow("Preview", dock_id_right_top);
+        ImGui::DockBuilderDockWindow("Controls & Log", dock_main_id);
+        ImGui::DockBuilderFinish(dockspace_id);
+    }
 
     void render(App* appInstance) {
 #ifdef MOTIONCAM_CONVERTER
@@ -201,6 +216,7 @@ namespace GuiOverlay {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::SetNextWindowViewport(viewport->ID);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -212,12 +228,12 @@ namespace GuiOverlay {
         ImGui::Begin("MainDockSpace", nullptr, window_flags);
         ImGui::PopStyleVar(3);
 
-#if IMGUI_HAS_DOCK
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        if (!ImGui::DockBuilderGetNode(dockspace_id)) {
+            SubmitDockspaceLayout(dockspace_id);
+        }
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-#endif
 
-        // 1. Files Panel
         if (ImGui::Begin("Files")) {
             if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
@@ -248,20 +264,19 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Preview Panel - display the rendered texture
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-        ImGuiWindowFlags preview_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground;
-        if (ImGui::Begin("Preview", nullptr, preview_flags)) {
-            ImVec2 size = ImGui::GetContentRegionAvail();
+        ImGui::Begin("Preview");
+        if (appInstance->getRenderer()) {
             ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
-            if (texID)
+            if (texID) {
+                ImVec2 size = ImGui::GetContentRegionAvail();
                 ImGui::Image(texID, size);
+            }
         }
         ImGui::End();
         ImGui::PopStyleVar();
 
-        // 3. Controls & Export Panel
-        if (ImGui::Begin("Controls & Export")) {
+        if (ImGui::Begin("Controls & Log")) {
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
             if (ImGui::Button(paused ? "Play" : "Pause")) {
                 if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
@@ -282,28 +297,30 @@ namespace GuiOverlay {
             }
             ImGui::PopItemWidth();
             ImGui::Separator();
-            if (appInstance->m_selectedBatchIndex != -1) {
-                int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
-                ImGui::Text("Export Format:");
-                ImGui::RadioButton("ProRes (CPU)", &fmt, (int)App::ExportFormat::PRORES_CPU); ImGui::SameLine();
-                ImGui::RadioButton("ProRes (GPU)", &fmt, (int)App::ExportFormat::PRORES_GPU);
-                ImGui::RadioButton("DNxHR (CPU)", &fmt, (int)App::ExportFormat::DNXHR_CPU); ImGui::SameLine();
-                ImGui::RadioButton("DNxHR (GPU)", &fmt, (int)App::ExportFormat::DNXHR_GPU);
-                ImGui::RadioButton("HEVC (GPU)", &fmt, (int)App::ExportFormat::HEVC_GPU); ImGui::SameLine();
-                ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
-                appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
-            }
-            ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
-            ImGui::SameLine();
-            if (ImGui::Button("Browse...")) {
-                std::string folder = appInstance->openFolderDialog();
-                if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
-            }
-            if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
-                appInstance->startBatchConversion();
+            if (ImGui::CollapsingHeader("Export Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (appInstance->m_selectedBatchIndex != -1) {
+                    int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
+                    ImGui::Text("Export Format:");
+                    ImGui::RadioButton("ProRes (CPU)", &fmt, (int)App::ExportFormat::PRORES_CPU); ImGui::SameLine();
+                    ImGui::RadioButton("ProRes (GPU)", &fmt, (int)App::ExportFormat::PRORES_GPU);
+                    ImGui::RadioButton("DNxHR (CPU)", &fmt, (int)App::ExportFormat::DNXHR_CPU); ImGui::SameLine();
+                    ImGui::RadioButton("DNxHR (GPU)", &fmt, (int)App::ExportFormat::DNXHR_GPU);
+                    ImGui::RadioButton("HEVC (GPU)", &fmt, (int)App::ExportFormat::HEVC_GPU); ImGui::SameLine();
+                    ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
+                    appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
+                }
+                ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
+                ImGui::SameLine();
+                if (ImGui::Button("Browse...")) {
+                    std::string folder = appInstance->openFolderDialog();
+                    if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
+                }
+                if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
+                    appInstance->startBatchConversion();
+                }
             }
             ImGui::Separator();
-            if (ImGui::CollapsingHeader("Log")) {
+            if (ImGui::CollapsingHeader("Log", ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::BeginChild("LogScrollingRegion");
                 for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
                 if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
@@ -312,8 +329,7 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        ImGui::End(); // End MainDockSpace
-
+        ImGui::End();
 #else
         if (!appInstance) return;
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appInstance->m_uiOpacity);
