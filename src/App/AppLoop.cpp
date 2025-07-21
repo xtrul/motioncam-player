@@ -414,7 +414,7 @@ void App::drawFrame() {
 
         if (renderContentFromPacket) {
             m_rendererVk->prepareAndUploadFrameData(
-                cmd, m_currentFrame,
+                cmd, 0,
                 stagingBufferToUseForUpload,
                 packetToRender.width, packetToRender.height, packetToRender.metadata,
                 m_staticBlack, m_staticWhite, m_cfaOverride.value_or(m_cfaTypeFromMetadata),
@@ -441,17 +441,13 @@ void App::drawFrame() {
     }
 
 
+    // Render video to off-screen image first
+    if (renderContentFromPacket)
+        m_rendererVk->renderVideoToPreviewImage(cmd);
+
     rpInfo.clearValueCount = 1;
     rpInfo.pClearValues = &clearColorValue;
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    if (renderContentFromPacket) {
-        m_rendererVk->recordDrawCommands(
-            cmd, m_currentFrame,
-            static_cast<int>(m_swapChainExtent.width),
-            static_cast<int>(m_swapChainExtent.height),
-            0, 0);
-    }
 
     if (m_uiOpacity > 0.0f) {
         GuiOverlay::beginFrame();
