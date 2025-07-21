@@ -428,49 +428,16 @@ void Renderer_VK::recordDrawCommands(
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
 
     VkViewport viewport{};
+    viewport.x = (float)offsetX;
+    viewport.y = (float)offsetY;
+    viewport.width = (float)windowWidth;
+    viewport.height = (float)windowHeight;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
     VkRect2D scissor{};
-
-    if (m_currentRawW <= 0 || m_currentRawH <= 0) {
-        viewport.x = 0.0f; viewport.y = 0.0f;
-        viewport.width = (float)windowWidth; viewport.height = (float)windowHeight;
-        viewport.minDepth = 0.0f; viewport.maxDepth = 1.0f;
-        scissor.offset = { 0, 0 }; scissor.extent = { (uint32_t)windowWidth, (uint32_t)windowHeight };
-    }
-    else if (m_zoomNativePixels) {
-        viewport.x = m_panX; viewport.y = m_panY;
-        float w = (float)m_currentRawW;
-        float h = (float)m_currentRawH;
-        if (m_currentOrientationDegrees == 90 || m_currentOrientationDegrees == 270) {
-            std::swap(w, h);
-        }
-        viewport.width = w; viewport.height = h;
-        viewport.minDepth = 0.0f; viewport.maxDepth = 1.0f;
-        scissor.offset = { 0, 0 }; scissor.extent = { (uint32_t)windowWidth, (uint32_t)windowHeight };
-    }
-    else {
-        float imgAspect = (m_currentOrientationDegrees == 90 || m_currentOrientationDegrees == 270) ?
-            (float)m_currentRawH / (float)m_currentRawW : (float)m_currentRawW / (float)m_currentRawH;
-        float winAspect = (float)windowWidth / (float)windowHeight;
-        float vpWidth, vpHeight, vpX, vpY;
-        if (imgAspect > winAspect) {
-            vpWidth = (float)windowWidth; vpHeight = vpWidth / imgAspect;
-            vpX = 0.0f; vpY = ((float)windowHeight - vpHeight) / 2.0f;
-        }
-        else {
-            vpHeight = (float)windowHeight; vpWidth = vpHeight * imgAspect;
-            vpY = 0.0f; vpX = ((float)windowWidth - vpWidth) / 2.0f;
-        }
-        viewport.x = vpX; viewport.y = vpY;
-        viewport.width = vpWidth; viewport.height = vpHeight;
-        viewport.minDepth = 0.0f; viewport.maxDepth = 1.0f;
-        scissor.offset = { (int32_t)std::max(0.0f, vpX), (int32_t)std::max(0.0f, vpY) };
-        scissor.extent = { (uint32_t)std::max(0.0f, vpWidth), (uint32_t)std::max(0.0f, vpHeight) };
-    }
-
-    viewport.x += (float)offsetX;
-    viewport.y += (float)offsetY;
-    scissor.offset.x += offsetX;
-    scissor.offset.y += offsetY;
+    scissor.offset = { offsetX, offsetY };
+    scissor.extent = { (uint32_t)windowWidth, (uint32_t)windowHeight };
 
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
