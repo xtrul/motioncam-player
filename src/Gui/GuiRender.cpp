@@ -190,134 +190,694 @@ namespace GuiOverlay {
     }
 
 
-
-void render(App* appInstance) {
+    void render(App* appInstance) {
 #ifdef MOTIONCAM_CONVERTER
-    if (!appInstance) return;
+        if (!appInstance) return;
 
-    // Set up a full-screen, non-interactable window to host the dockspace
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::SetNextWindowViewport(viewport->ID);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar | \
-                                    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | \
-                                    ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-    ImGui::Begin("MainDockSpaceHost", nullptr, window_flags);
-    ImGui::PopStyleVar(3);
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-    // Create the main dockspace where all windows will live
-    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
-    ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+        window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+        window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
-    // --- All UI windows are defined below and will dock into the space above ---
+        ImGui::Begin("MainDockSpace", nullptr, window_flags);
+        ImGui::PopStyleVar(3);
 
-    // 1. Files Panel
-    if (ImGui::Begin("Files")) {
-        if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
-        ImGui::SameLine();
-        if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex != -1) {
-            appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
-            appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
-            appInstance->m_selectedBatchIndex = -1;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Clear")) {
-            appInstance->m_fileList.clear();
-            appInstance->m_fileExportFormats.clear();
-            appInstance->m_selectedBatchIndex = -1;
-        }
-        ImGui::Separator();
-        ImGui::BeginChild("FileListScrollingRegion");
-        for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
-            bool is_selected = (i == appInstance->m_selectedBatchIndex);
-            std::string name = fs::path(appInstance->m_fileList[i]).filename().string();
-            if (ImGui::Selectable(name.c_str(), is_selected)) {
-                if (appInstance->m_selectedBatchIndex != i) {
-                    appInstance->m_selectedBatchIndex = i;
-                    appInstance->loadFileAtIndex(i);
+#if IMGUI_HAS_DOCK
+        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+#endif
+
+        // 1. Files Panel
+        if (ImGui::Begin("Files")) {
+            if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
+            ImGui::SameLine();
+            if (ImGui::Button("Remove")) {
+                 if (appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileList.size()) {
+                    appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
+                    if (appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size())
+                        appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
+                    appInstance->m_selectedBatchIndex = -1;
                 }
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear")) {
+                appInstance->m_fileList.clear(); appInstance->m_fileExportFormats.clear(); appInstance->m_selectedBatchIndex = -1;
+            }
+            ImGui::Separator();
+            ImGui::BeginChild("FileListChild");
+            for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
+                bool sel = (i == appInstance->m_selectedBatchIndex);
+                std::string name = std::filesystem::path(appInstance->m_fileList[i]).filename().string();
+                if (ImGui::Selectable(name.c_str(), sel)) {
+                    if (appInstance->m_selectedBatchIndex != i) {
+                        appInstance->m_selectedBatchIndex = i; appInstance->loadFileAtIndex(i);
+                    }
+                }
+            }
+            ImGui::EndChild();
         }
-        ImGui::EndChild();
-    }
-    ImGui::End();
+        ImGui::End();
 
-    // 2. Preview Panel - This is where the video will be drawn
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0)); // No padding to maximize video area
-    if (ImGui::Begin("Preview")) {
-        ImVec2 pos = ImGui::GetCursorScreenPos();
-        ImVec2 size = ImGui::GetContentRegionAvail();
-        // Update the app's preview rectangle with the exact coordinates and size of this panel's content area.
-        appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)size.x, (int)size.y};
-    } else {
-        // If the preview panel is closed by the user, set the rect to zero to stop rendering.
-        appInstance->m_previewRect = {0, 0, 0, 0};
-    }
-    ImGui::End();
-    ImGui::PopStyleVar();
+        // 2. Preview Panel
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        if (ImGui::Begin("Preview")) {
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+            ImVec2 size = ImGui::GetContentRegionAvail();
+            appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y)};
+        } else {
+            appInstance->m_previewRect = {0, 0, 0, 0};
+        }
+        ImGui::End();
+        ImGui::PopStyleVar();
 
-    // 3. Controls, Export, and Log Panel
-    if (ImGui::Begin("Controls & Export")) {
-        // ... (The content of this panel is the same as the previous correct version)
-        bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
-        if (ImGui::Button(paused ? "Play" : "Pause")) {
-            if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
-        }
-        ImGui::SameLine();
-        size_t curIdx = 0, total = 0;
-        if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
-            curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
-            total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
-        }
-        int frame_int = (int)curIdx;
-        ImGui::PushItemWidth(-1);
-        if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d / %d")) {
-            if (ImGui::IsItemActive()) {
-                if (!paused) appInstance->m_playbackController_ptr->togglePause();
-                appInstance->performSeek(frame_int);
+        // 3. Controls & Export Panel
+        if (ImGui::Begin("Controls & Export")) {
+            bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
+            if (ImGui::Button(paused ? "Play" : "Pause")) {
+                if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
+            }
+            ImGui::SameLine();
+            size_t curIdx = 0, total = 1;
+            if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+                curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
+                total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
+                if (total == 0) total = 1;
+            }
+            int frame_int = (int)curIdx;
+            ImGui::PushItemWidth(-1);
+            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d")) {
+                if (ImGui::IsItemActive()) {
+                    if (!paused) appInstance->m_playbackController_ptr->togglePause();
+                    appInstance->performSeek(frame_int);
+                }
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::Separator();
+
+            if (appInstance->m_selectedBatchIndex != -1) {
+                int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
+                ImGui::Text("Export Format:");
+                ImGui::RadioButton("ProRes (CPU)", &fmt, (int)App::ExportFormat::PRORES_CPU); ImGui::SameLine();
+                ImGui::RadioButton("ProRes (GPU)", &fmt, (int)App::ExportFormat::PRORES_GPU);
+                ImGui::RadioButton("DNxHR (CPU)", &fmt, (int)App::ExportFormat::DNXHR_CPU); ImGui::SameLine();
+                ImGui::RadioButton("DNxHR (GPU)", &fmt, (int)App::ExportFormat::DNXHR_GPU);
+                ImGui::RadioButton("HEVC (GPU)", &fmt, (int)App::ExportFormat::HEVC_GPU); ImGui::SameLine();
+                ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
+                appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
+            }
+
+            ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
+            ImGui::SameLine();
+            if (ImGui::Button("Browse...")) {
+                std::string folder = appInstance->openFolderDialog();
+                if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
+            }
+            if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
+                appInstance->startBatchConversion();
             }
         }
-        ImGui::PopItemWidth();
-        ImGui::Separator();
-        if (appInstance->m_selectedBatchIndex != -1) {
-            int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
-            ImGui::Text("Export Format:");
-            ImGui::RadioButton("ProRes (CPU)", &fmt, (int)App::ExportFormat::PRORES_CPU); ImGui::SameLine();
-            ImGui::RadioButton("ProRes (GPU)", &fmt, (int)App::ExportFormat::PRORES_GPU);
-            ImGui::RadioButton("DNxHR (CPU)", &fmt, (int)App::ExportFormat::DNXHR_CPU); ImGui::SameLine();
-            ImGui::RadioButton("DNxHR (GPU)", &fmt, (int)App::ExportFormat::DNXHR_GPU);
-            ImGui::RadioButton("HEVC (GPU)", &fmt, (int)App::ExportFormat::HEVC_GPU); ImGui::SameLine();
-            ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
-            appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
-        }
-        ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
-        ImGui::SameLine();
-        if (ImGui::Button("Browse...")) {
-            std::string folder = appInstance->openFolderDialog();
-            if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
-        }
-        if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
-            appInstance->startBatchConversion();
-        }
-        ImGui::Separator();
-        if (ImGui::CollapsingHeader("Log")) {
-            ImGui::BeginChild("LogScrollingRegion");
+        ImGui::End();
+
+        // 4. Log Panel
+        if (ImGui::Begin("Log")) {
+            ImGui::BeginChild("ScrollingLog");
             for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
             ImGui::EndChild();
         }
-    }
-    ImGui::End();
+        ImGui::End();
 
-    ImGui::End(); // End MainDockSpaceHost
+        ImGui::End(); // End MainDockSpace
+
 #else
-    // Player UI (unchanged)
+        if (!appInstance) return;
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appInstance->m_uiOpacity);
+        UIData ui = GuiOverlay::gatherData(appInstance);
+        ImGuiStyle& style = ImGui::GetStyle();
+        ImGuiIO& io = ImGui::GetIO();
+
+        if (!appInstance->m_firstFileLoaded) {
+            ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                                           viewport->WorkPos.y + viewport->WorkSize.y * 0.5f),
+                                   ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowBgAlpha(0.f);
+            ImGui::Begin("OPEN_PROMPT", nullptr,
+                        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(60.0f/255.0f, 60.0f/255.0f, 60.0f/255.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(80.0f/255.0f, 80.0f/255.0f, 80.0f/255.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(80.0f/255.0f, 80.0f/255.0f, 80.0f/255.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+            if (ImGui::Button("Open or drag a MCRAW file", ImVec2(220, 40))) {
+                appInstance->triggerOpenFileViaDialog();
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(4);
+            ImGui::End();
+            ImGui::PopStyleVar();
+            return;
+        }
+
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && !io.WantCaptureMouse) {
+            ImGui::OpenPopup("AppContextMenu");
+        }
+
+        if (ImGui::BeginPopup("AppContextMenu")) {
+            bool canOperateOnCurrentFile = appInstance && appInstance->m_currentFileIndex != -1 &&
+                static_cast<size_t>(appInstance->m_currentFileIndex) < appInstance->m_fileList.size();
+            bool playlistNotEmpty = appInstance && !appInstance->m_fileList.empty();
+
+            if (ImGui::MenuItem("Save Current Frame as DNG", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->saveCurrentFrameAsDng();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Soft Delete MCRAW", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->softDeleteCurrentFile();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Send Current to MotionCam Fuse", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->sendCurrentFileToMotionCamFS();
+            }
+            if (ImGui::MenuItem("Send All in Playlist to MotionCam Fuse", nullptr, false, playlistNotEmpty)) {
+                if (appInstance) appInstance->sendAllPlaylistFilesToMotionCamFS();
+            }
+            ImGui::Separator();
+#ifdef ENABLE_PRORES_EXPORT
+            if (ImGui::MenuItem("Export to ProRes", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->exportCurrentClipToProRes();
+            }
+            if (ImGui::MenuItem("Convert to ProRes (GPU)", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->convertCurrentClipToProRes();
+            }
+            if (ImGui::MenuItem("Export to DNxHR", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->exportCurrentClipToDNxHR();
+            }
+            if (ImGui::MenuItem("Convert to DNxHR (GPU)", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->convertCurrentClipToDNxHR();
+            }
+            if (ImGui::MenuItem("Convert to HEVC (GPU, AMD 10-bit HQ)", nullptr, false, canOperateOnCurrentFile)) {
+                if (appInstance) appInstance->convertCurrentClipToHEVC_AMD();
+            }
+#else
+            ImGui::MenuItem("Export to ProRes", nullptr, false, false);
 #endif
-}
+            ImGui::EndPopup();
+        }
+
+        float current_playlist_window_width = 0.0f;
+        bool playlist_window_is_visible = false;
+
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+        if (GuiOverlay::show_playlist_aux) {
+            const float initial_playlist_width = 320.0f;
+            float default_playlist_height = viewport->WorkSize.y * 0.80f;
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - initial_playlist_width - style.WindowPadding.x, viewport->WorkPos.y + style.WindowPadding.y), ImGuiCond_Appearing);
+            ImGui::SetNextWindowSize(ImVec2(initial_playlist_width, default_playlist_height), ImGuiCond_Appearing);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(initial_playlist_width * 0.5f, 100.0f), ImVec2(viewport->WorkSize.x * 0.5f, viewport->WorkSize.y - 2 * style.WindowPadding.y));
+
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 4));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.09f, 0.95f));
+
+            if (ImGui::Begin("Playlist", &GuiOverlay::show_playlist_aux, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+                current_playlist_window_width = ImGui::GetWindowSize().x;
+                playlist_window_is_visible = true;
+                if (appInstance->m_fileList.empty()) {
+                    ImGui::TextDisabled(" (empty)");
+                }
+                else {
+                    for (int i = 0; i < static_cast<int>(appInstance->m_fileList.size()); ++i) {
+                        const std::string& filePath = appInstance->m_fileList[i];
+                        std::string filename_to_display = fs::path(filePath).stem().string();
+                        bool is_selected = (appInstance->m_currentFileIndex == i);
+                        char entry_buf[512];
+                        snprintf(entry_buf, sizeof(entry_buf), "%2d. %s ", i + 1, filename_to_display.c_str());
+                        if (is_selected) ImGui::PushStyleColor(ImGuiCol_Header, style.Colors[ImGuiCol_HeaderActive]);
+                        if (ImGui::Selectable(entry_buf, is_selected, ImGuiSelectableFlags_SpanAllColumns)) {
+                            if (!is_selected) {
+                                bool originalFirstFileLoadedState = appInstance->m_firstFileLoaded;
+                                appInstance->m_firstFileLoaded = true;
+                                appInstance->loadFileAtIndex(i);
+                                appInstance->m_firstFileLoaded = originalFirstFileLoadedState;
+                            }
+                        }
+                        if (is_selected) ImGui::PopStyleColor();
+                    }
+                }
+            }
+            ImGui::End();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar(2);
+        }
+        (void)current_playlist_window_width; // Mark as used to suppress warnings if NDEBUG
+        (void)playlist_window_is_visible; // Mark as used
+
+
+        if (ui.showHelpPage) {
+            ImGui::SetNextWindowSize(ImVec2(450, 420), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x / 2 - 225, viewport->WorkPos.y + viewport->WorkSize.y / 2 - 210), ImGuiCond_Appearing);
+
+            bool help_open_flag = ui.showHelpPage;
+            if (ImGui::Begin("Help - Keyboard Shortcuts", &help_open_flag, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+                ImGui::Text("Playback Controls:");
+                ImGui::BulletText("[Space]        : Play / Pause");
+                ImGui::BulletText("[Left Arrow]   : Previous Frame (Step Back)");
+                ImGui::BulletText("[Right Arrow]  : Next Frame (Step Forward)");
+                ImGui::BulletText("[Home]         : Go to First Frame");
+                ImGui::BulletText("[End]          : Go to Last Frame");
+                ImGui::Separator();
+                ImGui::Text("File Navigation:");
+                ImGui::BulletText("[[ (L-Bracket)]: Previous File in Playlist");
+                ImGui::BulletText("[] (R-Bracket)]: Next File in Playlist");
+                ImGui::BulletText("[Ctrl + O]     : Open File Dialog");
+                ImGui::Separator();
+                ImGui::Text("Display & UI:");
+                ImGui::BulletText("[F] or [F11]   : Toggle Fullscreen");
+                ImGui::BulletText("[Z]            : Toggle Zoom (Native Pixels / Fit to Window)");
+                ImGui::BulletText("[M]            : Toggle Metrics Overlay");
+                ImGui::BulletText("[P]            : Cycle Playback Mode");
+                ImGui::BulletText("[H] or [F1]    : Toggle This Help Page");
+                ImGui::BulletText("[Tab]          : Toggle Main UI Controls");
+                ImGui::BulletText("[Esc]          : Exit Fullscreen / Close Popups / Quit");
+                ImGui::Separator();
+                ImGui::Text("Application:");
+                ImGui::BulletText("[Ctrl + Q]     : Quit Application");
+            }
+            ImGui::End();
+            if (!help_open_flag && ui.showHelpPage) {
+                appInstance->toggleHelpPage();
+            }
+        }
+
+        ImVec2 sizeLargeButton, sizeSmallButton, sizeAuxOverlayButton, sizePlayPauseButton;
+        float largeButtonFrameHeight, smallButtonFrameHeight, auxOverlayButtonFrameHeight, playPauseButtonFrameHeight;
+
+        if (GuiStyles::G_LargeIconFont) ImGui::PushFont(GuiStyles::G_LargeIconFont);
+        float large_icon_line_height_sp = ImGui::GetTextLineHeightWithSpacing();
+        float large_button_dim = (large_icon_line_height_sp + GuiStyles::G_LARGE_BUTTON_PADDING.y * 2.0f) * 1.1f;
+        sizeLargeButton = ImVec2(large_button_dim, large_button_dim);
+        largeButtonFrameHeight = sizeLargeButton.y;
+        sizePlayPauseButton = ImVec2(large_button_dim * 1.30f, large_button_dim * 1.30f);
+        playPauseButtonFrameHeight = sizePlayPauseButton.y;
+        if (GuiStyles::G_LargeIconFont) ImGui::PopFont();
+
+        if (GuiStyles::G_SmallIconFont) ImGui::PushFont(GuiStyles::G_SmallIconFont);
+        float small_icon_line_height_sp = ImGui::GetTextLineHeightWithSpacing();
+        sizeSmallButton = ImVec2(small_icon_line_height_sp + GuiStyles::G_SMALL_BUTTON_PADDING.x * 2.0f + 4.0f, small_icon_line_height_sp + GuiStyles::G_SMALL_BUTTON_PADDING.y * 2.0f + 2.0f);
+        smallButtonFrameHeight = sizeSmallButton.y;
+        if (GuiStyles::G_SmallIconFont) ImGui::PopFont();
+
+        if (GuiStyles::G_AuxOverlayIconFont) ImGui::PushFont(GuiStyles::G_AuxOverlayIconFont);
+        float aux_overlay_icon_line_height_sp = ImGui::GetTextLineHeightWithSpacing();
+        sizeAuxOverlayButton = ImVec2(aux_overlay_icon_line_height_sp + GuiStyles::G_AUX_OVERLAY_BUTTON_PADDING.x * 2.0f + 3.0f, aux_overlay_icon_line_height_sp + GuiStyles::G_AUX_OVERLAY_BUTTON_PADDING.y * 2.0f + 1.5f);
+        auxOverlayButtonFrameHeight = sizeAuxOverlayButton.y;
+        if (GuiStyles::G_AuxOverlayIconFont) ImGui::PopFont();
+        (void)auxOverlayButtonFrameHeight; // Mark as used
+
+        const float general_inter_button_gap = style.ItemSpacing.x * 1.0f;
+        const float tight_inter_button_gap = style.ItemSpacing.x * 0.3f;
+        float main_panel_buttons_total_width = sizeLargeButton.x + tight_inter_button_gap + sizeSmallButton.x + general_inter_button_gap + sizePlayPauseButton.x + general_inter_button_gap + sizeSmallButton.x + tight_inter_button_gap + sizeLargeButton.x;
+
+        std::string currentTimeStr = GuiUtils::format_mm_ss(ui.currentVideoTimeSec);
+        std::string totalTimeStr = (ui.totalDurationSec > 0) ? GuiUtils::format_mm_ss(ui.totalDurationSec) : "00:00";
+        float current_time_text_width_calc = ImGui::CalcTextSize(currentTimeStr.c_str()).x;
+        float total_time_text_width_calc = ImGui::CalcTextSize(totalTimeStr.c_str()).x;
+        const float min_scrubber_width_pref = 150.0f;
+        float time_row_min_width_calc = current_time_text_width_calc + style.ItemSpacing.x + min_scrubber_width_pref + style.ItemSpacing.x + total_time_text_width_calc;
+        float time_row_text_height_calc = ImGui::CalcTextSize("00:00").y;
+
+        float aux_button_effective_item_spacing_x = style.ItemSpacing.x * 0.25f;
+        float aux_vertical_spacing_tight = style.ItemSpacing.y * 0.25f;
+        float aux_buttons_grid_width = (sizeAuxOverlayButton.x * 2.0f) + aux_button_effective_item_spacing_x;
+        float aux_buttons_grid_height = (sizeAuxOverlayButton.y * 2.0f) + (aux_vertical_spacing_tight * 1.0f);
+
+        float base_desired_panel_content_width = std::max(main_panel_buttons_total_width, time_row_min_width_calc);
+        float min_content_for_main_and_aux_grid = main_panel_buttons_total_width + aux_buttons_grid_width + style.ItemSpacing.x * 2.0f;
+        base_desired_panel_content_width = std::max(base_desired_panel_content_width, min_content_for_main_and_aux_grid);
+        base_desired_panel_content_width = std::max(base_desired_panel_content_width, 380.0f);
+
+        float final_desired_panel_content_width = base_desired_panel_content_width * 1.15f;
+        const float actual_panel_total_width = final_desired_panel_content_width + 2.0f * GuiStyles::PANEL_HORIZONTAL_PADDING;
+        float actual_main_button_row_max_height = playPauseButtonFrameHeight;
+        float main_panel_estimated_content_height = time_row_text_height_calc + style.ItemSpacing.y * 0.5f + std::max(actual_main_button_row_max_height, aux_buttons_grid_height);
+        float main_panel_height_for_positioning = main_panel_estimated_content_height + 2.0f * GuiStyles::PANEL_VERTICAL_PADDING;
+
+        float main_panel_center_x_coord = viewport->WorkPos.x + viewport->WorkSize.x * 0.5f;
+        float main_panel_pos_x_top_left = main_panel_center_x_coord - actual_panel_total_width / 2.0f;
+        main_panel_pos_x_top_left = std::max(main_panel_pos_x_top_left, viewport->WorkPos.x + style.WindowPadding.x);
+
+        float bottom_margin_percentage = 0.12f;
+        float main_panel_pos_y_top_left = viewport->WorkPos.y + viewport->WorkSize.y * (1.0f - bottom_margin_percentage) - main_panel_height_for_positioning;
+        main_panel_pos_y_top_left = std::max(main_panel_pos_y_top_left, viewport->WorkPos.y + style.WindowPadding.y);
+
+        ImGui::SetNextWindowPos(ImVec2(main_panel_pos_x_top_left, main_panel_pos_y_top_left), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(actual_panel_total_width, 0), ImGuiCond_Always);
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.08f, 0.09f, 0.10f, 0.92f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.14f, 0.15f, 0.16f, 0.70f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, GuiStyles::PILL_RADIUS);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(GuiStyles::PANEL_HORIZONTAL_PADDING, GuiStyles::PANEL_VERTICAL_PADDING));
+        ImGuiWindowFlags control_panel_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_AlwaysAutoResize;
+
+        float y_base_for_button_row_content_area = 0.0f;
+
+        if (ImGui::Begin("ControlsPanel", nullptr, control_panel_flags)) {
+            const float panel_content_width_for_layout = ImGui::GetContentRegionAvail().x;
+            const float thinner_slider_padding_y = 1.0f;
+
+            float current_time_width = current_time_text_width_calc;
+            float total_time_width = total_time_text_width_calc;
+            float scrubber_width = panel_content_width_for_layout - current_time_width - total_time_width - 2 * style.ItemSpacing.x;
+            scrubber_width = std::max(scrubber_width, 10.0f);
+            float full_time_row_width = current_time_width + style.ItemSpacing.x + scrubber_width + style.ItemSpacing.x + total_time_width;
+            float center_x_offset_time_row = (panel_content_width_for_layout - full_time_row_width) / 2.0f;
+
+            float initial_cursor_y_for_time_row = ImGui::GetCursorPosY();
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + center_x_offset_time_row);
+            ImGui::SetCursorPosY(initial_cursor_y_for_time_row);
+            ImGui::TextUnformatted(currentTimeStr.c_str());
+            ImGui::SameLine(0.0f, style.ItemSpacing.x);
+
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, thinner_slider_padding_y));
+            float slider_height_with_padding = ImGui::GetFrameHeight();
+            ImGui::PopStyleVar();
+            float slider_y_offset = (time_row_text_height_calc - slider_height_with_padding) / 2.0f;
+
+            ImGui::SetCursorPosY(initial_cursor_y_for_time_row + slider_y_offset);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, thinner_slider_padding_y));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 8.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 4.0f);
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.13f, 0.14f, 0.16f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.02f, 0.56f, 0.98f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.02f, 0.56f, 0.98f, 1.0f));
+            ImGui::PushItemWidth(scrubber_width);
+
+            if (ui.totalFramesInFile > 0 && appInstance->m_playbackController_ptr) {
+                int current_frame_idx_slider = static_cast<int>(ui.currentFrameIndex);
+                int total_frames_slider = std::max(0, static_cast<int>(ui.totalFramesInFile) - 1);
+
+                bool value_changed_by_user_drag = ImGui::SliderInt("##Scrubber", &current_frame_idx_slider, 0, total_frames_slider, "", ImGuiSliderFlags_AlwaysClamp);
+
+                static bool was_paused_state_before_scrub = false;
+                static bool scrub_in_progress = false;
+
+                if (ImGui::IsItemActivated()) {
+#ifndef NDEBUG
+                    LogToFile("[GuiRender::Slider] Scrub ACTIVATED.");
+#endif
+                    scrub_in_progress = true;
+                    was_paused_state_before_scrub = appInstance->m_playbackController_ptr->isPaused();
+                    if (!was_paused_state_before_scrub) {
+#ifndef NDEBUG
+                        LogToFile("[GuiRender::Slider] Was playing, pausing for scrub via handleKey(SPACE).");
+#endif
+                        appInstance->handleKey(GLFW_KEY_SPACE, 0); // This will toggle pause and call recordPauseTime
+                    }
+                }
+
+                if (ImGui::IsItemActive() && value_changed_by_user_drag) {
+#ifndef NDEBUG
+                    LogToFile(std::string("[GuiRender::Slider] Scrub DRAG, slider val: ") + std::to_string(current_frame_idx_slider) + ". Calling performSeek.");
+#endif
+                    appInstance->performSeek(static_cast<size_t>(current_frame_idx_slider));
+                }
+
+                if (scrub_in_progress && ImGui::IsItemDeactivated()) {
+#ifndef NDEBUG
+                    LogToFile(std::string("[GuiRender::Slider] Scrub DEACTIVATED. Final slider val: ") + std::to_string(current_frame_idx_slider) +
+                        ", Current PB idx (after last drag seek, if any): " + std::to_string(appInstance->m_playbackController_ptr->getCurrentFrameIndex()));
+#endif
+                    scrub_in_progress = false;
+
+                    if (static_cast<size_t>(current_frame_idx_slider) != appInstance->m_playbackController_ptr->getCurrentFrameIndex()) {
+#ifndef NDEBUG
+                        LogToFile(std::string("[GuiRender::Slider] Scrub DEACTIVATED, value different from PB. Final seek to: ") + std::to_string(current_frame_idx_slider));
+#endif
+                        appInstance->performSeek(static_cast<size_t>(current_frame_idx_slider));
+                    }
+
+                    if (!was_paused_state_before_scrub) {
+#ifndef NDEBUG
+                        LogToFile("[GuiRender::Slider] Scrub ended, was playing before. Resuming playback via handleKey(SPACE).");
+#endif
+                        appInstance->handleKey(GLFW_KEY_SPACE, 0); // This will unpause and call anchorPlaybackTimeForResume
+                    }
+#ifndef NDEBUG
+                    else {
+                        LogToFile("[GuiRender::Slider] Scrub ended, was paused. Stays paused. Anchor already set by (final) performSeek for paused state.");
+                    }
+#endif
+                    was_paused_state_before_scrub = false;
+                }
+            }
+            else {
+                int dummy = 0;
+                ImGui::SliderInt("##Timeline", &dummy, 0, 0, "", ImGuiSliderFlags_AlwaysClamp);
+            }
+            ImGui::PopItemWidth();
+            ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar(4);
+            ImGui::SameLine(0.0f, style.ItemSpacing.x);
+            ImGui::SetCursorPosY(initial_cursor_y_for_time_row);
+            ImGui::TextUnformatted(totalTimeStr.c_str());
+
+            ImGui::Dummy(ImVec2(0, style.ItemSpacing.y * 0.5f));
+            y_base_for_button_row_content_area = ImGui::GetCursorPosY();
+
+            float center_x_offset_button_row = (panel_content_width_for_layout - main_panel_buttons_total_width) / 2.0f;
+            float current_x_for_buttons = ImGui::GetCursorPosX() + center_x_offset_button_row;
+
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+
+            float y_for_play_pause_button = y_base_for_button_row_content_area;
+            float y_for_skip_buttons = y_base_for_button_row_content_area + (playPauseButtonFrameHeight - largeButtonFrameHeight) / 2.0f;
+            float y_for_small_buttons = y_base_for_button_row_content_area + (playPauseButtonFrameHeight - smallButtonFrameHeight) / 2.0f;
+
+            ImGui::PushFont(GuiStyles::G_LargeIconFont);
+            ImGui::SetCursorPos(ImVec2(current_x_for_buttons, y_for_skip_buttons));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, GuiStyles::G_LARGE_BUTTON_PADDING);
+            if (ImGui::Button(ICON_MD_SKIP_PREVIOUS, sizeLargeButton)) appInstance->handleKey(GLFW_KEY_LEFT_BRACKET, 0);
+            ImGui::PopStyleVar();
+            current_x_for_buttons += sizeLargeButton.x + tight_inter_button_gap;
+            ImGui::PopFont();
+
+            ImGui::PushFont(GuiStyles::G_SmallIconFont);
+            ImGui::SetCursorPos(ImVec2(current_x_for_buttons, y_for_small_buttons));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, GuiStyles::G_SMALL_BUTTON_PADDING);
+            if (ImGui::Button(ICON_MD_KEYBOARD_ARROW_LEFT, sizeSmallButton)) appInstance->handleKey(GLFW_KEY_LEFT, 0);
+            ImGui::PopStyleVar();
+            current_x_for_buttons += sizeSmallButton.x + general_inter_button_gap;
+            ImGui::PopFont();
+
+            ImGui::PushFont(GuiStyles::G_LargeIconFont);
+            ImGui::SetCursorPos(ImVec2(current_x_for_buttons, y_for_play_pause_button));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, sizePlayPauseButton.x * 0.5f);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.01f, 0.45f, 0.88f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.02f, 0.55f, 1.00f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.01f, 0.35f, 0.70f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, GuiStyles::G_LARGE_BUTTON_PADDING);
+            if (ImGui::Button(ui.isPaused ? ICON_MD_PLAY_ARROW : ICON_MD_PAUSE, sizePlayPauseButton)) appInstance->handleKey(GLFW_KEY_SPACE, 0);
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(3);
+            current_x_for_buttons += sizePlayPauseButton.x + general_inter_button_gap;
+            ImGui::PopFont();
+
+            ImGui::PushFont(GuiStyles::G_SmallIconFont);
+            ImGui::SetCursorPos(ImVec2(current_x_for_buttons, y_for_small_buttons));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, GuiStyles::G_SMALL_BUTTON_PADDING);
+            if (ImGui::Button(ICON_MD_KEYBOARD_ARROW_RIGHT, sizeSmallButton)) appInstance->handleKey(GLFW_KEY_RIGHT, 0);
+            ImGui::PopStyleVar();
+            current_x_for_buttons += sizeSmallButton.x + tight_inter_button_gap;
+            ImGui::PopFont();
+
+            ImGui::PushFont(GuiStyles::G_LargeIconFont);
+            ImGui::SetCursorPos(ImVec2(current_x_for_buttons, y_for_skip_buttons));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, GuiStyles::G_LARGE_BUTTON_PADDING);
+            if (ImGui::Button(ICON_MD_SKIP_NEXT, sizeLargeButton)) appInstance->handleKey(GLFW_KEY_RIGHT_BRACKET, 0);
+            ImGui::PopStyleVar();
+            ImGui::PopFont();
+
+            ImGui::PopStyleColor();
+
+            if (GuiStyles::G_AuxOverlayIconFont && y_base_for_button_row_content_area > 0.0f) {
+                ImVec2 mainPanelWindowPos = ImGui::GetWindowPos();
+                ImVec2 contentRegionTopLeftScreenPos = mainPanelWindowPos + ImVec2(GuiStyles::PANEL_HORIZONTAL_PADDING, GuiStyles::PANEL_VERTICAL_PADDING);
+                float main_playback_buttons_row_visual_center_y_offset_in_content = y_base_for_button_row_content_area + playPauseButtonFrameHeight / 2.0f;
+                float screen_y_for_aux_grid_center = contentRegionTopLeftScreenPos.y + main_playback_buttons_row_visual_center_y_offset_in_content;
+
+                float screen_y_for_aux_grid_top_row = screen_y_for_aux_grid_center - aux_buttons_grid_height / 2.0f;
+                float screen_x_of_content_right_edge = contentRegionTopLeftScreenPos.x + panel_content_width_for_layout;
+                float screen_x_for_aux_grid_left_col = screen_x_of_content_right_edge - aux_buttons_grid_width;
+
+                ImGui::PushFont(GuiStyles::G_AuxOverlayIconFont);
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 0.75f));
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, GuiStyles::G_AUX_OVERLAY_BUTTON_PADDING);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(aux_button_effective_item_spacing_x, aux_vertical_spacing_tight));
+
+                ImGui::SetCursorScreenPos(ImVec2(screen_x_for_aux_grid_left_col, screen_y_for_aux_grid_top_row));
+                bool muted = appInstance->m_audio && appInstance->m_audio->isEffectivelyMuted();
+                if (ImGui::Button(muted ? ICON_MD_VOLUME_OFF : ICON_MD_VOLUME_UP, sizeAuxOverlayButton)) {
+                    if (appInstance->m_audio) appInstance->m_audio->setForceMute(!muted);
+                }
+                ImGui::SameLine(0.0f, aux_button_effective_item_spacing_x);
+                if (ImGui::Button(ICON_MD_INSIGHTS, sizeAuxOverlayButton)) {
+                    appInstance->m_showMetrics = !appInstance->m_showMetrics;
+                }
+
+                float screen_y_for_aux_grid_middle_row = screen_y_for_aux_grid_top_row + sizeAuxOverlayButton.y + aux_vertical_spacing_tight;
+                ImGui::SetCursorScreenPos(ImVec2(screen_x_for_aux_grid_left_col, screen_y_for_aux_grid_middle_row));
+                if (ImGui::Button(ICON_MD_HELP_OUTLINE, sizeAuxOverlayButton)) {
+                    appInstance->toggleHelpPage();
+                }
+                ImGui::SameLine(0.0f, aux_button_effective_item_spacing_x);
+                if (ImGui::Button(ICON_MD_MENU, sizeAuxOverlayButton)) {
+                    GuiOverlay::show_playlist_aux = !GuiOverlay::show_playlist_aux;
+                }
+
+                ImGui::PopStyleVar(2);
+                ImGui::PopStyleColor();
+                ImGui::PopFont();
+            }
+            ImGui::End();
+        }
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+
+        if (ui.showMetrics) {
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + style.WindowPadding.x, viewport->WorkPos.y + style.WindowPadding.y), ImGuiCond_Appearing);
+            ImGui::SetNextWindowBgAlpha(0.75f);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(200, 100), ImVec2(viewport->WorkSize.x * 0.8f, viewport->WorkSize.y * 0.8f));
+            ImGuiWindowFlags metrics_window_flags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_AlwaysAutoResize;
+
+            if (ImGui::Begin("METRICS", &appInstance->m_showMetrics, metrics_window_flags)) {
+                ImGui::Text("File: %s", ui.currentFileName.c_str());
+                ImGui::Text("Frame: %zu / %zu", ui.currentFrameIndex + (ui.totalFramesInFile > 0 ? 1 : 0), ui.totalFramesInFile);
+                ImGui::Text("Time: %s / %s", ui.videoTimestampStr.c_str(), GuiUtils::formatHMS(static_cast<int64_t>(ui.totalDurationSec * 1e9)).c_str());
+                ImGui::Text("Decoded Res: %d x %d", ui.decodedWidth, ui.decodedHeight);
+                ImGui::Separator();
+                ImGui::Text("Captured FPS: %.2f", ui.capturedFps);
+                ImGui::Text("Display FPS: %.1f", ui.actualDisplayFps);
+                const char* modeItems[] = { "Realtime", "24 FPS", "30 FPS", "60 FPS", "Benchmark" };
+                int modeTemp = ui.playbackMode;
+                if (ImGui::Combo("Playback Mode", &modeTemp, modeItems, IM_ARRAYSIZE(modeItems))) {
+                    if (appInstance) {
+                        appInstance->setPlaybackMode(static_cast<PlaybackController::PlaybackMode>(modeTemp));
+                    }
+                }
+                ImGui::Text("Audio TS: %s", ui.audioTimestampStr.c_str());
+                ImGui::Text("A/V Sync: %s", ui.avSyncDeltaStr.c_str());
+                ImGui::Separator();
+
+                ImGui::Text("Loop Times (ms): Total: %.1f", ui.totalLoopTimeMs);
+                ImGui::Text("  GPU Wait: %.1f, Decode: %.1f", ui.gpuWaitTimeMs, ui.decodeTimeMs);
+                ImGui::Text("  RenderPrep: %.1f, GUI: %.1f", ui.renderPrepTimeMs, ui.guiRenderTimeMs);
+                ImGui::Text("  VK Submit/Present: %.1f", ui.vkSubmitPresentTimeMs);
+                ImGui::Text("  App Logic (Events/PB/Audio): %.1f", ui.appLogicTimeMs);
+                ImGui::Text("  Sleep: %.1f", ui.sleepTimeMs);
+
+                ImGui::Separator();
+                ImGui::Text("CFA: %s (Meta: %s)", ui.cfaOverride.has_value() ? std::to_string(ui.cfaOverride.value()).c_str() : "Auto", ui.cfaFromMetadataStr.c_str());
+                ImGui::Text("Mode: %s, Zoom: %s", ui.isFullscreen ? "Fullscreen" : "Windowed", ui.isZoomedToNative ? "Native Pixels" : "Fit to Window");
+            }
+            ImGui::End();
+        }
+
+        // Show transient action message
+        if (!appInstance->m_actionMessage.empty()) {
+            double age = std::chrono::duration<double>(std::chrono::steady_clock::now() - appInstance->m_actionMessageTime).count();
+            if (age < appInstance->m_actionMessageDurationSec) {
+                ImGui::SetNextWindowBgAlpha(0.35f);
+                ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
+                                              viewport->WorkPos.y + viewport->WorkSize.y * 0.2f),
+                                        ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                ImGui::Begin("ACTION_MSG", nullptr,
+                            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize);
+                ImGui::SetWindowFontScale(2.0f);
+                ImGui::TextUnformatted(appInstance->m_actionMessage.c_str());
+                ImGui::End();
+            } else {
+                appInstance->m_actionMessage.clear();
+            }
+        }
+
+#ifdef ENABLE_PRORES_EXPORT
+        if (appInstance->m_showExportProgressPopup.load()) {
+            ImGui::OpenPopup("EXPORT_PROGRESS");
+        }
+        if (ImGui::BeginPopupModal("EXPORT_PROGRESS", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            int cur = appInstance->m_proResStatus.currentFrame.load();
+            int total = appInstance->m_proResStatus.totalFrames;
+            float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
+            ImGui::Text("Exporting to ProRes %d / %d", cur, total);
+            ImGui::ProgressBar(progress, ImVec2(200, 0));
+            if (!appInstance->m_proResStatus.errorMsg.empty()) {
+                ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_proResStatus.errorMsg.c_str());
+            }
+            if (!appInstance->m_proResStatus.active.load()) {
+                if (ImGui::Button("Close")) {
+                    ImGui::CloseCurrentPopup();
+                    appInstance->m_showExportProgressPopup.store(false);
+                }
+            }
+            ImGui::EndPopup();
+        }
+
+        if (appInstance->m_showDNxHRExportProgressPopup.load()) {
+            ImGui::OpenPopup("DNXHR_EXPORT_PROGRESS");
+        }
+        if (ImGui::BeginPopupModal("DNXHR_EXPORT_PROGRESS", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            int cur = appInstance->m_dnxhrStatus.currentFrame.load();
+            int total = appInstance->m_dnxhrStatus.totalFrames;
+            float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
+            ImGui::Text("Exporting to DNxHR %d / %d", cur, total);
+            ImGui::ProgressBar(progress, ImVec2(200, 0));
+            if (!appInstance->m_dnxhrStatus.errorMsg.empty()) {
+                ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_dnxhrStatus.errorMsg.c_str());
+            }
+            if (!appInstance->m_dnxhrStatus.active.load()) {
+                if (ImGui::Button("Close")) {
+                    ImGui::CloseCurrentPopup();
+                    appInstance->m_showDNxHRExportProgressPopup.store(false);
+                }
+            }
+            ImGui::EndPopup();
+        }
+        if (appInstance->m_showHevcExportProgressPopup.load()) {
+            ImGui::OpenPopup("HEVC_EXPORT_PROGRESS");
+        }
+        if (ImGui::BeginPopupModal("HEVC_EXPORT_PROGRESS", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            int cur = appInstance->m_hevcStatus.currentFrame.load();
+            int total = appInstance->m_hevcStatus.totalFrames;
+            float progress = total > 0 ? static_cast<float>(cur) / static_cast<float>(total) : 0.0f;
+            ImGui::Text("Exporting to HEVC %d / %d", cur, total);
+            ImGui::ProgressBar(progress, ImVec2(200, 0));
+            if (!appInstance->m_hevcStatus.errorMsg.empty()) {
+                ImGui::TextColored(ImVec4(1,0,0,1), "%s", appInstance->m_hevcStatus.errorMsg.c_str());
+            }
+            if (!appInstance->m_hevcStatus.active.load()) {
+                if (ImGui::Button("Close")) {
+                    ImGui::CloseCurrentPopup();
+                    appInstance->m_showHevcExportProgressPopup.store(false);
+                }
+            }
+            ImGui::EndPopup();
+        }
+#endif
+        ImGui::PopStyleVar();
+#endif
+    }
+
     void endFrame(VkCommandBuffer commandBuffer) {
         ImVec4 originalWindowBg = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
         ImVec4 originalText = ImGui::GetStyle().Colors[ImGuiCol_Text];
