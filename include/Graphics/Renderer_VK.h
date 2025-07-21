@@ -64,6 +64,10 @@ public:
         int offsetY = 0
     );
 
+    // New off-screen rendering path
+    void renderVideoToPreviewImage(VkCommandBuffer commandBuffer, uint32_t currentFrameIndex);
+    VkDescriptorSet getPreviewDescriptorSet() const { return m_previewDescriptorSet; }
+
     static int getCfaType(const std::string& cfaString);
     void setZoomNativePixels(bool nativePixels);
     void setPanOffsets(float x, float y);
@@ -99,6 +103,16 @@ public:
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
 
     uint32_t m_swapChainImageCount = 0; // Needed by Descriptor helpers
+
+    // Off-screen preview resources
+    VkImage m_previewImage = VK_NULL_HANDLE;
+    VmaAllocation m_previewImageAllocation = VK_NULL_HANDLE;
+    VkImageView m_previewImageView = VK_NULL_HANDLE;
+    VkSampler m_previewImageSampler = VK_NULL_HANDLE;
+    VkRenderPass m_previewRenderPass = VK_NULL_HANDLE;
+    VkFramebuffer m_previewFramebuffer = VK_NULL_HANDLE;
+    VkDescriptorSet m_previewDescriptorSet = VK_NULL_HANDLE;
+    VkExtent2D m_previewExtent{};
 
 private:
     struct ShaderParamsUBO {
