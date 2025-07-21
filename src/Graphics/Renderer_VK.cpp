@@ -9,6 +9,7 @@
 #include "Utils/DebugLog.h"
 #include "Utils/RawFrameBuffer.h"
 #include "Utils/OrientationUtils.h"
+#include <imgui_impl_vulkan.h>
 
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -33,6 +34,14 @@ Renderer_VK::Renderer_VK(VkPhysicalDevice physicalDevice, VkDevice device, VmaAl
     m_pipelineLayout(VK_NULL_HANDLE),
     m_graphicsPipeline(VK_NULL_HANDLE),
     m_descriptorPool(VK_NULL_HANDLE),
+    m_previewImage(VK_NULL_HANDLE),
+    m_previewImageAllocation(VK_NULL_HANDLE),
+    m_previewImageView(VK_NULL_HANDLE),
+    m_previewImageSampler(VK_NULL_HANDLE),
+    m_previewRenderPass(VK_NULL_HANDLE),
+    m_previewFramebuffer(VK_NULL_HANDLE),
+    m_previewDescriptorSet(VK_NULL_HANDLE),
+    m_previewWidth(0), m_previewHeight(0),
     m_currentRawW(0), m_currentRawH(0),
     m_zoomNativePixels(false),
     m_panX(0.0f), m_panY(0.0f),
@@ -45,7 +54,7 @@ Renderer_VK::~Renderer_VK() {
     LogToFile("[Renderer_VK] Destructor called.");
 }
 
-bool Renderer_VK::init(VkRenderPass renderPass, uint32_t swapChainImageCount) {
+bool Renderer_VK::init(VkRenderPass renderPass, uint32_t swapChainImageCount, VkExtent2D extent) {
     LogToFile(std::string("[Renderer_VK::init] Initializing with swapChainImageCount: ") + std::to_string(swapChainImageCount));
     m_swapChainImageCount = swapChainImageCount;
 
@@ -55,7 +64,7 @@ bool Renderer_VK::init(VkRenderPass renderPass, uint32_t swapChainImageCount) {
     if (!ImageResource::createRawImageResources(this, 1, 1)) { LogToFile("[Renderer_VK::init] ERROR: Failed to create initial raw image resources."); return false; }
     LogToFile("[Renderer_VK::init] Initial raw image resources created.");
 
-    onSwapChainRecreated(renderPass, swapChainImageCount);
+    onSwapChainRecreated(renderPass, swapChainImageCount, extent);
 
     LogToFile("[Renderer_VK::init] Initialization successful.");
     return true;
@@ -66,6 +75,33 @@ void Renderer_VK::cleanup() {
     Pipeline::cleanupSwapChainResources(this);
     ImageResource::cleanupRawImageResources(this);
 
+    if (m_previewDescriptorSet != VK_NULL_HANDLE)
+    {
+        ImGui_ImplVulkan_RemoveTexture(m_previewDescriptorSet);
+        m_previewDescriptorSet = VK_NULL_HANDLE;
+    }
+    if (m_previewFramebuffer != VK_NULL_HANDLE) {
+        vkDestroyFramebuffer(m_device_p, m_previewFramebuffer, nullptr);
+        m_previewFramebuffer = VK_NULL_HANDLE;
+    }
+    if (m_previewRenderPass != VK_NULL_HANDLE) {
+        vkDestroyRenderPass(m_device_p, m_previewRenderPass, nullptr);
+        m_previewRenderPass = VK_NULL_HANDLE;
+    }
+    if (m_previewImageSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(m_device_p, m_previewImageSampler, nullptr);
+        m_previewImageSampler = VK_NULL_HANDLE;
+    }
+    if (m_previewImageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(m_device_p, m_previewImageView, nullptr);
+        m_previewImageView = VK_NULL_HANDLE;
+    }
+    if (m_previewImage != VK_NULL_HANDLE) {
+        vmaDestroyImage(m_allocator_p, m_previewImage, m_previewImageAllocation);
+        m_previewImage = VK_NULL_HANDLE;
+        m_previewImageAllocation = VK_NULL_HANDLE;
+    }
+
     if (m_descriptorSetLayout != VK_NULL_HANDLE) {
         LogToFile("[Renderer_VK::cleanup] Destroying descriptor set layout.");
         vkDestroyDescriptorSetLayout(m_device_p, m_descriptorSetLayout, nullptr);
@@ -74,10 +110,12 @@ void Renderer_VK::cleanup() {
     LogToFile("[Renderer_VK::cleanup] Cleanup complete.");
 }
 
-void Renderer_VK::onSwapChainRecreated(VkRenderPass renderPass, uint32_t swapChainImageCount) {
+void Renderer_VK::onSwapChainRecreated(VkRenderPass renderPass, uint32_t swapChainImageCount, VkExtent2D extent) {
     LogToFile(std::string("[Renderer_VK::onSwapChainRecreated] Recreating for ") + std::to_string(swapChainImageCount) + " images.");
 
     m_swapChainImageCount = swapChainImageCount;
+    m_previewWidth = extent.width;
+    m_previewHeight = extent.height;
 
     Pipeline::cleanupSwapChainResources(this);
 
@@ -85,6 +123,125 @@ void Renderer_VK::onSwapChainRecreated(VkRenderPass renderPass, uint32_t swapCha
     if (!Descriptor::createUniformBuffers(this)) { LogToFile("[Renderer_VK::onSwapChainRecreated] ERROR: Failed to recreate uniform buffers"); throw std::runtime_error("Failed to recreate uniform buffers"); }
     if (!Descriptor::createDescriptorPool(this)) { LogToFile("[Renderer_VK::onSwapChainRecreated] ERROR: Failed to recreate descriptor pool"); throw std::runtime_error("Failed to recreate descriptor pool"); }
     if (!Descriptor::createDescriptorSets(this)) { LogToFile("[Renderer_VK::onSwapChainRecreated] ERROR: Failed to recreate descriptor sets"); throw std::runtime_error("Failed to recreate descriptor sets"); }
+
+    // --- create preview render target ---
+    if (m_previewFramebuffer != VK_NULL_HANDLE) {
+        vkDestroyFramebuffer(m_device_p, m_previewFramebuffer, nullptr);
+        m_previewFramebuffer = VK_NULL_HANDLE;
+    }
+    if (m_previewRenderPass != VK_NULL_HANDLE) {
+        vkDestroyRenderPass(m_device_p, m_previewRenderPass, nullptr);
+        m_previewRenderPass = VK_NULL_HANDLE;
+    }
+    if (m_previewImageSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(m_device_p, m_previewImageSampler, nullptr);
+        m_previewImageSampler = VK_NULL_HANDLE;
+    }
+    if (m_previewImageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(m_device_p, m_previewImageView, nullptr);
+        m_previewImageView = VK_NULL_HANDLE;
+    }
+    if (m_previewImage != VK_NULL_HANDLE) {
+        vmaDestroyImage(m_allocator_p, m_previewImage, m_previewImageAllocation);
+        m_previewImage = VK_NULL_HANDLE;
+        m_previewImageAllocation = VK_NULL_HANDLE;
+    }
+
+    VkImageCreateInfo img{};
+    img.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    img.imageType = VK_IMAGE_TYPE_2D;
+    img.extent.width = m_previewWidth ? m_previewWidth : 1;
+    img.extent.height = m_previewHeight ? m_previewHeight : 1;
+    img.extent.depth = 1;
+    img.mipLevels = 1;
+    img.arrayLayers = 1;
+    img.format = VK_FORMAT_B8G8R8A8_UNORM;
+    img.tiling = VK_IMAGE_TILING_OPTIMAL;
+    img.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    img.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    img.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    img.samples = VK_SAMPLE_COUNT_1_BIT;
+
+    VmaAllocationCreateInfo ainfo{};
+    ainfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    VK_CHECK_RENDERER(vmaCreateImage(m_allocator_p, &img, &ainfo, &m_previewImage, &m_previewImageAllocation, nullptr));
+
+    VkImageViewCreateInfo view{};
+    view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    view.image = m_previewImage;
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = VK_FORMAT_B8G8R8A8_UNORM;
+    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view.subresourceRange.baseMipLevel = 0;
+    view.subresourceRange.levelCount = 1;
+    view.subresourceRange.baseArrayLayer = 0;
+    view.subresourceRange.layerCount = 1;
+    VK_CHECK_RENDERER(vkCreateImageView(m_device_p, &view, nullptr, &m_previewImageView));
+
+    VkSamplerCreateInfo sinfo{};
+    sinfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sinfo.magFilter = VK_FILTER_LINEAR;
+    sinfo.minFilter = VK_FILTER_LINEAR;
+    sinfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sinfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sinfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sinfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    VK_CHECK_RENDERER(vkCreateSampler(m_device_p, &sinfo, nullptr, &m_previewImageSampler));
+
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = VK_FORMAT_B8G8R8A8_UNORM;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentReference colorRef{};
+    colorRef.attachment = 0;
+    colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorRef;
+
+    VkSubpassDependency dep{};
+    dep.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dep.dstSubpass = 0;
+    dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dep.srcAccessMask = 0;
+    dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    VkRenderPassCreateInfo rpci{};
+    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpci.attachmentCount = 1;
+    rpci.pAttachments = &colorAttachment;
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+    rpci.dependencyCount = 1;
+    rpci.pDependencies = &dep;
+    VK_CHECK_RENDERER(vkCreateRenderPass(m_device_p, &rpci, nullptr, &m_previewRenderPass));
+
+    VkImageView attachments[] = { m_previewImageView };
+    VkFramebufferCreateInfo fbci{};
+    fbci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbci.renderPass = m_previewRenderPass;
+    fbci.attachmentCount = 1;
+    fbci.pAttachments = attachments;
+    fbci.width = m_previewWidth;
+    fbci.height = m_previewHeight;
+    fbci.layers = 1;
+    VK_CHECK_RENDERER(vkCreateFramebuffer(m_device_p, &fbci, nullptr, &m_previewFramebuffer));
+
+    // Descriptor set will be created lazily once ImGui is initialized
+    if (m_previewDescriptorSet != VK_NULL_HANDLE)
+    {
+        ImGui_ImplVulkan_RemoveTexture(m_previewDescriptorSet);
+        m_previewDescriptorSet = VK_NULL_HANDLE;
+    }
 
     LogToFile("[Renderer_VK::onSwapChainRecreated] Swapchain-dependent resources recreated.");
 }
@@ -370,4 +527,33 @@ void Renderer_VK::ensureRawImageCapacity(uint32_t w, uint32_t h)
         LogToFile("[Renderer_VK::ensureRawImageCapacity] ERROR: Failed to recreate raw image resources for new capacity.");
         throw std::runtime_error("Failed to ensure raw image capacity by recreating resources.");
     }
+}
+
+void Renderer_VK::renderVideoToPreviewImage(VkCommandBuffer cmd)
+{
+    if (m_previewRenderPass == VK_NULL_HANDLE || m_previewFramebuffer == VK_NULL_HANDLE)
+        return;
+
+    VkClearValue clear{}; clear.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+    VkRenderPassBeginInfo rp{ VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+    rp.renderPass = m_previewRenderPass;
+    rp.framebuffer = m_previewFramebuffer;
+    rp.renderArea.offset = {0,0};
+    rp.renderArea.extent = { m_previewWidth, m_previewHeight };
+    rp.clearValueCount = 1;
+    rp.pClearValues = &clear;
+    vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
+
+    recordDrawCommands(cmd, 0, (int)m_previewWidth, (int)m_previewHeight, 0, 0);
+
+    vkCmdEndRenderPass(cmd);
+}
+
+VkDescriptorSet Renderer_VK::getPreviewDescriptorSet()
+{
+    if (m_previewDescriptorSet == VK_NULL_HANDLE && m_previewImageView != VK_NULL_HANDLE)
+    {
+        m_previewDescriptorSet = ImGui_ImplVulkan_AddTexture(m_previewImageSampler, m_previewImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    return m_previewDescriptorSet;
 }

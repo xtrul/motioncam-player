@@ -52,6 +52,7 @@ public:
     App& operator=(const App&) = delete;
 
     bool run();
+    Renderer_VK* getRenderer() { return m_rendererVk.get(); }
 
     friend GuiOverlay::UIData GuiOverlay::gatherData(App* appInstance);
     friend void GuiOverlay::render(App* appInstance);
@@ -142,12 +143,6 @@ public:
     char m_outputFolder[1024] = "";
     std::vector<ExportFormat> m_fileExportFormats;
     bool m_previewOpen = true;
-    struct PreviewRect {
-        int x = 0;
-        int y = 0;
-        int w = 0;
-        int h = 0;
-    } m_previewRect;
 #endif
 
     std::vector<VkImage> m_swapChainImages;
