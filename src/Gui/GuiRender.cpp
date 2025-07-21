@@ -191,14 +191,12 @@ namespace GuiOverlay {
 
 
     void render(App* appInstance) {
-
 #ifdef MOTIONCAM_CONVERTER
         if (!appInstance) return;
 
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
-        ImGui::SetNextWindowViewport(viewport->ID);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -210,35 +208,35 @@ namespace GuiOverlay {
         ImGui::Begin("MainDockSpace", nullptr, window_flags);
         ImGui::PopStyleVar(3);
 
+#if IMGUI_HAS_DOCK
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-
-        // --- UI Panels (which will be docked into the space above) ---
+#endif
 
         // 1. Files Panel
         if (ImGui::Begin("Files")) {
             if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
-            if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex != -1) {
-                appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
-                appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
-                appInstance->m_selectedBatchIndex = -1;
+            if (ImGui::Button("Remove")) {
+                 if (appInstance->m_selectedBatchIndex >= 0 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileList.size()) {
+                    appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
+                    if (appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size())
+                        appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
+                    appInstance->m_selectedBatchIndex = -1;
+                }
             }
             ImGui::SameLine();
             if (ImGui::Button("Clear")) {
-                appInstance->m_fileList.clear();
-                appInstance->m_fileExportFormats.clear();
-                appInstance->m_selectedBatchIndex = -1;
+                appInstance->m_fileList.clear(); appInstance->m_fileExportFormats.clear(); appInstance->m_selectedBatchIndex = -1;
             }
             ImGui::Separator();
-            ImGui::BeginChild("FileListScrollingRegion");
+            ImGui::BeginChild("FileListChild");
             for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
-                bool is_selected = (i == appInstance->m_selectedBatchIndex);
-                std::string name = fs::path(appInstance->m_fileList[i]).filename().string();
-                if (ImGui::Selectable(name.c_str(), is_selected)) {
+                bool sel = (i == appInstance->m_selectedBatchIndex);
+                std::string name = std::filesystem::path(appInstance->m_fileList[i]).filename().string();
+                if (ImGui::Selectable(name.c_str(), sel)) {
                     if (appInstance->m_selectedBatchIndex != i) {
-                        appInstance->m_selectedBatchIndex = i;
-                        appInstance->loadFileAtIndex(i);
+                        appInstance->m_selectedBatchIndex = i; appInstance->loadFileAtIndex(i);
                     }
                 }
             }
@@ -246,15 +244,13 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Preview Panel - This is where the video will be drawn.
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0)); // No padding to maximize video area
+        // 2. Preview Panel
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         if (ImGui::Begin("Preview")) {
             ImVec2 pos = ImGui::GetCursorScreenPos();
             ImVec2 size = ImGui::GetContentRegionAvail();
-            // Update the app's preview rectangle with the exact coordinates and size of this panel's content area.
-            appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)size.x, (int)size.y};
+            appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y)};
         } else {
-            // If the preview panel is closed by the user, set the rect to zero to stop rendering.
             appInstance->m_previewRect = {0, 0, 0, 0};
         }
         ImGui::End();
@@ -267,21 +263,24 @@ namespace GuiOverlay {
                 if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
             }
             ImGui::SameLine();
-            size_t curIdx = 0, total = 0;
+            size_t curIdx = 0, total = 1;
             if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
                 curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
                 total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
+                if (total == 0) total = 1;
             }
             int frame_int = (int)curIdx;
             ImGui::PushItemWidth(-1);
-            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d / %d")) {
+            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d")) {
                 if (ImGui::IsItemActive()) {
                     if (!paused) appInstance->m_playbackController_ptr->togglePause();
                     appInstance->performSeek(frame_int);
                 }
             }
             ImGui::PopItemWidth();
+
             ImGui::Separator();
+
             if (appInstance->m_selectedBatchIndex != -1) {
                 int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
                 ImGui::Text("Export Format:");
@@ -293,6 +292,7 @@ namespace GuiOverlay {
                 ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
                 appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
             }
+
             ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
@@ -302,17 +302,20 @@ namespace GuiOverlay {
             if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
                 appInstance->startBatchConversion();
             }
-            ImGui::Separator();
-            if (ImGui::CollapsingHeader("Log")) {
-                ImGui::BeginChild("LogScrollingRegion");
-                for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
-                if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
-                ImGui::EndChild();
-            }
+        }
+        ImGui::End();
+
+        // 4. Log Panel
+        if (ImGui::Begin("Log")) {
+            ImGui::BeginChild("ScrollingLog");
+            for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
+            ImGui::EndChild();
         }
         ImGui::End();
 
         ImGui::End(); // End MainDockSpace
+
 #else
         if (!appInstance) return;
         ImGui::PushStyleVar(ImGuiStyleVar_Alpha, appInstance->m_uiOpacity);
