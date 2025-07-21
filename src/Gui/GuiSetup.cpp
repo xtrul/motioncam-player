@@ -42,7 +42,8 @@ namespace GuiOverlay {
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-        // Docking and Viewports are disabled for a fixed layout.
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;    // Enable Docking
+        io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable; // Ensure Multi-Viewports are disabled
 
         // Explicitly set ini file location so it stays in the application folder
         g_ImGuiIniPath = (std::filesystem::path(g_AppBasePath) / "imgui.ini").string();

@@ -205,25 +205,35 @@ namespace GuiOverlay {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
-                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+        window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+        window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
-        ImGui::Begin("MainLayout", nullptr, window_flags);
+        ImGui::Begin("MainDockSpace", nullptr, window_flags);
         ImGui::PopStyleVar(3);
 
-        const float fileListWidth = 250.0f;
-        const float controlsWidth = 350.0f;
-        const float padding = ImGui::GetStyle().ItemSpacing.x;
+#if IMGUI_HAS_DOCK
+        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+#endif
 
-        ImGui::BeginChild("FilesPanel", ImVec2(fileListWidth, 0), true);
-        {
-            if (ImGui::Button("Add", ImVec2(ImGui::GetContentRegionAvail().x * 0.33f, 0))) { appInstance->triggerOpenFileViaDialog(); }
+        // 1. Files Panel
+        if (ImGui::Begin("Files")) {
+            if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
-            if (ImGui::Button("Remove", ImVec2(ImGui::GetContentRegionAvail().x * 0.5f, 0))) { /* ... remove logic ... */ }
+            if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex != -1) {
+                appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
+                appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
+                appInstance->m_selectedBatchIndex = -1;
+            }
             ImGui::SameLine();
-            if (ImGui::Button("Clear", ImVec2(-1, 0))) { /* ... clear logic ... */ }
+            if (ImGui::Button("Clear")) {
+                appInstance->m_fileList.clear();
+                appInstance->m_fileExportFormats.clear();
+                appInstance->m_selectedBatchIndex = -1;
+            }
             ImGui::Separator();
-            ImGui::BeginChild("FileListScrolling");
+            ImGui::BeginChild("FileListScrollingRegion");
             for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
                 bool is_selected = (i == appInstance->m_selectedBatchIndex);
                 std::string name = fs::path(appInstance->m_fileList[i]).filename().string();
@@ -236,70 +246,73 @@ namespace GuiOverlay {
             }
             ImGui::EndChild();
         }
-        ImGui::EndChild();
+        ImGui::End();
 
-        ImGui::SameLine();
-
-        ImGui::BeginChild("PreviewPanel", ImVec2(ImGui::GetContentRegionAvail().x - controlsWidth - padding, 0), true);
-        {
-            ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();
-            ImVec2 canvas_sz = ImGui::GetContentRegionAvail();
-
-            if (appInstance->getRenderer()) {
-                int imgW = appInstance->getRenderer()->getImageWidth();
-                int imgH = appInstance->getRenderer()->getImageHeight();
-
-                if (imgW > 0 && imgH > 0) {
-                    float imgAspect = (float)imgW / (float)imgH;
-                    float canvasAspect = canvas_sz.x / canvas_sz.y;
-
-                    ImVec2 renderSize;
-                    ImVec2 renderPos;
-
-                    if (imgAspect > canvasAspect) {
-                        renderSize.x = canvas_sz.x;
-                        renderSize.y = canvas_sz.x / imgAspect;
-                        renderPos.x = canvas_p0.x;
-                        renderPos.y = canvas_p0.y + (canvas_sz.y - renderSize.y) * 0.5f;
-                    } else {
-                        renderSize.y = canvas_sz.y;
-                        renderSize.x = canvas_sz.y * imgAspect;
-                        renderPos.x = canvas_p0.x + (canvas_sz.x - renderSize.x) * 0.5f;
-                        renderPos.y = canvas_p0.y;
-                    }
-
-                    ImGui::SetCursorScreenPos(renderPos);
-                    ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
-                    if(texID) ImGui::Image(texID, renderSize);
-                }
-            }
+        // 2. Preview Panel - display the rendered texture
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGuiWindowFlags preview_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground;
+        if (ImGui::Begin("Preview", nullptr, preview_flags)) {
+            ImVec2 size = ImGui::GetContentRegionAvail();
+            ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
+            if (texID)
+                ImGui::Image(texID, size);
         }
-        ImGui::EndChild();
+        ImGui::End();
+        ImGui::PopStyleVar();
 
-        ImGui::SameLine();
-
-        ImGui::BeginChild("ControlsPanel", ImVec2(controlsWidth, 0), true);
-        {
+        // 3. Controls & Export Panel
+        if (ImGui::Begin("Controls & Export")) {
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
-            if (ImGui::Button(paused ? "Play" : "Pause")) { /* ... */ }
+            if (ImGui::Button(paused ? "Play" : "Pause")) {
+                if (appInstance->m_playbackController_ptr) appInstance->m_playbackController_ptr->togglePause();
+            }
             ImGui::SameLine();
             size_t curIdx = 0, total = 0;
+            if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+                curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
+                total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
+            }
             int frame_int = (int)curIdx;
             ImGui::PushItemWidth(-1);
-            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d / %d")) { /* ... */ }
+            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d / %d")) {
+                if (ImGui::IsItemActive()) {
+                    if (!paused) appInstance->m_playbackController_ptr->togglePause();
+                    appInstance->performSeek(frame_int);
+                }
+            }
             ImGui::PopItemWidth();
             ImGui::Separator();
-            if (ImGui::CollapsingHeader("Export Settings", ImGuiTreeNodeFlags_DefaultOpen)) { /* ... */ }
+            if (appInstance->m_selectedBatchIndex != -1) {
+                int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
+                ImGui::Text("Export Format:");
+                ImGui::RadioButton("ProRes (CPU)", &fmt, (int)App::ExportFormat::PRORES_CPU); ImGui::SameLine();
+                ImGui::RadioButton("ProRes (GPU)", &fmt, (int)App::ExportFormat::PRORES_GPU);
+                ImGui::RadioButton("DNxHR (CPU)", &fmt, (int)App::ExportFormat::DNXHR_CPU); ImGui::SameLine();
+                ImGui::RadioButton("DNxHR (GPU)", &fmt, (int)App::ExportFormat::DNXHR_GPU);
+                ImGui::RadioButton("HEVC (GPU)", &fmt, (int)App::ExportFormat::HEVC_GPU); ImGui::SameLine();
+                ImGui::RadioButton("DNGs", &fmt, (int)App::ExportFormat::DNG);
+                appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
+            }
+            ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
+            ImGui::SameLine();
+            if (ImGui::Button("Browse...")) {
+                std::string folder = appInstance->openFolderDialog();
+                if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
+            }
+            if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
+                appInstance->startBatchConversion();
+            }
             ImGui::Separator();
-            if (ImGui::CollapsingHeader("Log", ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::BeginChild("LogScrolling");
+            if (ImGui::CollapsingHeader("Log")) {
+                ImGui::BeginChild("LogScrollingRegion");
                 for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
+                if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
                 ImGui::EndChild();
             }
         }
-        ImGui::EndChild();
-
         ImGui::End();
+
+        ImGui::End(); // End MainDockSpace
 
 #else
         if (!appInstance) return;
