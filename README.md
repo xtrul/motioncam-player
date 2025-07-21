@@ -40,6 +40,14 @@ configure step prints "FFmpeg found via vcpkg, enabling ProRes export". When
 this message appears, the `ENABLE_PRORES_EXPORT` definition is added and the
 runtime DLLs will be copied automatically.
 
+## Usage
+
+The application uses a single dockspace window. The video is drawn inside the
+**Preview** panel which can be resized or moved like any other ImGui window.
+Clips start in a paused state so you can inspect the first frame before
+beginning playback. Use the **Play** button or press the spacebar to toggle
+playback.
+
 ## ProRes Export
 
 - Right-click anywhere in the player window to open the context menu.
