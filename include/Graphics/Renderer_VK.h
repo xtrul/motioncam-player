@@ -38,9 +38,9 @@ public:
     );
     ~Renderer_VK();
 
-    bool init(VkRenderPass renderPass, uint32_t swapChainImageCount, VkExtent2D extent);
+    bool init(VkRenderPass renderPass, uint32_t swapChainImageCount);
     void cleanup();
-    void onSwapChainRecreated(VkRenderPass renderPass, uint32_t swapChainImageCount, VkExtent2D extent);
+    void onSwapChainRecreated(VkRenderPass renderPass, uint32_t swapChainImageCount);
     // cleanupSwapChainResources is now a free function in Pipeline.cpp, called internally
 
     void prepareAndUploadFrameData(
@@ -75,10 +75,6 @@ public:
     void resetDimensions();
     void ensureRawImageCapacity(uint32_t w, uint32_t h);
 
-    // --- Render to texture preview helpers ---
-    void renderVideoToPreviewImage(VkCommandBuffer commandBuffer);
-    VkDescriptorSet getPreviewDescriptorSet();
-
     // Public members needed by helper namespaces (e.g., ImageResource, Pipeline, Descriptor)
     // These allow the namespaced functions to operate on Renderer_VK's state.
     VkPhysicalDevice m_physicalDevice_p; // Renamed to avoid conflict if original was public
@@ -101,17 +97,6 @@ public:
     VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> m_descriptorSets;
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
-
-    // --- Off-screen preview resources ---
-    VkImage m_previewImage = VK_NULL_HANDLE;
-    VmaAllocation m_previewImageAllocation = VK_NULL_HANDLE;
-    VkImageView m_previewImageView = VK_NULL_HANDLE;
-    VkSampler m_previewImageSampler = VK_NULL_HANDLE;
-    VkRenderPass m_previewRenderPass = VK_NULL_HANDLE;
-    VkFramebuffer m_previewFramebuffer = VK_NULL_HANDLE;
-    VkDescriptorSet m_previewDescriptorSet = VK_NULL_HANDLE;
-    uint32_t m_previewWidth = 0;
-    uint32_t m_previewHeight = 0;
 
     uint32_t m_swapChainImageCount = 0; // Needed by Descriptor helpers
 

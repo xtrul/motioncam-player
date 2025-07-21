@@ -189,7 +189,7 @@ void App::recreateSwapChain() {
 
     if (m_rendererVk) {
         LogToFile("[App::recreateSwapChain] Notifying Renderer_VK about swapchain recreation.");
-        m_rendererVk->onSwapChainRecreated(m_renderPass, static_cast<uint32_t>(m_swapChainImages.size()), m_swapChainExtent);
+        m_rendererVk->onSwapChainRecreated(m_renderPass, static_cast<uint32_t>(m_swapChainImages.size()));
     }
 
     LogToFile("[App::recreateSwapChain] Swapchain recreation complete.");

@@ -231,7 +231,7 @@ App::App(const std::string& filePath) :
 
     LogToFile("App::App constr Creating Renderer_VK...");
     m_rendererVk = std::make_unique<Renderer_VK>(m_physicalDevice, m_device, m_vmaAllocator, m_graphicsQueue, m_commandPool);
-    if (!m_rendererVk->init(m_renderPass, static_cast<uint32_t>(m_swapChainImages.size()), m_swapChainExtent)) {
+    if (!m_rendererVk->init(m_renderPass, static_cast<uint32_t>(m_swapChainImages.size()))) {
         LogToFile("App::App constr ERROR: Failed to initialize Renderer_VK. Aborting constructor.");
         throw std::runtime_error("Failed to initialize Renderer_VK in App constructor.");
     }

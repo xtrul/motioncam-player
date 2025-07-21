@@ -441,14 +441,17 @@ void App::drawFrame() {
     }
 
 
-    // Render video to off-screen texture first
-    if (renderContentFromPacket) {
-        m_rendererVk->renderVideoToPreviewImage(cmd);
-    }
-
     rpInfo.clearValueCount = 1;
     rpInfo.pClearValues = &clearColorValue;
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    if (renderContentFromPacket) {
+        m_rendererVk->recordDrawCommands(
+            cmd, m_currentFrame,
+            static_cast<int>(m_swapChainExtent.width),
+            static_cast<int>(m_swapChainExtent.height),
+            0, 0);
+    }
 
     if (m_uiOpacity > 0.0f) {
         GuiOverlay::beginFrame();
