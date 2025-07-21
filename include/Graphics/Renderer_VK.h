@@ -75,6 +75,10 @@ public:
     void resetDimensions();
     void ensureRawImageCapacity(uint32_t w, uint32_t h);
 
+    // Off-screen preview rendering
+    void renderVideoToPreviewImage(VkCommandBuffer commandBuffer);
+    VkDescriptorSet getPreviewDescriptorSet() const { return m_previewDescriptorSet; }
+
     // Public members needed by helper namespaces (e.g., ImageResource, Pipeline, Descriptor)
     // These allow the namespaced functions to operate on Renderer_VK's state.
     VkPhysicalDevice m_physicalDevice_p; // Renamed to avoid conflict if original was public
@@ -87,6 +91,16 @@ public:
     VmaAllocation m_rawImageAllocation = VK_NULL_HANDLE;
     VkImageView m_rawImageView = VK_NULL_HANDLE;
     VkSampler m_rawImageSampler = VK_NULL_HANDLE;
+
+    // Off-screen preview rendering resources
+    VkImage m_previewImage = VK_NULL_HANDLE;
+    VmaAllocation m_previewImageAllocation = VK_NULL_HANDLE;
+    VkImageView m_previewImageView = VK_NULL_HANDLE;
+    VkSampler m_previewImageSampler = VK_NULL_HANDLE;
+    VkRenderPass m_previewRenderPass = VK_NULL_HANDLE;
+    VkFramebuffer m_previewFramebuffer = VK_NULL_HANDLE;
+    VkDescriptorSet m_previewDescriptorSet = VK_NULL_HANDLE;
+    VkExtent2D m_previewExtent{};
 
     std::vector<VkBuffer> m_uniformBuffers;
     std::vector<VmaAllocation> m_uniformBufferAllocations;

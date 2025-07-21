@@ -92,6 +92,8 @@ public:
     PlaybackController* m_playbackController_ptr = nullptr;
     DecoderWrapper* m_decoderWrapper_ptr = nullptr;
 
+    Renderer_VK* getRenderer() const { return m_rendererVk.get(); }
+
     struct QueueFamilyIndices {
         std::optional<uint32_t> graphicsFamily;
         std::optional<uint32_t> presentFamily;
@@ -142,12 +144,6 @@ public:
     char m_outputFolder[1024] = "";
     std::vector<ExportFormat> m_fileExportFormats;
     bool m_previewOpen = true;
-    struct PreviewRect {
-        int x = 0;
-        int y = 0;
-        int w = 0;
-        int h = 0;
-    } m_previewRect;
 #endif
 
     std::vector<VkImage> m_swapChainImages;
