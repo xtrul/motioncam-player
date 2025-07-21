@@ -448,9 +448,10 @@ void App::drawFrame() {
     if (renderContentFromPacket) {
         m_rendererVk->recordDrawCommands(
             cmd, m_currentFrame,
-            static_cast<int>(m_swapChainExtent.width),
-            static_cast<int>(m_swapChainExtent.height),
-            0, 0);
+            m_previewRect.w,
+            m_previewRect.h,
+            m_previewRect.x,
+            m_previewRect.y);
     }
 
     if (m_uiOpacity > 0.0f) {
