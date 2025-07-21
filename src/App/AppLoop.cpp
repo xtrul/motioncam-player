@@ -440,18 +440,16 @@ void App::drawFrame() {
         }
     }
 
+    if (renderContentFromPacket)
+    {
+        m_rendererVk->renderVideoToPreviewImage(cmd, m_currentFrame);
+    }
+
 
     rpInfo.clearValueCount = 1;
     rpInfo.pClearValues = &clearColorValue;
     vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    if (renderContentFromPacket) {
-        m_rendererVk->recordDrawCommands(
-            cmd, m_currentFrame,
-            static_cast<int>(m_swapChainExtent.width),
-            static_cast<int>(m_swapChainExtent.height),
-            0, 0);
-    }
 
     if (m_uiOpacity > 0.0f) {
         GuiOverlay::beginFrame();

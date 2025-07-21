@@ -16,6 +16,7 @@
 #include "Playback/PlaybackController.h"
 #include "Audio/AudioController.h"
 #include "Decoder/DecoderWrapper.h"
+#include "Graphics/Renderer_VK.h"
 
 
 #include <imgui.h>
@@ -247,11 +248,9 @@ namespace GuiOverlay {
         // 2. Preview Panel
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         if (ImGui::Begin("Preview")) {
-            ImVec2 pos = ImGui::GetCursorScreenPos();
             ImVec2 size = ImGui::GetContentRegionAvail();
-            appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y)};
-        } else {
-            appInstance->m_previewRect = {0, 0, 0, 0};
+            VkDescriptorSet tex = appInstance->getRenderer()->getPreviewDescriptorSet();
+            ImGui::Image((ImTextureID)tex, size);
         }
         ImGui::End();
         ImGui::PopStyleVar();
