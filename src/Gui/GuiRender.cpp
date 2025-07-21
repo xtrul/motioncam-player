@@ -210,7 +210,21 @@ namespace GuiOverlay {
 
 #if IMGUI_HAS_DOCK
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+        if (ImGuiDockNode* central_node = ImGui::DockBuilderGetCentralNode(dockspace_id)) {
+            ImVec2 pos = central_node->Pos;
+            ImVec2 size = central_node->Size;
+            appInstance->m_previewRect = {
+                (int)pos.x, (int)pos.y,
+                (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y)
+            };
+        } else {
+            appInstance->m_previewRect = {0, 0, 0, 0};
+        }
+#else
+        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+        appInstance->m_previewRect = {0, 0, 0, 0};
 #endif
 
         // 1. Files Panel
@@ -244,17 +258,7 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Preview Panel
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-        if (ImGui::Begin("Preview")) {
-            ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImVec2 size = ImGui::GetContentRegionAvail();
-            appInstance->m_previewRect = {(int)pos.x, (int)pos.y, (int)std::max(1.0f, size.x), (int)std::max(1.0f, size.y)};
-        } else {
-            appInstance->m_previewRect = {0, 0, 0, 0};
-        }
-        ImGui::End();
-        ImGui::PopStyleVar();
+
 
         // 3. Controls & Export Panel
         if (ImGui::Begin("Controls & Export")) {
