@@ -22,6 +22,7 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
+#include <imgui_internal.h>
 
 #ifndef IMGUI_HAS_DOCK
 #define IMGUI_HAS_DOCK 0
@@ -193,6 +194,32 @@ namespace GuiOverlay {
         return data;
     }
 
+#if IMGUI_HAS_DOCK
+    static void SubmitDefaultDockLayout(ImGuiID dockspace_id)
+    {
+        ImGui::DockBuilderRemoveNode(dockspace_id);
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->WorkSize);
+
+        ImGuiID dock_main_id = dockspace_id;
+        ImGuiID dock_log;
+        ImGuiID dock_right;
+        dock_main_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.25f, &dock_log, &dock_main_id);
+        ImGuiID dock_right_col;
+        dock_main_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, &dock_right_col, &dock_main_id);
+        ImGuiID dock_files;
+        ImGuiID dock_controls;
+        ImGui::DockBuilderSplitNode(dock_right_col, ImGuiDir_Up, 0.5f, &dock_files, &dock_controls);
+
+        ImGui::DockBuilderDockWindow("Log", dock_log);
+        ImGui::DockBuilderDockWindow("Files", dock_files);
+        ImGui::DockBuilderDockWindow("Controls & Export", dock_controls);
+        ImGui::DockBuilderDockWindow("Preview", dock_main_id);
+
+        ImGui::DockBuilderFinish(dockspace_id);
+    }
+#endif
+
 
     void render(App* appInstance) {
 #ifdef MOTIONCAM_CONVERTER
@@ -214,6 +241,11 @@ namespace GuiOverlay {
 
 #if IMGUI_HAS_DOCK
         ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        static bool first_time = true;
+        if (first_time) {
+            SubmitDefaultDockLayout(dockspace_id);
+            first_time = false;
+        }
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 #endif
 
@@ -303,12 +335,15 @@ namespace GuiOverlay {
                 appInstance->startBatchConversion();
             }
             ImGui::Separator();
-            if (ImGui::CollapsingHeader("Log")) {
-                ImGui::BeginChild("LogScrollingRegion");
-                for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
-                if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
-                ImGui::EndChild();
-            }
+        }
+        ImGui::End();
+
+        // 4. Log Panel
+        if (ImGui::Begin("Log")) {
+            ImGui::BeginChild("LogScrollingRegion");
+            for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
+            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
+            ImGui::EndChild();
         }
         ImGui::End();
 
