@@ -94,3 +94,13 @@ runtime DLLs will be copied automatically.
 - The log file lists these settings so you can verify the parameters used.
 
 See `docs/Converter_Enhancement_Spec.md` for proposed improvements to the MotionCam Converter add-on.
+
+## Keyboard Shortcuts
+
+- **F** or **Middle Mouse Button** &ndash; Toggle preview-only fullscreen (UI hidden)
+- **F11** &ndash; Toggle main window fullscreen
+- **Spacebar** &ndash; Play/Pause
+- **Arrow Keys** &ndash; Step through frames
+- **Home/End** &ndash; Jump to first/last frame
+
+The UI ignores ImGui focus for these keys so playback and navigation remain responsive. Other navigation shortcuts remain active even when UI widgets are focused.

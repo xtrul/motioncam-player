@@ -39,37 +39,10 @@ void App::key_callback_static(GLFWwindow* window, int key, int scancode, int act
     auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
     if (!app) return;
 
-    ImGuiIO& io = ImGui::GetIO();
-    LogToFile(std::string("[key_callback_static] Key Event: key=") + std::to_string(key) + ", action=" + std::to_string(action) + ", io.WantCaptureKeyboard=" + (io.WantCaptureKeyboard ? "true" : "false"));
+    LogToFile(std::string("[key_callback_static] Key Event: key=") + std::to_string(key) + ", action=" + std::to_string(action));
 
-    // This is the final, correct logic.
-    // We define a comprehensive whitelist of all keys that are used for application
-    // control. If a key is on this list, we process it. Otherwise, we let ImGui
-    // handle it. This prevents the UI from blocking critical app functions.
-    const bool is_app_control_key =
-        (key == GLFW_KEY_F) || // THIS WAS THE MISSING KEY
-        (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F12) ||
-        key == GLFW_KEY_ESCAPE ||
-        key == GLFW_KEY_TAB ||
-        key == GLFW_KEY_LEFT ||
-        key == GLFW_KEY_RIGHT ||
-        key == GLFW_KEY_UP ||
-        key == GLFW_KEY_DOWN ||
-        key == GLFW_KEY_HOME ||
-        key == GLFW_KEY_END ||
-        key == GLFW_KEY_SPACE ||
-        key == GLFW_KEY_DELETE ||
-        key == GLFW_KEY_BACKSPACE ||
-        key == GLFW_KEY_LEFT_BRACKET ||
-        key == GLFW_KEY_RIGHT_BRACKET ||
-        ((mods & GLFW_MOD_CONTROL) && (key == GLFW_KEY_Q || key == GLFW_KEY_O));
-
-    if (!io.WantCaptureKeyboard || is_app_control_key) {
-        LogToFile("[key_callback_static] Key is an app control key or ImGui does not want capture. Forwarding to app.");
-        app->handleKey(key, mods);
-    } else {
-        LogToFile("[key_callback_static] Key is not an app control key, and ImGui wants capture. Event is NOT forwarded.");
-    }
+    // Forward all key presses so application shortcuts always work.
+    app->handleKey(key, mods);
 }
 
 void App::drop_callback_static(GLFWwindow* window, int count, const char** paths) {
@@ -78,8 +51,6 @@ void App::drop_callback_static(GLFWwindow* window, int count, const char** paths
 }
 
 void App::mouse_button_callback_static(GLFWwindow* window, int button, int action, int mods) {
-    ImGuiIO& io = ImGui::GetIO();
-    if (io.WantCaptureMouse && button != GLFW_MOUSE_BUTTON_MIDDLE) { return; }
     if (auto app = static_cast<App*>(glfwGetWindowUserPointer(window))) {
         app->handleMouseButton(button, action, mods);
     }
@@ -284,33 +255,11 @@ void App::handleKey(int key, int mods) {
     }
     else if (key == GLFW_KEY_F11) {
         keyHandledByAppLogic = true;
-        LogToFile(std::string("[App::handleKey] F11 pressed. Toggling application fullscreen. Was: ") + (m_isFullscreen ? "ON" : "OFF"));
-        if (m_isFullscreen) {
-            glfwSetWindowMonitor(m_window, nullptr, m_storedWindowedPosX, m_storedWindowedPosY, m_storedWindowedWidth, m_storedWindowedHeight, 0);
-            m_isFullscreen = false;
-            glfwGetWindowSize(m_window, &m_windowWidth, &m_windowHeight);
-        }
-        else {
-            GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-            if (monitor) {
-                const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-                if (mode) {
-                    glfwGetWindowPos(m_window, &m_storedWindowedPosX, &m_storedWindowedPosY);
-                    glfwGetWindowSize(m_window, &m_storedWindowedWidth, &m_storedWindowedHeight);
-                    glfwSetWindowMonitor(m_window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
-                    m_isFullscreen = true;
-                    glfwGetWindowSize(m_window, &m_windowWidth, &m_windowHeight);
-                }
-            }
-        }
-        m_framebufferResized = true;
-        showActionMessage(m_isFullscreen ? "Fullscreen" : "Windowed");
+        toggleWindowFullscreen();
     }
     else if (key == GLFW_KEY_F) {
         keyHandledByAppLogic = true;
-        m_previewFullscreen = !m_previewFullscreen;
-        LogToFile(std::string("[App::handleKey] F pressed. Preview fullscreen toggled: ") + (m_previewFullscreen ? "ON" : "OFF"));
-        showActionMessage(m_previewFullscreen ? "Preview Fullscreen" : "Preview Windowed");
+        togglePreviewFullscreen();
     }
     else if (key == GLFW_KEY_P) { // Keep P for playback mode toggle
         keyHandledByAppLogic = true;
@@ -339,16 +288,12 @@ void App::handleKey(int key, int mods) {
     else if (key == GLFW_KEY_ESCAPE) {
         keyHandledByAppLogic = true;
         if (m_previewFullscreen) {
-            m_previewFullscreen = false;
             LogToFile("[App::handleKey] ESC pressed. Exiting preview fullscreen.");
-            showActionMessage("Preview Windowed");
+            togglePreviewFullscreen();
         }
         else if (m_isFullscreen) {
             LogToFile("[App::handleKey] ESC pressed. Exiting fullscreen.");
-            glfwSetWindowMonitor(m_window, nullptr, m_storedWindowedPosX, m_storedWindowedPosY, m_storedWindowedWidth, m_storedWindowedHeight, 0);
-            m_isFullscreen = false;
-            glfwGetWindowSize(m_window, &m_windowWidth, &m_windowHeight);
-            m_framebufferResized = true;
+            toggleWindowFullscreen();
         }
         else if (m_showHelpPage) {
             LogToFile("[App::handleKey] ESC pressed. Closing help page.");
@@ -472,9 +417,8 @@ void App::handleMouseButton(int button, int action, int mods) {
     if (m_uiAutoHidden) m_uiAutoHidden = false;
 
     if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
-        m_previewFullscreen = !m_previewFullscreen;
-        LogToFile(std::string("[App::handleMouseButton] Middle mouse button pressed. Preview fullscreen toggled: ") + (m_previewFullscreen ? "ON" : "OFF"));
-        showActionMessage(m_previewFullscreen ? "Preview Fullscreen" : "Preview Windowed");
+        LogToFile(std::string("[App::handleMouseButton] Middle mouse button pressed."));
+        togglePreviewFullscreen();
         return;
     }
 
@@ -744,4 +688,33 @@ void App::showActionMessage(const std::string& msg) {
     m_actionMessageTime = std::chrono::steady_clock::now();
     // m_actionMessageDurationSec is already initialized (e.g., to 1.0)
     LogToFile(std::string("[App UI] Action message set: \"") + msg + "\"");
+}
+
+void App::togglePreviewFullscreen() {
+    m_previewFullscreen = !m_previewFullscreen;
+    LogToFile(std::string("[App] Preview fullscreen toggled: ") + (m_previewFullscreen ? "ON" : "OFF"));
+    showActionMessage(m_previewFullscreen ? "Preview Fullscreen" : "Preview Windowed");
+}
+
+void App::toggleWindowFullscreen() {
+    LogToFile(std::string("[App] Window fullscreen toggled. Was: ") + (m_isFullscreen ? "ON" : "OFF"));
+    if (m_isFullscreen) {
+        glfwSetWindowMonitor(m_window, nullptr, m_storedWindowedPosX, m_storedWindowedPosY, m_storedWindowedWidth, m_storedWindowedHeight, 0);
+        m_isFullscreen = false;
+        glfwGetWindowSize(m_window, &m_windowWidth, &m_windowHeight);
+    } else {
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        if (monitor) {
+            const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+            if (mode) {
+                glfwGetWindowPos(m_window, &m_storedWindowedPosX, &m_storedWindowedPosY);
+                glfwGetWindowSize(m_window, &m_storedWindowedWidth, &m_storedWindowedHeight);
+                glfwSetWindowMonitor(m_window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+                m_isFullscreen = true;
+                glfwGetWindowSize(m_window, &m_windowWidth, &m_windowHeight);
+            }
+        }
+    }
+    m_framebufferResized = true;
+    showActionMessage(m_isFullscreen ? "Fullscreen" : "Windowed");
 }
