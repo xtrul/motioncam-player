@@ -236,6 +236,7 @@ private:
     double m_lastMouseX = 0.0;
     double m_lastMouseY = 0.0;
     bool m_firstFileLoaded = false;
+    bool m_previewFullscreen = false;
 
     std::string m_lastWindowTitle;
     std::chrono::steady_clock::time_point m_lastTitleUpdateTime;

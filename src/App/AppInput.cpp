@@ -33,16 +33,42 @@ void App::framebuffer_size_callback_static(GLFWwindow* window, int width, int he
 }
 
 void App::key_callback_static(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    ImGuiIO& io = ImGui::GetIO();
-    bool ctrlCombo = (mods & GLFW_MOD_CONTROL) &&
-                     (key == GLFW_KEY_O || key == GLFW_KEY_Q);
-    if (io.WantCaptureKeyboard && key != GLFW_KEY_TAB && !ctrlCombo) {
+    if (action != GLFW_PRESS && action != GLFW_REPEAT) {
         return;
     }
-    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
-        if (auto app = static_cast<App*>(glfwGetWindowUserPointer(window))) {
-            app->handleKey(key, mods);
-        }
+    auto app = static_cast<App*>(glfwGetWindowUserPointer(window));
+    if (!app) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    LogToFile(std::string("[key_callback_static] Key Event: key=") + std::to_string(key) + ", action=" + std::to_string(action) + ", io.WantCaptureKeyboard=" + (io.WantCaptureKeyboard ? "true" : "false"));
+
+    // This is the final, correct logic.
+    // We define a comprehensive whitelist of all keys that are used for application
+    // control. If a key is on this list, we process it. Otherwise, we let ImGui
+    // handle it. This prevents the UI from blocking critical app functions.
+    const bool is_app_control_key =
+        (key == GLFW_KEY_F) || // THIS WAS THE MISSING KEY
+        (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F12) ||
+        key == GLFW_KEY_ESCAPE ||
+        key == GLFW_KEY_TAB ||
+        key == GLFW_KEY_LEFT ||
+        key == GLFW_KEY_RIGHT ||
+        key == GLFW_KEY_UP ||
+        key == GLFW_KEY_DOWN ||
+        key == GLFW_KEY_HOME ||
+        key == GLFW_KEY_END ||
+        key == GLFW_KEY_SPACE ||
+        key == GLFW_KEY_DELETE ||
+        key == GLFW_KEY_BACKSPACE ||
+        key == GLFW_KEY_LEFT_BRACKET ||
+        key == GLFW_KEY_RIGHT_BRACKET ||
+        ((mods & GLFW_MOD_CONTROL) && (key == GLFW_KEY_Q || key == GLFW_KEY_O));
+
+    if (!io.WantCaptureKeyboard || is_app_control_key) {
+        LogToFile("[key_callback_static] Key is an app control key or ImGui does not want capture. Forwarding to app.");
+        app->handleKey(key, mods);
+    } else {
+        LogToFile("[key_callback_static] Key is not an app control key, and ImGui wants capture. Event is NOT forwarded.");
     }
 }
 
@@ -53,7 +79,7 @@ void App::drop_callback_static(GLFWwindow* window, int count, const char** paths
 
 void App::mouse_button_callback_static(GLFWwindow* window, int button, int action, int mods) {
     ImGuiIO& io = ImGui::GetIO();
-    if (io.WantCaptureMouse) { return; }
+    if (io.WantCaptureMouse && button != GLFW_MOUSE_BUTTON_MIDDLE) { return; }
     if (auto app = static_cast<App*>(glfwGetWindowUserPointer(window))) {
         app->handleMouseButton(button, action, mods);
     }
@@ -83,6 +109,7 @@ void App::handleKey(int key, int mods) {
     (void)key; (void)mods;
     return;
 #else
+    LogToFile(std::string("[App::handleKey] Processing key: ") + std::to_string(key));
     m_lastInteractionTime = std::chrono::steady_clock::now();
     if (m_uiAutoHidden) m_uiAutoHidden = false;
     if (!m_window || !m_playbackController) return;
@@ -255,9 +282,9 @@ void App::handleKey(int key, int mods) {
         m_cfaOverride = key - GLFW_KEY_1;
         LogToFile(std::string("[App::handleKey] ") + std::to_string(key - GLFW_KEY_0) + " pressed. CFA override set to: " + std::to_string(m_cfaOverride.value()));
     }
-    else if (key == GLFW_KEY_F || key == GLFW_KEY_F11) {
+    else if (key == GLFW_KEY_F11) {
         keyHandledByAppLogic = true;
-        LogToFile(std::string("[App::handleKey] F/F11 pressed. Toggling fullscreen. Was: ") + (m_isFullscreen ? "ON" : "OFF"));
+        LogToFile(std::string("[App::handleKey] F11 pressed. Toggling application fullscreen. Was: ") + (m_isFullscreen ? "ON" : "OFF"));
         if (m_isFullscreen) {
             glfwSetWindowMonitor(m_window, nullptr, m_storedWindowedPosX, m_storedWindowedPosY, m_storedWindowedWidth, m_storedWindowedHeight, 0);
             m_isFullscreen = false;
@@ -279,7 +306,13 @@ void App::handleKey(int key, int mods) {
         m_framebufferResized = true;
         showActionMessage(m_isFullscreen ? "Fullscreen" : "Windowed");
     }
-    else if (key == GLFW_KEY_P) {
+    else if (key == GLFW_KEY_F) {
+        keyHandledByAppLogic = true;
+        m_previewFullscreen = !m_previewFullscreen;
+        LogToFile(std::string("[App::handleKey] F pressed. Preview fullscreen toggled: ") + (m_previewFullscreen ? "ON" : "OFF"));
+        showActionMessage(m_previewFullscreen ? "Preview Fullscreen" : "Preview Windowed");
+    }
+    else if (key == GLFW_KEY_P) { // Keep P for playback mode toggle
         keyHandledByAppLogic = true;
         if (m_playbackController) {
             auto current = m_playbackController->getPlaybackMode();
@@ -305,7 +338,12 @@ void App::handleKey(int key, int mods) {
     }
     else if (key == GLFW_KEY_ESCAPE) {
         keyHandledByAppLogic = true;
-        if (m_isFullscreen) {
+        if (m_previewFullscreen) {
+            m_previewFullscreen = false;
+            LogToFile("[App::handleKey] ESC pressed. Exiting preview fullscreen.");
+            showActionMessage("Preview Windowed");
+        }
+        else if (m_isFullscreen) {
             LogToFile("[App::handleKey] ESC pressed. Exiting fullscreen.");
             glfwSetWindowMonitor(m_window, nullptr, m_storedWindowedPosX, m_storedWindowedPosY, m_storedWindowedWidth, m_storedWindowedHeight, 0);
             m_isFullscreen = false;
@@ -432,6 +470,14 @@ void App::handleDrop(int count, const char** paths) {
 void App::handleMouseButton(int button, int action, int mods) {
     m_lastInteractionTime = std::chrono::steady_clock::now();
     if (m_uiAutoHidden) m_uiAutoHidden = false;
+
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
+        m_previewFullscreen = !m_previewFullscreen;
+        LogToFile(std::string("[App::handleMouseButton] Middle mouse button pressed. Preview fullscreen toggled: ") + (m_previewFullscreen ? "ON" : "OFF"));
+        showActionMessage(m_previewFullscreen ? "Preview Fullscreen" : "Preview Windowed");
+        return;
+    }
+
     if (!m_rendererVk || !m_playbackController || !m_playbackController->isZoomNativePixels()) {
         if (m_isPanning) { m_isPanning = false; }
         return;

@@ -196,6 +196,26 @@ namespace GuiOverlay {
 
     void render(App* appInstance) {
         if (!appInstance) return;
+
+        if (appInstance->m_previewFullscreen) {
+            ImGuiViewport* viewport = ImGui::GetMainViewport();
+            ImGui::SetNextWindowPos(viewport->WorkPos);
+            ImGui::SetNextWindowSize(viewport->WorkSize);
+            ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus;
+            
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
+            ImGui::Begin("FullscreenPreview", nullptr, flags);
+            
+            ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
+            if (texID) {
+                ImGui::Image(texID, viewport->WorkSize);
+            }
+            
+            ImGui::End();
+            ImGui::PopStyleVar();
+            return;
+        }
+
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImVec2 vp = viewport->WorkPos;
         ImVec2 vs = viewport->WorkSize;
