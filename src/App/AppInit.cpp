@@ -132,7 +132,7 @@ App::App(const std::string& filePath) :
     m_renderPrepTimeMs(0.0), m_guiRenderTimeMs(0.0), m_vkSubmitPresentTimeMs(0.0),
     m_appLogicTimeMs(0.0), m_sleepTimeMs(0.0), m_totalLoopTimeMs(0.0),
     m_decodedWidth(0), m_decodedHeight(0),
-    m_showUI(true), m_previewFullscreen(false), m_isPanning(false), m_lastMouseX(0.0), m_lastMouseY(0.0),
+    m_showUI(true), m_isPanning(false), m_lastMouseX(0.0), m_lastMouseY(0.0),
     m_firstFileLoaded(false),
     m_lastTitleUpdateTime(std::chrono::steady_clock::time_point::min()),
 #ifdef _WIN32

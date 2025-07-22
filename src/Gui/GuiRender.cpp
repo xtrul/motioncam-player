@@ -200,22 +200,6 @@ namespace GuiOverlay {
         ImVec2 vp = viewport->WorkPos;
         ImVec2 vs = viewport->WorkSize;
 
-        if (appInstance->m_previewFullscreen) {
-            ImGuiWindowFlags fs_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar;
-            ImGui::SetNextWindowPos(vp);
-            ImGui::SetNextWindowSize(vs);
-            ImGui::Begin("PreviewFullscreen", nullptr, fs_flags);
-            {
-                ImVec2 size = ImGui::GetContentRegionAvail();
-                ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
-                if (texID)
-                    ImGui::Image(texID, size);
-            }
-            ImGui::End();
-            return;
-        }
-
         // Layout constants
         const float rightPanelWidth = 340.0f; // Fixed width for side panels
         const float filesPanelHeight = 260.0f; // Fixed height for Files panel
