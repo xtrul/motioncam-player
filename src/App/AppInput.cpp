@@ -14,6 +14,7 @@
 #include <GLFW/glfw3native.h>
 #include <ShlObj.h>
 #include <commdlg.h>
+#include <shellapi.h>
 namespace DebugLogHelper {
     extern std::string wstring_to_utf8(const std::wstring& wstr);
 }
@@ -651,6 +652,23 @@ std::string App::openFolderDialog() {
     return folder;
 #endif
     return {};
+}
+
+void App::openFolderInExplorer(const std::string& path) {
+#ifdef _WIN32
+    int len = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, NULL, 0);
+    if (len > 0) {
+        std::wstring w(len, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, w.data(), len);
+        ShellExecuteW(NULL, L"open", w.c_str(), NULL, NULL, SW_SHOWDEFAULT);
+    }
+#elif __APPLE__
+    std::string cmd = "open \"" + path + "\"";
+    system(cmd.c_str());
+#else
+    std::string cmd = "xdg-open \"" + path + "\"";
+    system(cmd.c_str());
+#endif
 }
 
 void App::triggerOpenFileViaDialog() {
