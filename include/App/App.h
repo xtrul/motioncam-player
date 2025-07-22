@@ -130,6 +130,8 @@ public:
     void loadFileForExport(const std::string& path);
     void setPlaybackMode(PlaybackController::PlaybackMode mode);
     void showActionMessage(const std::string& msg);
+    void togglePreviewFullscreen();
+    void toggleWindowFullscreen();
 
 #ifdef MOTIONCAM_CONVERTER
     enum class ExportFormat {
