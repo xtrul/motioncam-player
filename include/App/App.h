@@ -232,6 +232,7 @@ private:
     std::chrono::steady_clock::time_point m_pauseBegan;
 
     bool m_showUI = true;
+    bool m_previewFullscreen = false;
     bool m_isPanning = false;
     double m_lastMouseX = 0.0;
     double m_lastMouseY = 0.0;
