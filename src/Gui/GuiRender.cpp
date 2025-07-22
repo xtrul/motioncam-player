@@ -229,8 +229,7 @@ namespace GuiOverlay {
         const float panelSpacing = 3.0f;
 
         float previewWidth = vs.x - rightPanelWidth - panelSpacing;
-        // With timeline moved below preview there are only two gaps
-        float previewHeight = vs.y - timelinePanelHeight - logPanelHeight - panelSpacing * 2;
+        float previewHeight = vs.y - logPanelHeight - panelSpacing;
         float controlsPanelHeight = vs.y - filesPanelHeight - panelSpacing * 2;
         if (controlsPanelHeight < controlsPanelMinHeight) controlsPanelHeight = controlsPanelMinHeight;
 
@@ -248,10 +247,11 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Timeline/Play controls (below Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
-        ImGui::SetNextWindowSize(ImVec2(previewWidth, timelinePanelHeight));
-        ImGui::Begin("TimelineControls", nullptr, fixed_flags);
+        // 2. Timeline/Play controls (overlay on Preview)
+        ImGui::SetNextWindowBgAlpha(0.5f);
+        ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth * 0.1f, vp.y + previewHeight - timelinePanelHeight - 10.0f));
+        ImGui::SetNextWindowSize(ImVec2(previewWidth * 0.8f, timelinePanelHeight));
+        ImGui::Begin("TimelineControls", nullptr, fixed_flags | ImGuiWindowFlags_NoBringToFrontOnFocus);
         {
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
             if (ImGui::Button(paused ? "Play" : "Pause")) {
@@ -351,13 +351,11 @@ namespace GuiOverlay {
             }
             ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
             if (ImGui::IsItemActivated() && ImGui::IsMouseDoubleClicked(0)) {
-                std::string folder = appInstance->openFolderDialog();
-                if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
+                appInstance->m_showOutputFolderBrowser = true;
             }
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
-                std::string folder = appInstance->openFolderDialog();
-                if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
+                appInstance->m_showOutputFolderBrowser = true;
             }
             ImVec4 btn = ImVec4(0.3f, 0.4f, 0.6f, 1.0f);
             ImVec4 hover = ImVec4(0.35f, 0.45f, 0.65f, 1.0f);
@@ -366,7 +364,10 @@ namespace GuiOverlay {
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, active);
             if (ImGui::Button("Convert All") && !exporting) {
-                appInstance->startBatchConversion();
+                App::ExportFormat fmt = App::ExportFormat::PRORES_CPU;
+                if (appInstance->m_selectedBatchIndex != -1 && appInstance->m_selectedBatchIndex < (int)appInstance->m_fileExportFormats.size())
+                    fmt = appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
+                appInstance->startBatchConversion(fmt);
             }
             ImGui::SameLine();
             if (ImGui::Button("Convert Selected") && appInstance->m_selectedBatchIndex != -1 && !exporting) {
@@ -385,23 +386,70 @@ namespace GuiOverlay {
                 ImGui::ProgressBar(batch, ImVec2(-1,0));
                 ImGui::Text("%s", appInstance->m_currentExportingFileName.c_str());
                 double eta = appInstance->calculateTimeRemaining();
-                if (eta > 0.0) ImGui::Text("ETA %.1fs", eta);
+                double fps = appInstance->getCurrentFps();
+                if (eta > 0.0) {
+                    if (fps > 0.0)
+                        ImGui::Text("ETA %.1fs (%.1f fps)", eta, fps);
+                    else
+                        ImGui::Text("ETA %.1fs", eta);
+                } else if (fps > 0.0) {
+                    ImGui::Text("%.1f fps", fps);
+                }
             }
         }
         ImGui::End();
 
         // 5. Log Panel (bottom left, only as wide as Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing + timelinePanelHeight + panelSpacing));
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, logPanelHeight));
         ImGui::Begin("Log", nullptr, fixed_flags);
         {
-            if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
             ImGui::BeginChild("LogScrollingRegion", ImVec2(0,0), true);
             for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
+            ImVec2 btnSize = ImVec2(70, 0);
+            ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - btnSize.x - 4,
+                                       ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - 4));
+            if (ImGui::Button("Clear", btnSize)) appInstance->m_batchLog.clear();
             ImGui::EndChild();
         }
         ImGui::End();
+
+        if (appInstance->m_showOutputFolderBrowser) {
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            if (appInstance->m_folderBrowserPath.empty()) {
+                namespace fs = std::filesystem;
+                appInstance->m_folderBrowserPath = appInstance->m_outputFolder[0] ?
+                    std::string(appInstance->m_outputFolder) : fs::current_path().string();
+            }
+            namespace fs = std::filesystem;
+            fs::path currentPath = appInstance->m_folderBrowserPath;
+            ImGui::Begin("Select Output Folder", &appInstance->m_showOutputFolderBrowser);
+            ImGui::TextUnformatted(currentPath.string().c_str());
+            ImGui::Separator();
+            if (currentPath.has_parent_path()) {
+                if (ImGui::Selectable("..")) {
+                    appInstance->m_folderBrowserPath = currentPath.parent_path().string();
+                }
+            }
+            for (auto& entry : fs::directory_iterator(currentPath)) {
+                if (entry.is_directory()) {
+                    if (ImGui::Selectable(entry.path().filename().string().c_str())) {
+                        appInstance->m_folderBrowserPath = entry.path().string();
+                    }
+                }
+            }
+            if (ImGui::Button("Select")) {
+                strncpy(appInstance->m_outputFolder, appInstance->m_folderBrowserPath.c_str(),
+                        sizeof(appInstance->m_outputFolder) - 1);
+                appInstance->m_showOutputFolderBrowser = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) {
+                appInstance->m_showOutputFolderBrowser = false;
+            }
+            ImGui::End();
+        }
     }
 
     void endFrame(VkCommandBuffer commandBuffer) {
