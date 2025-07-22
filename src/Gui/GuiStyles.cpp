@@ -1,6 +1,7 @@
 #include "Gui/GuiStyles.h"
 #include "Utils/IconsMaterial.h" // For ICON_MIN_MD, ICON_MAX_16_MD
 #include "Utils/DebugLog.h"      // For LogToFile
+#include "Gui/GuiLayoutConfig.h"
 
 #include <string>
 #include <filesystem> // For path manipulation if needed for font paths

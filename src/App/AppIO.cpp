@@ -40,6 +40,7 @@ extern "C" {
 #endif
 #include "Utils/ColorPipelineCPU.h"
 #include "Utils/EncodingConfig.h"
+#include "Utils/JobQueue.h"
 
 namespace fs = std::filesystem;
 
@@ -64,11 +65,19 @@ namespace {
             return false;
         }
 
-        if (data.size() < static_cast<size_t>(width) * height * sizeof(uint16_t)) {
-            errorMsg = "Insufficient image data for given dimensions. Expected bytes: " +
-                std::to_string(static_cast<size_t>(width) * height * sizeof(uint16_t)) +
-                ", Got: " + std::to_string(data.size());
+        const size_t expectedBytes = static_cast<size_t>(width) * height * sizeof(uint16_t);
+        if (data.empty()) {
+            errorMsg = "No image data provided";
             return false;
+        }
+        if (data.size() < expectedBytes) {
+            errorMsg = "Insufficient image data for given dimensions. Expected bytes: " +
+                std::to_string(expectedBytes) + ", Got: " + std::to_string(data.size());
+            return false;
+        }
+        if (data.size() > expectedBytes) {
+            LogToFile("[writeDngInternal] Warning: Image data size larger than expected. Expected: " + 
+                std::to_string(expectedBytes) + ", Got: " + std::to_string(data.size()));
         }
         std::vector<double> asShotNeutralDouble = frameMetadata.value("asShotNeutral", std::vector<double>{1.0, 1.0, 1.0});
         std::vector<float> asShotNeutral;
@@ -128,7 +137,7 @@ namespace {
         dng.SetBigEndian(false);
         dng.SetDNGVersion(1, 4, 0, 0);
         dng.SetDNGBackwardVersion(1, 1, 0, 0);
-        dng.SetImageData(data.data(), data.size());
+        dng.SetImageData(reinterpret_cast<const unsigned char*>(data.data()), data.size());
         dng.SetImageWidth(width);
         dng.SetImageLength(height);
         dng.SetPlanarConfig(tinydngwriter::PLANARCONFIG_CONTIG);
@@ -173,6 +182,19 @@ namespace {
         if (!writer.WriteToFile(outputPath.c_str(), &errorMsg)) {
             return false;
         }
+
+        // Verify file was written with non-zero size
+        std::error_code ec;
+        auto fileSize = fs::file_size(outputPath, ec);
+        if (ec) {
+            errorMsg = "Cannot access written file: " + ec.message();
+            return false;
+        }
+        if (fileSize == 0) {
+            errorMsg = "File was written but has zero size";
+            return false;
+        }
+
         return true;
     }
 }
@@ -935,10 +957,13 @@ void App::saveCurrentFrameAsDng() {
     }
 }
 
-void App::convertCurrentFileToDngs() {
+App::DngExportResult App::convertCurrentFileToDngs() {
+    DngExportResult result;
+    
     if (!m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder() || m_fileList.empty() || m_currentFileIndex < 0 || static_cast<size_t>(m_currentFileIndex) >= m_fileList.size()) {
         LogToFile("[App::convertCurrentFileToDngs] Conditions not met for DNG export.");
-        return;
+        result.firstError = "Invalid decoder state or file selection";
+        return result;
     }
 
     std::string currentMcrawPathStr = m_fileList[m_currentFileIndex];
@@ -947,12 +972,21 @@ void App::convertCurrentFileToDngs() {
 
     try {
         if (!fs::exists(dngOutputDir)) {
-            fs::create_directories(dngOutputDir);
+            if (!fs::create_directories(dngOutputDir)) {
+                result.firstError = "Failed to create output directory";
+                LogToFile(std::string("[App::convertCurrentFileToDngs] Failed to create output directory: ") + dngOutputDir.string());
+                return result;
+            }
+        } else if (!fs::is_directory(dngOutputDir)) {
+            result.firstError = "Output path exists but is not a directory";
+            LogToFile(std::string("[App::convertCurrentFileToDngs] Output path exists but is not a directory: ") + dngOutputDir.string());
+            return result;
         }
     }
     catch (const fs::filesystem_error& e) {
-        LogToFile(std::string("[App::convertCurrentFileToDngs] Failed to create output dir: ") + dngOutputDir.string() + " - " + e.what());
-        return;
+        result.firstError = std::string("Failed to create/check output directory: ") + e.what();
+        LogToFile(std::string("[App::convertCurrentFileToDngs] ") + result.firstError + ": " + dngOutputDir.string());
+        return result;
     }
 
     const auto& frameTimestamps = m_decoderWrapper_ptr->getDecoder()->getFrames();
@@ -970,12 +1004,12 @@ void App::convertCurrentFileToDngs() {
         }
     }
 
-    int successCount = 0;
-    int failCount = 0;
-
     for (size_t i = 0; i < frameTimestamps.size(); ++i) {
         if (m_window && glfwWindowShouldClose(m_window)) {
             LogToFile("[App::convertCurrentFileToDngs] DNG export interrupted by window close request.");
+            if (result.firstError.empty()) {
+                result.firstError = "Export interrupted by user";
+            }
             break;
         }
 
@@ -998,28 +1032,39 @@ void App::convertCurrentFileToDngs() {
 
             if (!writeDngInternal(outputDngPath.string(), rawFrameDataBuffer, frameMetadata, containerMetadata, errorMsg)) {
                 LogToFile(std::string("[App::convertCurrentFileToDngs] Failed DNG write for frame ") + std::to_string(i) + ": " + errorMsg);
-                failCount++;
+                result.failCount++;
+                if (result.firstError.empty()) {
+                    result.firstError = "Frame " + std::to_string(i) + ": " + errorMsg;
+                }
             }
             else {
-                successCount++;
+                result.successCount++;
             }
             if ((i + 1) % 20 == 0 || i == frameTimestamps.size() - 1) {
-                LogToFile(std::string("[App::convertCurrentFileToDngs] Converted ") + std::to_string(i + 1) + "/" + std::to_string(frameTimestamps.size()) + " frames. Success: " + std::to_string(successCount) + ", Fail: " + std::to_string(failCount));
+                LogToFile(std::string("[App::convertCurrentFileToDngs] Converted ") + std::to_string(i + 1) + "/" + std::to_string(frameTimestamps.size()) + 
+                    " frames. Success: " + std::to_string(result.successCount) + ", Fail: " + std::to_string(result.failCount));
             }
         }
         catch (const std::exception& e) {
             LogToFile(std::string("[App::convertCurrentFileToDngs] Error processing frame ") + std::to_string(i) + " for DNG export: " + e.what());
-            failCount++;
+            result.failCount++;
+            if (result.firstError.empty()) {
+                result.firstError = "Frame " + std::to_string(i) + ": " + e.what();
+            }
         }
     }
 
-    LogToFile(std::string("[App::convertCurrentFileToDngs] Conversion complete for ") + currentMcrawPathStr + ". Success: " + std::to_string(successCount) + ", Failed: " + std::to_string(failCount));
+    LogToFile(std::string("[App::convertCurrentFileToDngs] Conversion complete for ") + currentMcrawPathStr + 
+        ". Success: " + std::to_string(result.successCount) + ", Failed: " + std::to_string(result.failCount) + 
+        (result.firstError.empty() ? "" : ", First error: " + result.firstError));
 
     if (m_playbackController_ptr && m_playbackController_ptr->isPaused() && !wasPausedOriginalState) {
         m_playbackController_ptr->togglePause();
         if (m_audio) m_audio->setPaused(false);
         anchorPlaybackTimeForResume();
     }
+
+    return result;
 }
 
 void App::sendCurrentFileToMotionCamFS()
@@ -2845,8 +2890,20 @@ void App::startBatchConversion() {
 #endif
                 break;
             case ExportFormat::DNG:
-                convertCurrentFileToDngs();
-                m_batchLog.push_back(fs::path(path).filename().string() + " -> DNGs saved");
+                {
+                    DngExportResult dngResult = convertCurrentFileToDngs();
+                    std::string logMsg = fs::path(path).filename().string() + " -> ";
+                    if (dngResult.failCount == 0 && dngResult.successCount > 0) {
+                        logMsg += "DNGs saved successfully - " + std::to_string(dngResult.successCount) + " frames";
+                    } else {
+                        logMsg += "DNG export failed - " + std::to_string(dngResult.successCount) + " succeeded, " + 
+                            std::to_string(dngResult.failCount) + " failed";
+                        if (!dngResult.firstError.empty()) {
+                            logMsg += ". First error: " + dngResult.firstError;
+                        }
+                    }
+                    m_batchLog.push_back(logMsg);
+                }
                 break;
             }
             if (logFile.is_open()) logFile << "[end] " << fs::path(path).filename().string() << std::endl;

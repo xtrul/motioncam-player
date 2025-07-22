@@ -45,6 +45,12 @@ class Renderer_VK;
 
 class App {
 public:
+    struct DngExportResult {
+        int successCount = 0;
+        int failCount = 0;
+        std::string firstError;
+    };
+
     explicit App(const std::string& filePath = "");
     ~App();
 
@@ -111,7 +117,7 @@ public:
     void recordPauseTime();
     void toggleHelpPage() { m_showHelpPage = !m_showHelpPage; }
     void saveCurrentFrameAsDng();
-    void convertCurrentFileToDngs();
+    DngExportResult convertCurrentFileToDngs();
     void exportCurrentClipToProRes(const std::string& outputPath = "");
     void convertCurrentClipToProRes(const std::string& outputPath = "");
     void exportCurrentClipToDNxHR(const std::string& outputPath = "");

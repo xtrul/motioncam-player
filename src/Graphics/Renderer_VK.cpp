@@ -18,6 +18,7 @@
 #include <fstream>
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
+#include "Utils/PerformanceProfiler.h"
 
 
 Renderer_VK::Renderer_VK(VkPhysicalDevice physicalDevice, VkDevice device, VmaAllocator allocator, VkQueue graphicsQueue, VkCommandPool commandPool)
