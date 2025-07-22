@@ -235,8 +235,20 @@ namespace GuiOverlay {
 
         ImGuiWindowFlags fixed_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
-        // 1. Timeline/Play controls (above Preview)
+        // 1. Preview Panel
         ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
+        ImGui::SetNextWindowSize(ImVec2(previewWidth, previewHeight));
+        ImGui::Begin("Preview", nullptr, fixed_flags);
+        {
+            ImVec2 size = ImGui::GetContentRegionAvail();
+            ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
+            if (texID)
+                ImGui::Image(texID, size);
+        }
+        ImGui::End();
+
+        // 2. Timeline/Play controls (below Preview)
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, timelinePanelHeight));
         ImGui::Begin("TimelineControls", nullptr, fixed_flags);
         {
@@ -252,25 +264,15 @@ namespace GuiOverlay {
             }
             int frame_int = (int)curIdx;
             ImGui::PushItemWidth(-1);
-            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "Frame %d / %d")) {
+            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "")) {
                 if (ImGui::IsItemActive()) {
                     if (!paused) appInstance->m_playbackController_ptr->togglePause();
                     appInstance->performSeek(frame_int);
                 }
             }
             ImGui::PopItemWidth();
-        }
-        ImGui::End();
-
-        // 2. Preview Panel
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + timelinePanelHeight + panelSpacing));
-        ImGui::SetNextWindowSize(ImVec2(previewWidth, previewHeight));
-        ImGui::Begin("Preview", nullptr, fixed_flags);
-        {
-            ImVec2 size = ImGui::GetContentRegionAvail();
-            ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
-            if (texID)
-                ImGui::Image(texID, size);
+            ImGui::SameLine();
+            ImGui::Text("Frame %zu / %zu", curIdx + 1, total);
         }
         ImGui::End();
 
@@ -279,6 +281,12 @@ namespace GuiOverlay {
         ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, filesPanelHeight));
         ImGui::Begin("Files", nullptr, fixed_flags);
         {
+            bool exporting = appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load()
+#ifdef ENABLE_PRORES_EXPORT
+                || appInstance->m_proResStatus.active.load() || appInstance->m_dnxhrStatus.active.load() || appInstance->m_hevcStatus.active.load()
+#endif
+                ;
+            ImGui::BeginDisabled(exporting);
             if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
             if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex != -1) {
@@ -305,6 +313,7 @@ namespace GuiOverlay {
                 }
             }
             ImGui::EndChild();
+            ImGui::EndDisabled();
         }
         ImGui::End();
 
@@ -313,6 +322,13 @@ namespace GuiOverlay {
         ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, controlsPanelHeight));
         ImGui::Begin("Controls & Export", nullptr, fixed_flags);
         {
+            bool exporting = appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load()
+#ifdef ENABLE_PRORES_EXPORT
+                || appInstance->m_proResStatus.active.load() || appInstance->m_dnxhrStatus.active.load() || appInstance->m_hevcStatus.active.load()
+#endif
+                ;
+
+            ImGui::BeginDisabled(exporting);
             if (appInstance->m_selectedBatchIndex != -1) {
                 int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
                 static const char* exportFormatNames[] = {
@@ -329,14 +345,39 @@ namespace GuiOverlay {
                 std::string folder = appInstance->openFolderDialog();
                 if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
             }
-            if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
+            ImVec4 btn = ImVec4(0.3f, 0.4f, 0.6f, 1.0f);
+            ImVec4 hover = ImVec4(0.35f, 0.45f, 0.65f, 1.0f);
+            ImVec4 active = ImVec4(0.2f, 0.3f, 0.5f, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, btn);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, active);
+            if (ImGui::Button("Convert All") && !exporting) {
                 appInstance->startBatchConversion();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Convert Selected") && appInstance->m_selectedBatchIndex != -1 && !exporting) {
+                appInstance->startSingleConversion(appInstance->m_selectedBatchIndex);
+            }
+            ImGui::PopStyleColor(3);
+            ImGui::EndDisabled();
+
+            if (exporting) {
+                if (ImGui::Button("Stop Conversion", ImVec2(-1,0))) {
+                    appInstance->stopAllExports();
+                }
+                float cur = static_cast<float>(appInstance->getCurrentFileProgress());
+                ImGui::ProgressBar(cur, ImVec2(-1,0));
+                float batch = static_cast<float>(appInstance->getBatchProgress());
+                ImGui::ProgressBar(batch, ImVec2(-1,0));
+                ImGui::Text("%s", appInstance->m_currentExportingFileName.c_str());
+                double eta = appInstance->calculateTimeRemaining();
+                if (eta > 0.0) ImGui::Text("ETA %.1fs", eta);
             }
         }
         ImGui::End();
 
         // 5. Log Panel (bottom left, only as wide as Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + timelinePanelHeight + panelSpacing + previewHeight + panelSpacing));
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing + timelinePanelHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, logPanelHeight));
         ImGui::Begin("Log", nullptr, fixed_flags);
         {

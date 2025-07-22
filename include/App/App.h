@@ -144,6 +144,11 @@ public:
         DNG
     };
     void startBatchConversion();
+    void startSingleConversion(int fileIndex);
+    void stopAllExports();
+    double calculateTimeRemaining() const;
+    double getCurrentFileProgress() const;
+    double getBatchProgress() const;
     std::vector<std::string> m_batchLog;
     std::atomic<bool> m_batchActive{ false };
     std::thread m_batchThread;
@@ -152,6 +157,13 @@ public:
     std::vector<ExportFormat> m_fileExportFormats;
     bool m_previewOpen = true;
 #endif
+
+    std::atomic<bool> m_singleExportActive{ false };
+    std::atomic<bool> m_cancelExportRequested{ false };
+    std::chrono::steady_clock::time_point m_exportStartTime;
+    std::chrono::steady_clock::time_point m_currentFileExportStartTime;
+    int m_batchCompletedFiles{ 0 };
+    std::string m_currentExportingFileName;
 
     std::vector<VkImage> m_swapChainImages;
     std::atomic<size_t> m_activeFileLoadID{ 0 };

@@ -1563,6 +1563,7 @@ void App::exportCurrentClipToProRes(const std::string& outputPathOverride) {
         std::vector<uint8_t> rgbBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
+            if (m_cancelExportRequested.load()) { m_proResStatus.errorMsg = "Cancelled"; break; }
             RawBytes raw;
             nlohmann::json metaTmp;
             auto t0 = std::chrono::steady_clock::now();
@@ -2103,6 +2104,7 @@ void App::exportCurrentClipToDNxHR(const std::string& outputPathOverride) {
         std::vector<uint8_t> rgbBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
+            if (m_cancelExportRequested.load()) { m_dnxhrStatus.errorMsg = "Cancelled"; break; }
             RawBytes raw;
             nlohmann::json metaTmp;
             auto t0 = std::chrono::steady_clock::now();
@@ -2639,6 +2641,7 @@ void App::exportCurrentClipToHEVC_AMD(const std::string& outputPathOverride) {
         int framesEncoded = 0;
 
         for (size_t idx = 0; idx < frames.size(); ++idx) {
+            if (m_cancelExportRequested.load()) { m_hevcStatus.errorMsg = "Cancelled"; break; }
             try { dec->loadFrame(frames[idx], raw, meta); }
             catch (...) { m_hevcStatus.errorMsg = "Frame read error"; break; }
 
@@ -2806,6 +2809,9 @@ void App::loadFileForExport(const std::string& path) {
 void App::startBatchConversion() {
     if (m_batchActive.load()) return;
     m_batchActive.store(true);
+    m_cancelExportRequested.store(false);
+    m_exportStartTime = std::chrono::steady_clock::now();
+    m_batchCompletedFiles = 0;
     m_batchLog.clear();
     namespace fs = std::filesystem;
     fs::path logDir = fs::path(getLogDirectory());
@@ -2816,8 +2822,11 @@ void App::startBatchConversion() {
     m_batchThread = std::thread([this, logFile = std::move(logFile)]() mutable {
         namespace fs = std::filesystem;
         for (size_t i = 0; i < m_fileList.size(); ++i) {
+            if (m_cancelExportRequested.load()) break;
             if (m_window && glfwWindowShouldClose(m_window)) break;
             const std::string& path = m_fileList[i];
+            m_currentExportingFileName = fs::path(path).filename().string();
+            m_currentFileExportStartTime = std::chrono::steady_clock::now();
             m_batchLog.push_back(std::string("Converting ") + fs::path(path).filename().string() + "...");
             if (logFile.is_open()) logFile << "[start] " << fs::path(path).filename().string() << std::endl;
             m_currentFileIndex = static_cast<int>(i);
@@ -2906,10 +2915,95 @@ void App::startBatchConversion() {
                 break;
             }
             if (logFile.is_open()) logFile << "[end] " << fs::path(path).filename().string() << std::endl;
+            ++m_batchCompletedFiles;
         }
         m_batchLog.push_back("Batch finished");
         if (logFile.is_open()) logFile << "[summary] total=" << m_fileList.size() << std::endl;
         m_batchActive.store(false);
+    m_currentExportingFileName.clear();
     });
+}
+
+void App::startSingleConversion(int fileIndex) {
+    if (m_singleExportActive.load() || fileIndex < 0 || fileIndex >= static_cast<int>(m_fileList.size())) return;
+    m_singleExportActive.store(true);
+    m_cancelExportRequested.store(false);
+    m_exportStartTime = std::chrono::steady_clock::now();
+    m_batchCompletedFiles = 0;
+    m_currentExportingFileName = fs::path(m_fileList[fileIndex]).filename().string();
+    m_currentFileExportStartTime = std::chrono::steady_clock::now();
+    loadFileForExport(m_fileList[fileIndex]);
+    ExportFormat fmt = ExportFormat::PRORES_CPU;
+    if (fileIndex < (int)m_fileExportFormats.size()) fmt = m_fileExportFormats[fileIndex];
+    switch (fmt) {
+    case ExportFormat::PRORES_CPU:
+        exportCurrentClipToProRes( (fs::path(m_outputFolder[0] ? m_outputFolder : fs::path(m_fileList[fileIndex]).parent_path().string()) / (fs::path(m_fileList[fileIndex]).stem().string() + ".mov")).string() );
+        break;
+    case ExportFormat::PRORES_GPU:
+        convertCurrentClipToProRes( (fs::path(m_outputFolder[0] ? m_outputFolder : fs::path(m_fileList[fileIndex]).parent_path().string()) / (fs::path(m_fileList[fileIndex]).stem().string() + ".mov")).string() );
+        break;
+    case ExportFormat::DNXHR_CPU:
+        exportCurrentClipToDNxHR( (fs::path(m_outputFolder[0] ? m_outputFolder : fs::path(m_fileList[fileIndex]).parent_path().string()) / (fs::path(m_fileList[fileIndex]).stem().string() + ".mov")).string() );
+        break;
+    case ExportFormat::DNXHR_GPU:
+        convertCurrentClipToDNxHR( (fs::path(m_outputFolder[0] ? m_outputFolder : fs::path(m_fileList[fileIndex]).parent_path().string()) / (fs::path(m_fileList[fileIndex]).stem().string() + ".mov")).string() );
+        break;
+    case ExportFormat::HEVC_CPU:
+        exportCurrentClipToHEVC_AMD( (fs::path(m_outputFolder[0] ? m_outputFolder : fs::path(m_fileList[fileIndex]).parent_path().string()) / (fs::path(m_fileList[fileIndex]).stem().string() + ".mp4")).string() );
+        break;
+    case ExportFormat::HEVC_GPU:
+        convertCurrentClipToHEVC_AMD( (fs::path(m_outputFolder[0] ? m_outputFolder : fs::path(m_fileList[fileIndex]).parent_path().string()) / (fs::path(m_fileList[fileIndex]).stem().string() + ".mp4")).string() );
+        break;
+    case ExportFormat::DNG:
+        convertCurrentFileToDngs();
+        break;
+    }
+#ifdef ENABLE_PRORES_EXPORT
+    while (m_proResStatus.active.load() || m_dnxhrStatus.active.load() || m_hevcStatus.active.load())
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    if (m_proResThread.joinable()) m_proResThread.join();
+    if (m_dnxhrThread.joinable()) m_dnxhrThread.join();
+    if (m_hevcThread.joinable()) m_hevcThread.join();
+#endif
+    ++m_batchCompletedFiles;
+    m_currentExportingFileName.clear();
+    m_singleExportActive.store(false);
+}
+
+void App::stopAllExports() {
+    m_cancelExportRequested.store(true);
+#ifdef ENABLE_PRORES_EXPORT
+    if (m_proResThread.joinable()) m_proResThread.join();
+    if (m_dnxhrThread.joinable()) m_dnxhrThread.join();
+    if (m_hevcThread.joinable()) m_hevcThread.join();
+#endif
+    if (m_batchThread.joinable()) m_batchThread.join();
+    m_batchActive.store(false);
+    m_singleExportActive.store(false);
+    m_currentExportingFileName.clear();
+}
+
+double App::getCurrentFileProgress() const {
+#ifdef ENABLE_PRORES_EXPORT
+    if (m_proResStatus.active.load()) return m_proResStatus.totalFrames ? (double)m_proResStatus.currentFrame.load() / m_proResStatus.totalFrames : 0.0;
+    if (m_dnxhrStatus.active.load()) return m_dnxhrStatus.totalFrames ? (double)m_dnxhrStatus.currentFrame.load() / m_dnxhrStatus.totalFrames : 0.0;
+    if (m_hevcStatus.active.load()) return m_hevcStatus.totalFrames ? (double)m_hevcStatus.currentFrame.load() / m_hevcStatus.totalFrames : 0.0;
+#endif
+    return 0.0;
+}
+
+double App::getBatchProgress() const {
+    size_t totalFiles = m_batchActive.load() ? m_fileList.size() : 1;
+    if (totalFiles == 0) return 0.0;
+    double currentFileFraction = getCurrentFileProgress();
+    return (m_batchCompletedFiles + currentFileFraction) / static_cast<double>(totalFiles);
+}
+
+double App::calculateTimeRemaining() const {
+    if (!m_batchActive.load() && !m_singleExportActive.load()) return 0.0;
+    double progress = getBatchProgress();
+    if (progress <= 0.0) return 0.0;
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - m_exportStartTime).count();
+    return (elapsed / progress) - elapsed;
 }
 #endif
