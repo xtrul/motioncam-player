@@ -224,7 +224,7 @@ namespace GuiOverlay {
         const float rightPanelWidth = 340.0f; // Fixed width for side panels
         const float filesPanelHeight = 260.0f; // Fixed height for Files panel
         const float controlsPanelMinHeight = 200.0f; // Minimum height for Controls panel
-        const float timelinePanelHeight = 60.0f; // Height for play/timeline controls
+        const float timelinePanelHeight = 40.0f; // Height for play/timeline controls
         const float logPanelHeight = 180.0f; // Fixed height for Log panel (taller)
         const float panelSpacing = 3.0f;
 
@@ -248,13 +248,13 @@ namespace GuiOverlay {
         ImGui::End();
 
         // 2. Timeline/Play controls (overlay on Preview)
-        ImGui::SetNextWindowBgAlpha(0.5f);
-        ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth * 0.1f, vp.y + previewHeight - timelinePanelHeight - 10.0f));
-        ImGui::SetNextWindowSize(ImVec2(previewWidth * 0.8f, timelinePanelHeight));
+        ImGui::SetNextWindowBgAlpha(0.6f);
+        ImGui::SetNextWindowPos(ImVec2(vp.x + 10.0f, vp.y + previewHeight - timelinePanelHeight - 10.0f));
+        ImGui::SetNextWindowSize(ImVec2(previewWidth - 20.0f, timelinePanelHeight));
         ImGui::Begin("TimelineControls", nullptr, fixed_flags | ImGuiWindowFlags_NoBringToFrontOnFocus);
         {
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
-            if (ImGui::Button(paused ? "Play" : "Pause")) {
+            if (ImGui::Button(paused ? ICON_MD_PLAY_ARROW : ICON_MD_PAUSE)) {
                 if (appInstance->m_playbackController_ptr) {
                     bool wasPaused = paused;
                     appInstance->m_playbackController_ptr->togglePause();
@@ -274,7 +274,10 @@ namespace GuiOverlay {
                 total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
             }
             int frame_int = (int)curIdx;
-            ImGui::PushItemWidth(-1);
+            float textWidth = ImGui::CalcTextSize("00000 / 00000").x + ImGui::GetStyle().ItemSpacing.x;
+            float sliderWidth = ImGui::GetContentRegionAvail().x - textWidth;
+            if (sliderWidth < 10.0f) sliderWidth = ImGui::GetContentRegionAvail().x;
+            ImGui::PushItemWidth(sliderWidth);
             if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "")) {
                 if (ImGui::IsItemActive()) {
                     if (!paused) appInstance->m_playbackController_ptr->togglePause();

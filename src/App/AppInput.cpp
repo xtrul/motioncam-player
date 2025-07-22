@@ -20,6 +20,9 @@ namespace DebugLogHelper {
     extern std::string wstring_to_utf8(const std::wstring& wstr);
 }
 #endif
+#ifndef _WIN32
+#include "tinyfiledialogs.h"
+#endif
 
 #include <filesystem>
 #include <iostream>
@@ -656,10 +659,10 @@ std::string App::openFolderDialog() {
     }
     return folder;
 #else
-    std::string folder;
-    std::cout << "Output folder: " << std::flush;
-    std::getline(std::cin, folder);
-    return folder;
+    const char* path = tinyfd_selectFolderDialog("Select Output Folder", "");
+    if (path)
+        return std::string(path);
+    return {};
 #endif
 }
 

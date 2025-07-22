@@ -229,6 +229,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${IMGUI_SOURCE_DIR}"
   "${IMGUI_SOURCE_DIR}/backends"
   "${APP_EXTERNAL_DIR}/tinydngwriter"
+  "${APP_EXTERNAL_DIR}/tinyfiledialogs"
 )
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
