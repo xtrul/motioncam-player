@@ -187,35 +187,6 @@ list(APPEND APP_SOURCES "${IMGUI_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp")
 
 message(STATUS "Application sources for executable: ${APP_SOURCES}")
 
-# UI/UX and Performance Enhancements
-option(ENABLE_PROFILING "Enable Tracy profiling integration" OFF)
-
-if(ENABLE_PROFILING)
-    add_definitions(-DENABLE_PROFILING)
-    add_subdirectory(external/tracy)
-    set(PROFILER_LIB tracy)
-else()
-    set(PROFILER_LIB "")
-endif()
-
-# ImGui Docking
-add_definitions(-DIMGUI_ENABLE_DOCKING)
-
-# New UI/UX and Performance Sources
-set(SRC_UIUX
-    src/Gui/GuiLayoutConfig.cpp
-    src/Gui/GuiPreview.cpp
-    src/Utils/JobQueue.cpp
-    src/Utils/PerformanceProfiler.cpp
-)
-
-set(INC_UIUX
-    include/Gui/GuiLayoutConfig.h
-    include/Gui/GuiPreview.h
-    include/Utils/JobQueue.h
-    include/Utils/PerformanceProfiler.h
-)
-
 add_executable(${PROJECT_NAME} WIN32 "")
 target_sources(${PROJECT_NAME} PRIVATE ${APP_SOURCES})
 
@@ -279,7 +250,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     "${GLFW_LIB_PATH_VC_SPECIFIC}"
     "${SDL2_LIBRARY_DIR}/SDL2.lib"
     ${Vulkan_LIBRARIES}
-    ${PROFILER_LIB}
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
@@ -354,9 +324,6 @@ else()
     message(WARNING "Assets directory not found at ${APP_ASSETS_DIR}. Skipping asset copy.")
 endif()
 
-# Asset copying for UI config and themes
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ui_config.json ${CMAKE_CURRENT_BINARY_DIR}/ui_config.json COPYONLY)
-
 message(STATUS "---------------------------------------------------------------------")
 message(STATUS "Final Configuration Summary:")
 message(STATUS "  Target Executable: MotionCam Converter")
@@ -371,17 +338,3 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     enable_testing()
     add_subdirectory(tests)
 endif()
-
-# Shader compilation for optimized compute shader variants
-file(GLOB SHADERS_COMP src/shaders/*.comp)
-foreach(SHADER ${SHADERS_COMP})
-    get_filename_component(SHADER_NAME ${SHADER} NAME)
-    add_custom_command(
-        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/shaders/${SHADER_NAME}.spv
-        COMMAND glslc ${SHADER} -o ${CMAKE_CURRENT_BINARY_DIR}/shaders/${SHADER_NAME}.spv
-        DEPENDS ${SHADER}
-    )
-    list(APPEND SHADER_SPV ${CMAKE_CURRENT_BINARY_DIR}/shaders/${SHADER_NAME}.spv)
-endforeach()
-add_custom_target(Shaders ALL DEPENDS ${SHADER_SPV})
-add_dependencies(${PROJECT_NAME} Shaders)

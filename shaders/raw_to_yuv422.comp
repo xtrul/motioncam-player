@@ -2,8 +2,7 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
 #extension GL_EXT_shader_16bit_storage               : require
 #extension GL_KHR_shader_subgroup_basic              : enable
-#extension GL_KHR_shader_subgroup_arithmetic         : enable
-#extension GL_KHR_memory_scope_semantics             : enable
+//#extension GL_EXT_scalar_block_layout               : require
 
 // --- bindings ----------------------------------------------
 layout(set = 0, binding = 0, r16ui   ) readonly  uniform uimage2D  rawImg;   // 16‑bit Bayer
@@ -20,10 +19,7 @@ layout(push_constant, std430) uniform PC {
     uint   black, white;           // raw black/white levels (inclusive)
 } pc;
 
-// --- shared memory for tile neighborhood (for 2x2 block per thread) ---
-shared float tileRGB[34][18][3]; // (local_size_x+2)x(local_size_y+2)x3, for 32x16 workgroup, 1-pixel border
-
-// --- utility functions --------------------------------------
+// -----------------------------------------------------------
 uint readRaw(uint x, uint y) { return imageLoad(rawImg, ivec2(x, y)).r; }
 
 float normRaw(uint r){
@@ -33,69 +29,60 @@ float normRaw(uint r){
 
 #define RAW(xx,yy) normRaw(readRaw(xx,yy))
 
-// --- CFA pattern specialization (eliminate runtime branching) ---
-vec3 bayerToRGB_BGGR(uint x, uint y) {
+// -----------------------------------------------------------
+vec3 bayerToRGB(uint x, uint y)
+{
     bool xe = (x & 1u) == 0u;
     bool ye = (y & 1u) == 0u;
     float r = 0.0, g = 0.0, b = 0.0;
-    if(ye){
-        if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-        else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-    }else{
-        if(xe){ g=RAW(x,y); b=(RAW(x,y-1)+RAW(x,y+1))*0.5; r=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-        else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+
+    switch(pc.cfaType)
+    {
+    // BGGR --------------------------------------------------
+    case 0u:
+        if(ye){
+            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+        }else{
+            if(xe){ g=RAW(x,y); b=(RAW(x,y-1)+RAW(x,y+1))*0.5; r=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
+            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+        }
+        break;
+    // RGGB --------------------------------------------------
+    case 1u:
+        if(ye){
+            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+        }else{
+            if(xe){ g=RAW(x,y); r=(RAW(x,y-1)+RAW(x,y+1))*0.5; b=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
+            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+        }
+        break;
+    // GBRG --------------------------------------------------
+    case 2u:
+        if(ye){
+            if(xe){ g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+        }else{
+            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+        }
+        break;
+    // GRBG --------------------------------------------------
+    case 3u:
+        if(ye){
+            if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+        }else{
+            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+        }
+        break;
     }
+
     vec3 rgb = vec3(r,g,b);
-    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);
-    rgb  = pc.colMat * rgb;
-    return clamp(rgb, 0.0, 1.0);
-}
-vec3 bayerToRGB_RGGB(uint x, uint y) {
-    bool xe = (x & 1u) == 0u;
-    bool ye = (y & 1u) == 0u;
-    float r = 0.0, g = 0.0, b = 0.0;
-    if(ye){
-        if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-        else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-    }else{
-        if(xe){ g=RAW(x,y); r=(RAW(x,y-1)+RAW(x,y+1))*0.5; b=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-        else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-    }
-    vec3 rgb = vec3(r,g,b);
-    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);
-    rgb  = pc.colMat * rgb;
-    return clamp(rgb, 0.0, 1.0);
-}
-vec3 bayerToRGB_GBRG(uint x, uint y) {
-    bool xe = (x & 1u) == 0u;
-    bool ye = (y & 1u) == 0u;
-    float r = 0.0, g = 0.0, b = 0.0;
-    if(ye){
-        if(xe){ g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-        else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-    }else{
-        if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-        else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-    }
-    vec3 rgb = vec3(r,g,b);
-    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);
-    rgb  = pc.colMat * rgb;
-    return clamp(rgb, 0.0, 1.0);
-}
-vec3 bayerToRGB_GRBG(uint x, uint y) {
-    bool xe = (x & 1u) == 0u;
-    bool ye = (y & 1u) == 0u;
-    float r = 0.0, g = 0.0, b = 0.0;
-    if(ye){
-        if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-        else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-    }else{
-        if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-        else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-    }
-    vec3 rgb = vec3(r,g,b);
-    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);
-    rgb  = pc.colMat * rgb;
+    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);           // white balance
+    rgb  = pc.colMat * rgb;                        // sensor → BT.709
     return clamp(rgb, 0.0, 1.0);
 }
 
@@ -138,23 +125,8 @@ void main(){
     if(x0 >= pc.width || gid.y >= pc.height) return;
     uint x1 = min(x0 + 1u, pc.width - 1u);
 
-    // --- CFA pattern specialization ---
-    vec3 rgb0, rgb1;
-    switch(pc.cfaType) {
-        case 0u: rgb0 = encodeSRGB(bayerToRGB_BGGR(x0, gid.y)); rgb1 = encodeSRGB(bayerToRGB_BGGR(x1, gid.y)); break;
-        case 1u: rgb0 = encodeSRGB(bayerToRGB_RGGB(x0, gid.y)); rgb1 = encodeSRGB(bayerToRGB_RGGB(x1, gid.y)); break;
-        case 2u: rgb0 = encodeSRGB(bayerToRGB_GBRG(x0, gid.y)); rgb1 = encodeSRGB(bayerToRGB_GBRG(x1, gid.y)); break;
-        case 3u: rgb0 = encodeSRGB(bayerToRGB_GRBG(x0, gid.y)); rgb1 = encodeSRGB(bayerToRGB_GRBG(x1, gid.y)); break;
-        default: rgb0 = vec3(0.0); rgb1 = vec3(0.0); break;
-    }
-
-    // --- Subgroup optimization: average U/V across subgroup for better chroma smoothness ---
-    #ifdef USE_SUBGROUP
-    float u = kUscale * ((rgb0.b + rgb1.b) - (dot(rgb0, kBT709) + dot(rgb1, kBT709)));
-    float v = kVscale * ((rgb0.r + rgb1.r) - (dot(rgb0, kBT709) + dot(rgb1, kBT709)));
-    u = subgroupAdd(u) / float(gl_SubgroupSize);
-    v = subgroupAdd(v) / float(gl_SubgroupSize);
-    #endif
+    vec3 rgb0 = encodeSRGB(bayerToRGB(x0, gid.y));
+    vec3 rgb1 = encodeSRGB(bayerToRGB(x1, gid.y));
 
     imageStore(yuvImg, ivec2(gid), packYUV(rgb0, rgb1));
 

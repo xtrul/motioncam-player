@@ -11,7 +11,6 @@
 #include "Gui/GuiUtils.h"
 #include "Utils/IconsMaterial.h"
 #include "Utils/DebugLog.h" // For LogToFile, if logging is desired
-#include "Gui/GuiLayoutConfig.h"
 
 #include "App/App.h"
 #include "Playback/PlaybackController.h"
@@ -198,25 +197,28 @@ namespace GuiOverlay {
     void render(App* appInstance) {
         if (!appInstance) return;
         ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(viewport->WorkSize);
-        ImGui::SetNextWindowViewport(viewport->ID);
-        ImGuiWindowFlags host_window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_MenuBar;
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-        ImGui::Begin("MainDockSpaceHost", nullptr, host_window_flags);
-        ImGui::PopStyleVar(2);
-        // DockSpace
-        ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
-        ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoDockingInCentralNode;
-        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
-        ImGui::End();
+        ImVec2 vp = viewport->WorkPos;
+        ImVec2 vs = viewport->WorkSize;
 
-        // Now render each panel as a dockable window (remove SetNextWindowPos/Size)
-        ImGuiWindowFlags panel_flags = ImGuiWindowFlags_None;
+        // Layout constants
+        const float rightPanelWidth = 340.0f; // Fixed width for side panels
+        const float filesPanelHeight = 260.0f; // Fixed height for Files panel
+        const float controlsPanelMinHeight = 200.0f; // Minimum height for Controls panel
+        const float timelinePanelHeight = 60.0f; // Height for play/timeline controls
+        const float logPanelHeight = 120.0f; // Fixed height for Log panel
+        const float panelSpacing = 3.0f;
 
-        // Timeline/Play controls
-        ImGui::Begin("Timeline", nullptr, panel_flags);
+        float previewWidth = vs.x - rightPanelWidth - panelSpacing;
+        float previewHeight = vs.y - timelinePanelHeight - logPanelHeight - panelSpacing * 3;
+        float controlsPanelHeight = vs.y - filesPanelHeight - panelSpacing * 2;
+        if (controlsPanelHeight < controlsPanelMinHeight) controlsPanelHeight = controlsPanelMinHeight;
+
+        ImGuiWindowFlags fixed_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+        // 1. Timeline/Play controls (above Preview)
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
+        ImGui::SetNextWindowSize(ImVec2(previewWidth, timelinePanelHeight));
+        ImGui::Begin("TimelineControls", nullptr, fixed_flags);
         {
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
             if (ImGui::Button(paused ? "Play" : "Pause")) {
@@ -240,8 +242,10 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // Preview Panel
-        ImGui::Begin("Preview", nullptr, panel_flags);
+        // 2. Preview Panel
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + timelinePanelHeight + panelSpacing));
+        ImGui::SetNextWindowSize(ImVec2(previewWidth, previewHeight));
+        ImGui::Begin("Preview", nullptr, fixed_flags);
         {
             ImVec2 size = ImGui::GetContentRegionAvail();
             ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
@@ -250,8 +254,10 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // Files Panel
-        ImGui::Begin("Files", nullptr, panel_flags);
+        // 3. Files Panel (fixed size, top right)
+        ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y));
+        ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, filesPanelHeight));
+        ImGui::Begin("Files", nullptr, fixed_flags);
         {
             if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
@@ -282,8 +288,10 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // Controls & Export Panel
-        ImGui::Begin("Controls & Export", nullptr, panel_flags);
+        // 4. Controls & Export Panel (fixed width, fills right column below Files)
+        ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y + filesPanelHeight + panelSpacing));
+        ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, controlsPanelHeight));
+        ImGui::Begin("Controls & Export", nullptr, fixed_flags);
         {
             if (appInstance->m_selectedBatchIndex != -1) {
                 int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
@@ -307,8 +315,10 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // Log Panel
-        ImGui::Begin("Log", nullptr, panel_flags);
+        // 5. Log Panel (bottom left, only as wide as Preview)
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + timelinePanelHeight + panelSpacing + previewHeight + panelSpacing));
+        ImGui::SetNextWindowSize(ImVec2(previewWidth, logPanelHeight));
+        ImGui::Begin("Log", nullptr, fixed_flags);
         {
             ImGui::BeginChild("LogScrollingRegion");
             for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());

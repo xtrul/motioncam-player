@@ -40,7 +40,6 @@ extern "C" {
 #endif
 #include "Utils/ColorPipelineCPU.h"
 #include "Utils/EncodingConfig.h"
-#include "Utils/JobQueue.h"
 
 namespace fs = std::filesystem;
 
