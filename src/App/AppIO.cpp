@@ -3110,4 +3110,20 @@ double App::calculateTimeRemaining() const {
     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - m_exportStartTime).count();
     return (elapsed / progress) - elapsed;
 }
+
+double App::getCurrentFps() const {
+#ifdef ENABLE_PRORES_EXPORT
+    if (!m_batchActive.load() && !m_singleExportActive.load()) return 0.0;
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - m_exportStartTime).count();
+    if (elapsedMs <= 0) return 0.0;
+
+    int frame = 0;
+    if (m_proResStatus.active.load()) frame = m_proResStatus.currentFrame.load();
+    else if (m_dnxhrStatus.active.load()) frame = m_dnxhrStatus.currentFrame.load();
+    else if (m_hevcStatus.active.load()) frame = m_hevcStatus.currentFrame.load();
+    if (frame > 0) return frame * 1000.0 / elapsedMs;
+#endif
+    return 0.0;
+}
 #endif

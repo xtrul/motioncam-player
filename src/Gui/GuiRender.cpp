@@ -229,8 +229,7 @@ namespace GuiOverlay {
         const float panelSpacing = 3.0f;
 
         float previewWidth = vs.x - rightPanelWidth - panelSpacing;
-        // With timeline moved below preview there are only two gaps
-        float previewHeight = vs.y - timelinePanelHeight - logPanelHeight - panelSpacing * 2;
+        float previewHeight = vs.y - logPanelHeight - panelSpacing;
         float controlsPanelHeight = vs.y - filesPanelHeight - panelSpacing * 2;
         if (controlsPanelHeight < controlsPanelMinHeight) controlsPanelHeight = controlsPanelMinHeight;
 
@@ -248,9 +247,11 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Timeline/Play controls (below Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
-        ImGui::SetNextWindowSize(ImVec2(previewWidth, timelinePanelHeight));
+        // 2. Timeline/Play controls (overlay bottom of Preview)
+        float timelineWidth = previewWidth * 0.6f;
+        ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth * 0.5f - timelineWidth * 0.5f,
+                                       vp.y + previewHeight - timelinePanelHeight - panelSpacing));
+        ImGui::SetNextWindowSize(ImVec2(timelineWidth, timelinePanelHeight));
         ImGui::Begin("TimelineControls", nullptr, fixed_flags);
         {
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
@@ -351,13 +352,11 @@ namespace GuiOverlay {
             }
             ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
             if (ImGui::IsItemActivated() && ImGui::IsMouseDoubleClicked(0)) {
-                std::string folder = appInstance->openFolderDialog();
-                if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
+                appInstance->m_showOutputFolderBrowser = true;
             }
             ImGui::SameLine();
             if (ImGui::Button("Browse...")) {
-                std::string folder = appInstance->openFolderDialog();
-                if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
+                appInstance->m_showOutputFolderBrowser = true;
             }
             ImVec4 btn = ImVec4(0.3f, 0.4f, 0.6f, 1.0f);
             ImVec4 hover = ImVec4(0.35f, 0.45f, 0.65f, 1.0f);
@@ -385,23 +384,69 @@ namespace GuiOverlay {
                 ImGui::ProgressBar(batch, ImVec2(-1,0));
                 ImGui::Text("%s", appInstance->m_currentExportingFileName.c_str());
                 double eta = appInstance->calculateTimeRemaining();
-                if (eta > 0.0) ImGui::Text("ETA %.1fs", eta);
+                double fps = appInstance->getCurrentFps();
+                if (eta > 0.0) {
+                    if (fps > 0.0)
+                        ImGui::Text("ETA %.1fs (%.1f fps)", eta, fps);
+                    else
+                        ImGui::Text("ETA %.1fs", eta);
+                } else if (fps > 0.0) {
+                    ImGui::Text("%.1f fps", fps);
+                }
             }
         }
         ImGui::End();
 
         // 5. Log Panel (bottom left, only as wide as Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing + timelinePanelHeight + panelSpacing));
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, logPanelHeight));
         ImGui::Begin("Log", nullptr, fixed_flags);
         {
-            if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
-            ImGui::BeginChild("LogScrollingRegion", ImVec2(0,0), true);
+            ImGui::BeginChild("LogScrollingRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), true);
             for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
             ImGui::EndChild();
+            float btnWidth = ImGui::CalcTextSize("Clear Logs").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - btnWidth);
+            if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
         }
         ImGui::End();
+
+        if (appInstance->m_showOutputFolderBrowser) {
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            if (appInstance->m_folderBrowserPath.empty()) {
+                namespace fs = std::filesystem;
+                appInstance->m_folderBrowserPath = appInstance->m_outputFolder[0] ?
+                    std::string(appInstance->m_outputFolder) : fs::current_path().string();
+            }
+            namespace fs = std::filesystem;
+            fs::path currentPath = appInstance->m_folderBrowserPath;
+            ImGui::Begin("Select Output Folder", &appInstance->m_showOutputFolderBrowser);
+            ImGui::TextUnformatted(currentPath.string().c_str());
+            ImGui::Separator();
+            if (currentPath.has_parent_path()) {
+                if (ImGui::Selectable("..")) {
+                    appInstance->m_folderBrowserPath = currentPath.parent_path().string();
+                }
+            }
+            for (auto& entry : fs::directory_iterator(currentPath)) {
+                if (entry.is_directory()) {
+                    if (ImGui::Selectable(entry.path().filename().string().c_str())) {
+                        appInstance->m_folderBrowserPath = entry.path().string();
+                    }
+                }
+            }
+            if (ImGui::Button("Select")) {
+                strncpy(appInstance->m_outputFolder, appInstance->m_folderBrowserPath.c_str(),
+                        sizeof(appInstance->m_outputFolder) - 1);
+                appInstance->m_showOutputFolderBrowser = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) {
+                appInstance->m_showOutputFolderBrowser = false;
+            }
+            ImGui::End();
+        }
     }
 
     void endFrame(VkCommandBuffer commandBuffer) {

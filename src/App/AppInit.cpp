@@ -127,7 +127,7 @@ App::App(const std::string& filePath) :
     m_currentFrame(0), m_imguiDescriptorPool(VK_NULL_HANDLE),
     m_isFullscreen(false), m_cfaTypeFromMetadata(0), m_staticBlack(0.0), m_staticWhite(65535.0),
     m_dumpMetadata(false), m_currentFileIndex(-1),
-    m_showMetrics(false), m_showHelpPage(false),
+    m_showMetrics(false), m_showHelpPage(false), m_showOutputFolderBrowser(false),
     m_gpuWaitTimeMs(0.0), m_decodeTimeMs(0.0),
     m_renderPrepTimeMs(0.0), m_guiRenderTimeMs(0.0), m_vkSubmitPresentTimeMs(0.0),
     m_appLogicTimeMs(0.0), m_sleepTimeMs(0.0), m_totalLoopTimeMs(0.0),
@@ -145,7 +145,8 @@ App::App(const std::string& filePath) :
     m_uiAutoHidden(false),
     m_uiOpacity(1.0f),
     m_uiAutoHideDelaySec(3.0),
-    m_uiFadeSpeed(3.0f)
+    m_uiFadeSpeed(3.0f),
+    m_folderBrowserPath()
 #ifdef ENABLE_PRORES_EXPORT
     , m_showExportProgressPopup(false)
     , m_proResStatus()
