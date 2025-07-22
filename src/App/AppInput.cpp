@@ -634,6 +634,7 @@ std::string App::openSaveMp4Dialog() {
 std::string App::openFolderDialog() {
 #ifdef _WIN32
     std::string folder;
+    HRESULT hrInit = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     IFileDialog* dialog = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) {
         DWORD opts = 0;
@@ -654,6 +655,7 @@ std::string App::openFolderDialog() {
         }
         dialog->Release();
     }
+    if (SUCCEEDED(hrInit)) CoUninitialize();
     return folder;
 #else
     std::string folder;

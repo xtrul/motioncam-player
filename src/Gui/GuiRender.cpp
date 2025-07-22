@@ -248,7 +248,7 @@ namespace GuiOverlay {
         ImGui::End();
 
         // 2. Timeline/Play controls (overlay on Preview)
-        ImGui::SetNextWindowBgAlpha(0.5f);
+        ImGui::SetNextWindowBgAlpha(0.75f);
         ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth * 0.1f, vp.y + previewHeight - timelinePanelHeight - 10.0f));
         ImGui::SetNextWindowSize(ImVec2(previewWidth * 0.8f, timelinePanelHeight));
         ImGui::Begin("TimelineControls", nullptr, fixed_flags | ImGuiWindowFlags_NoBringToFrontOnFocus);
@@ -300,17 +300,22 @@ namespace GuiOverlay {
             ImGui::BeginDisabled(exporting);
             if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
-            if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex != -1) {
+            bool removeClicked = ImGui::Button("Remove") && appInstance->m_selectedBatchIndex != -1;
+            ImGui::SameLine();
+            bool clearClicked = ImGui::Button("Clear");
+            ImGui::EndDisabled();
+
+            if (removeClicked) {
                 appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
                 appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
                 appInstance->m_selectedBatchIndex = -1;
             }
-            ImGui::SameLine();
-            if (ImGui::Button("Clear")) {
+            if (clearClicked) {
                 appInstance->m_fileList.clear();
                 appInstance->m_fileExportFormats.clear();
                 appInstance->m_selectedBatchIndex = -1;
             }
+
             ImGui::Separator();
             ImGui::BeginChild("FileListScrollingRegion");
             for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
@@ -324,7 +329,6 @@ namespace GuiOverlay {
                 }
             }
             ImGui::EndChild();
-            ImGui::EndDisabled();
         }
         ImGui::End();
 

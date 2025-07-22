@@ -61,6 +61,7 @@ bool App::run() {
             bool oldFirst = m_firstFileLoaded;
             m_firstFileLoaded = true;
             loadFileAtIndex(idx);
+            m_selectedBatchIndex = idx;
             m_firstFileLoaded = oldFirst;
         }
 
