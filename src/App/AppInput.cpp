@@ -255,6 +255,12 @@ void App::handleKey(int key, int mods) {
         m_cfaOverride = key - GLFW_KEY_1;
         LogToFile(std::string("[App::handleKey] ") + std::to_string(key - GLFW_KEY_0) + " pressed. CFA override set to: " + std::to_string(m_cfaOverride.value()));
     }
+    else if (key == GLFW_KEY_ENTER) {
+        keyHandledByAppLogic = true;
+        m_previewFullscreen = !m_previewFullscreen;
+        LogToFile(std::string("[App::handleKey] Enter pressed. Preview fullscreen toggled: ") + (m_previewFullscreen ? "ON" : "OFF"));
+        showActionMessage(m_previewFullscreen ? "Preview Fullscreen" : "Preview Windowed");
+    }
     else if (key == GLFW_KEY_F || key == GLFW_KEY_F11) {
         keyHandledByAppLogic = true;
         LogToFile(std::string("[App::handleKey] F/F11 pressed. Toggling fullscreen. Was: ") + (m_isFullscreen ? "ON" : "OFF"));
@@ -305,7 +311,12 @@ void App::handleKey(int key, int mods) {
     }
     else if (key == GLFW_KEY_ESCAPE) {
         keyHandledByAppLogic = true;
-        if (m_isFullscreen) {
+        if (m_previewFullscreen) {
+            LogToFile("[App::handleKey] ESC pressed. Exiting preview fullscreen.");
+            m_previewFullscreen = false;
+            showActionMessage("Preview Windowed");
+        }
+        else if (m_isFullscreen) {
             LogToFile("[App::handleKey] ESC pressed. Exiting fullscreen.");
             glfwSetWindowMonitor(m_window, nullptr, m_storedWindowedPosX, m_storedWindowedPosY, m_storedWindowedWidth, m_storedWindowedHeight, 0);
             m_isFullscreen = false;
