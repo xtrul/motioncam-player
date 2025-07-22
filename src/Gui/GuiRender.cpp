@@ -202,17 +202,60 @@ namespace GuiOverlay {
             ImGui::SetNextWindowPos(viewport->WorkPos);
             ImGui::SetNextWindowSize(viewport->WorkSize);
             ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus;
-            
+
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0,0));
             ImGui::Begin("FullscreenPreview", nullptr, flags);
-            
+
             ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
             if (texID) {
                 ImGui::Image(texID, viewport->WorkSize);
             }
-            
+
             ImGui::End();
             ImGui::PopStyleVar();
+
+            // Draw timeline overlay even in fullscreen
+            const float timelinePanelHeight = 60.0f;
+            ImGui::SetNextWindowBgAlpha(0.5f);
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x * 0.1f,
+                                          viewport->WorkPos.y + viewport->WorkSize.y - timelinePanelHeight - 10.0f));
+            ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x * 0.8f, timelinePanelHeight));
+            ImGui::Begin("TimelineControls", nullptr, flags | ImGuiWindowFlags_NoBringToFrontOnFocus);
+            {
+                bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
+                if (ImGui::Button(paused ? "Play" : "Pause")) {
+                    if (appInstance->m_playbackController_ptr) {
+                        bool wasPaused = paused;
+                        appInstance->m_playbackController_ptr->togglePause();
+                        bool nowPaused = appInstance->m_playbackController_ptr->isPaused();
+                        if (nowPaused != wasPaused) {
+                            if (appInstance->m_audio) appInstance->m_audio->setPaused(nowPaused);
+                            if (nowPaused) appInstance->recordPauseTime();
+                            else appInstance->anchorPlaybackTimeForResume();
+                            appInstance->m_ioThreadFileCv.notify_all();
+                        }
+                    }
+                }
+                ImGui::SameLine();
+                size_t curIdx = 0, total = 0;
+                if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+                    curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
+                    total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
+                }
+                int frame_int = (int)curIdx;
+                ImGui::PushItemWidth(-1);
+                if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "")) {
+                    if (ImGui::IsItemActive()) {
+                        if (!paused) appInstance->m_playbackController_ptr->togglePause();
+                        appInstance->performSeek(frame_int);
+                    }
+                }
+                ImGui::PopItemWidth();
+                ImGui::SameLine();
+                ImGui::Text("%zu / %zu", curIdx + 1, total);
+            }
+            ImGui::End();
+
             return;
         }
 
