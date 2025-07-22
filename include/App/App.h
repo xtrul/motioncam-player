@@ -143,22 +143,18 @@ public:
         HEVC_GPU,
         DNG
     };
-    void startBatchConversion(ExportFormat fmtForAll);
+    void startBatchConversion();
     void startSingleConversion(int fileIndex);
     void stopAllExports();
     double calculateTimeRemaining() const;
     double getCurrentFileProgress() const;
-    double getCurrentFps() const;
     double getBatchProgress() const;
-    void openFolderInExplorer(const std::string& path);
     std::vector<std::string> m_batchLog;
     std::atomic<bool> m_batchActive{ false };
     std::thread m_batchThread;
     int m_selectedBatchIndex = -1;
     char m_outputFolder[1024] = "";
     std::vector<ExportFormat> m_fileExportFormats;
-    ExportFormat m_globalExportFormat{ ExportFormat::PRORES_CPU };
-    std::atomic<int> m_pendingPreviewIndex{ -1 };
     bool m_previewOpen = true;
 #endif
 

@@ -56,14 +56,6 @@ bool App::run() {
         appLogicStartTime = steady_clock::now();
         glfwPollEvents();
 
-        int idx = m_pendingPreviewIndex.exchange(-1, std::memory_order_acquire);
-        if (idx != -1 && idx < static_cast<int>(m_fileList.size())) {
-            bool oldFirst = m_firstFileLoaded;
-            m_firstFileLoaded = true;
-            loadFileAtIndex(idx);
-            m_firstFileLoaded = oldFirst;
-        }
-
         bool paused = (m_playbackController ? m_playbackController->isPaused() : true);
         bool segment_looped_or_ended = false;
 

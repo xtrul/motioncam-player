@@ -13,9 +13,7 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #include <ShlObj.h>
-#include <Shobjidl.h>
 #include <commdlg.h>
-#include <shellapi.h>
 namespace DebugLogHelper {
     extern std::string wstring_to_utf8(const std::wstring& wstr);
 }
@@ -633,51 +631,26 @@ std::string App::openSaveMp4Dialog() {
 
 std::string App::openFolderDialog() {
 #ifdef _WIN32
-    std::string folder;
-    IFileDialog* dialog = nullptr;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog)))) {
-        DWORD opts = 0;
-        if (SUCCEEDED(dialog->GetOptions(&opts))) {
-            dialog->SetOptions(opts | FOS_PICKFOLDERS);
+    BROWSEINFOW bi{};
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_USENEWUI;
+    bi.hwndOwner = m_window ? glfwGetWin32Window(m_window) : NULL;
+    PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
+    if (pidl) {
+        wchar_t path[MAX_PATH];
+        if (SHGetPathFromIDListW(pidl, path)) {
+            std::string utf8 = DebugLogHelper::wstring_to_utf8(path);
+            CoTaskMemFree(pidl);
+            return utf8;
         }
-        HWND owner = m_window ? glfwGetWin32Window(m_window) : NULL;
-        if (SUCCEEDED(dialog->Show(owner))) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(dialog->GetResult(&item))) {
-                PWSTR wpath = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &wpath))) {
-                    folder = DebugLogHelper::wstring_to_utf8(wpath);
-                    CoTaskMemFree(wpath);
-                }
-                item->Release();
-            }
-        }
-        dialog->Release();
+        CoTaskMemFree(pidl);
     }
-    return folder;
 #else
     std::string folder;
     std::cout << "Output folder: " << std::flush;
     std::getline(std::cin, folder);
     return folder;
 #endif
-}
-
-void App::openFolderInExplorer(const std::string& path) {
-#ifdef _WIN32
-    int len = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, NULL, 0);
-    if (len > 0) {
-        std::wstring w(len, L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, w.data(), len);
-        ShellExecuteW(NULL, L"open", w.c_str(), NULL, NULL, SW_SHOWDEFAULT);
-    }
-#elif __APPLE__
-    std::string cmd = "open \"" + path + "\"";
-    system(cmd.c_str());
-#else
-    std::string cmd = "xdg-open \"" + path + "\"";
-    system(cmd.c_str());
-#endif
+    return {};
 }
 
 void App::triggerOpenFileViaDialog() {
