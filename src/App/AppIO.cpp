@@ -17,6 +17,21 @@
 #endif
 #include <tinydng/tiny_dng_writer.h>
 
+#include <array>
+
+static const char* exportFormatName(App::ExportFormat fmt) {
+    switch (fmt) {
+    case App::ExportFormat::PRORES_CPU: return "ProRes CPU";
+    case App::ExportFormat::PRORES_GPU: return "ProRes GPU";
+    case App::ExportFormat::DNXHR_CPU:  return "DNxHR CPU";
+    case App::ExportFormat::DNXHR_GPU:  return "DNxHR GPU";
+    case App::ExportFormat::HEVC_CPU:   return "HEVC CPU";
+    case App::ExportFormat::HEVC_GPU:   return "HEVC GPU";
+    case App::ExportFormat::DNG:        return "DNG";
+    }
+    return "Unknown";
+}
+
 
 #include <filesystem>
 #include <thread>
@@ -2818,13 +2833,15 @@ void App::loadFileForExport(const std::string& path) {
 }
 
 #ifdef MOTIONCAM_CONVERTER
-void App::startBatchConversion() {
+void App::startBatchConversion(ExportFormat fmtForAll) {
     if (m_batchActive.load()) return;
     m_batchActive.store(true);
     m_cancelExportRequested.store(false);
     m_exportStartTime = std::chrono::steady_clock::now();
     m_batchCompletedFiles = 0;
     m_batchLog.clear();
+    m_globalExportFormat = fmtForAll;
+    for (auto& f : m_fileExportFormats) f = fmtForAll;
     namespace fs = std::filesystem;
     fs::path logDir = fs::path(getLogDirectory());
     std::error_code ec;
@@ -2837,9 +2854,12 @@ void App::startBatchConversion() {
             if (m_cancelExportRequested.load()) break;
             if (m_window && glfwWindowShouldClose(m_window)) break;
             const std::string& path = m_fileList[i];
+            m_selectedBatchIndex = static_cast<int>(i);
+            m_pendingPreviewIndex.store(static_cast<int>(i), std::memory_order_release);
             m_currentExportingFileName = fs::path(path).filename().string();
             m_currentFileExportStartTime = std::chrono::steady_clock::now();
             m_batchLog.push_back(std::string("Converting ") + fs::path(path).filename().string() + "...");
+            LogToFile(std::string("[Batch] Starting ") + fs::path(path).filename().string());
             if (logFile.is_open()) logFile << "[start] " << fs::path(path).filename().string() << std::endl;
             m_currentFileIndex = static_cast<int>(i);
             loadFileForExport(path);
@@ -2848,6 +2868,7 @@ void App::startBatchConversion() {
             std::string outPath;
             ExportFormat fmt = ExportFormat::PRORES_CPU;
             if (i < m_fileExportFormats.size()) fmt = m_fileExportFormats[i];
+            LogToFile(std::string("[Batch] Format: ") + exportFormatName(fmt));
             switch (fmt) {
             case ExportFormat::PRORES_CPU:
                 outPath = (fs::path(outFolder) / (stem + ".mov")).string();
@@ -3092,6 +3113,17 @@ double App::getCurrentFileProgress() const {
     if (m_proResStatus.active.load()) return m_proResStatus.totalFrames ? (double)m_proResStatus.currentFrame.load() / m_proResStatus.totalFrames : 0.0;
     if (m_dnxhrStatus.active.load()) return m_dnxhrStatus.totalFrames ? (double)m_dnxhrStatus.currentFrame.load() / m_dnxhrStatus.totalFrames : 0.0;
     if (m_hevcStatus.active.load()) return m_hevcStatus.totalFrames ? (double)m_hevcStatus.currentFrame.load() / m_hevcStatus.totalFrames : 0.0;
+#endif
+    return 0.0;
+}
+
+double App::getCurrentFps() const {
+#ifdef ENABLE_PRORES_EXPORT
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_currentFileExportStartTime).count();
+    if (elapsedMs <= 0) return 0.0;
+    if (m_proResStatus.active.load()) return m_proResStatus.currentFrame.load() * 1000.0 / elapsedMs;
+    if (m_dnxhrStatus.active.load()) return m_dnxhrStatus.currentFrame.load() * 1000.0 / elapsedMs;
+    if (m_hevcStatus.active.load()) return m_hevcStatus.currentFrame.load() * 1000.0 / elapsedMs;
 #endif
     return 0.0;
 }

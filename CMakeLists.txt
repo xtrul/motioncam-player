@@ -270,7 +270,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
+    target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib Ole32.lib)
     if(HAVE_FFMPEG)
         # Copy required FFmpeg runtime DLLs next to the executable
         set(FFMPEG_RUNTIME_DIR "C:/dev/vcpkg/installed/x64-windows/bin")
