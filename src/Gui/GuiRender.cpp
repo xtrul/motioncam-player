@@ -235,8 +235,20 @@ namespace GuiOverlay {
 
         ImGuiWindowFlags fixed_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
-        // 1. Timeline/Play controls (above Preview)
+        // 1. Preview Panel (top left)
         ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
+        ImGui::SetNextWindowSize(ImVec2(previewWidth, previewHeight));
+        ImGui::Begin("Preview", nullptr, fixed_flags);
+        {
+            ImVec2 size = ImGui::GetContentRegionAvail();
+            ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
+            if (texID)
+                ImGui::Image(texID, size);
+        }
+        ImGui::End();
+
+        // 2. Timeline/Play controls (below Preview)
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, timelinePanelHeight));
         ImGui::Begin("TimelineControls", nullptr, fixed_flags);
         {
@@ -262,22 +274,11 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Preview Panel
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + timelinePanelHeight + panelSpacing));
-        ImGui::SetNextWindowSize(ImVec2(previewWidth, previewHeight));
-        ImGui::Begin("Preview", nullptr, fixed_flags);
-        {
-            ImVec2 size = ImGui::GetContentRegionAvail();
-            ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
-            if (texID)
-                ImGui::Image(texID, size);
-        }
-        ImGui::End();
-
         // 3. Files Panel (fixed size, top right)
         ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y));
         ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, filesPanelHeight));
         ImGui::Begin("Files", nullptr, fixed_flags);
+        ImGui::BeginDisabled(appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load());
         {
             if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
@@ -306,12 +307,14 @@ namespace GuiOverlay {
             }
             ImGui::EndChild();
         }
+        ImGui::EndDisabled();
         ImGui::End();
 
         // 4. Controls & Export Panel (fixed width, fills right column below Files)
         ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y + filesPanelHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, controlsPanelHeight));
         ImGui::Begin("Controls & Export", nullptr, fixed_flags);
+        ImGui::BeginDisabled(appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load());
         {
             if (appInstance->m_selectedBatchIndex != -1) {
                 int fmt = (int)appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex];
@@ -329,14 +332,30 @@ namespace GuiOverlay {
                 std::string folder = appInstance->openFolderDialog();
                 if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
             }
-            if (ImGui::Button("Convert All", ImVec2(-1, 0)) && !appInstance->m_batchActive.load()) {
+            if (ImGui::Button("Convert All", ImVec2(-1, 0))) {
                 appInstance->startBatchConversion();
             }
+            if (ImGui::Button("Convert Selected", ImVec2(-1, 0))) {
+                appInstance->startSingleConversion(appInstance->m_selectedBatchIndex);
+            }
+        }
+        ImGui::EndDisabled();
+        if (appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load()) {
+            if (ImGui::Button("Stop Conversion", ImVec2(-1, 0))) {
+                appInstance->stopAllExports();
+            }
+            double cur = appInstance->getCurrentFileProgress();
+            double batch = appInstance->getBatchProgress();
+            double eta = appInstance->calculateTimeRemaining();
+            ImGui::ProgressBar(static_cast<float>(cur), ImVec2(-1, 0), "Current");
+            ImGui::ProgressBar(static_cast<float>(batch), ImVec2(-1, 0), "Batch");
+            ImGui::Text("%s", appInstance->m_currentExportingFileName.c_str());
+            ImGui::Text("ETA: %.1fs", eta);
         }
         ImGui::End();
 
         // 5. Log Panel (bottom left, only as wide as Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + timelinePanelHeight + panelSpacing + previewHeight + panelSpacing));
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing + timelinePanelHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, logPanelHeight));
         ImGui::Begin("Log", nullptr, fixed_flags);
         {

@@ -15,6 +15,7 @@
 #ifndef TINY_DNG_WRITER_IMPLEMENTATION
 #define TINY_DNG_WRITER_IMPLEMENTATION
 #endif
+
 #include <tinydng/tiny_dng_writer.h>
 
 
@@ -1004,6 +1005,7 @@ App::DngExportResult App::convertCurrentFileToDngs() {
     }
 
     for (size_t i = 0; i < frameTimestamps.size(); ++i) {
+        if (m_cancelExportRequested.load()) { result.firstError = "cancelled"; break; }
         if (m_window && glfwWindowShouldClose(m_window)) {
             LogToFile("[App::convertCurrentFileToDngs] DNG export interrupted by window close request.");
             if (result.firstError.empty()) {
@@ -1563,6 +1565,7 @@ void App::exportCurrentClipToProRes(const std::string& outputPathOverride) {
         std::vector<uint8_t> rgbBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
+            if (m_cancelExportRequested.load()) { m_proResStatus.errorMsg = "cancelled"; break; }
             RawBytes raw;
             nlohmann::json metaTmp;
             auto t0 = std::chrono::steady_clock::now();
@@ -1624,6 +1627,7 @@ void App::exportCurrentClipToProRes(const std::string& outputPathOverride) {
             motioncam::AudioChunk chunk;
             int64_t audioPts = 0;
             while (loader && loader->next(chunk)) {
+                if (m_cancelExportRequested.load()) { m_proResStatus.errorMsg = "cancelled"; break; }
                 if (chunk.second.empty()) break;
                 AVFrame* af = av_frame_alloc();
                 af->format = actx->sample_fmt;
@@ -2103,6 +2107,7 @@ void App::exportCurrentClipToDNxHR(const std::string& outputPathOverride) {
         std::vector<uint8_t> rgbBuf;
         int64_t pts = 0;
         for (size_t idx = 0; idx < frames.size(); ++idx) {
+            if (m_cancelExportRequested.load()) { m_dnxhrStatus.errorMsg = "cancelled"; break; }
             RawBytes raw;
             nlohmann::json metaTmp;
             auto t0 = std::chrono::steady_clock::now();
@@ -2178,6 +2183,7 @@ void App::exportCurrentClipToDNxHR(const std::string& outputPathOverride) {
             motioncam::AudioChunk chunk;
             int64_t audioPts = 0;
             while (loader && loader->next(chunk)) {
+                if (m_cancelExportRequested.load()) { m_dnxhrStatus.errorMsg = "cancelled"; break; }
                 if (chunk.second.empty()) break;
                 AVFrame* af = av_frame_alloc();
                 af->format = actx->sample_fmt;
@@ -2639,6 +2645,7 @@ void App::exportCurrentClipToHEVC_AMD(const std::string& outputPathOverride) {
         int framesEncoded = 0;
 
         for (size_t idx = 0; idx < frames.size(); ++idx) {
+            if (m_cancelExportRequested.load()) { m_hevcStatus.errorMsg = "cancelled"; break; }
             try { dec->loadFrame(frames[idx], raw, meta); }
             catch (...) { m_hevcStatus.errorMsg = "Frame read error"; break; }
 
@@ -2686,6 +2693,7 @@ void App::exportCurrentClipToHEVC_AMD(const std::string& outputPathOverride) {
             motioncam::AudioChunk chunk;
             int64_t audioPts = 0;
             while (loader && loader->next(chunk)) {
+                if (m_cancelExportRequested.load()) { m_hevcStatus.errorMsg = "cancelled"; break; }
                 if (chunk.second.empty()) break;
                 AVFrame* af = av_frame_alloc();
                 af->format = actx->sample_fmt;
@@ -2804,9 +2812,12 @@ void App::loadFileForExport(const std::string& path) {
 
 #ifdef MOTIONCAM_CONVERTER
 void App::startBatchConversion() {
-    if (m_batchActive.load()) return;
+    if (m_batchActive.load() || m_singleExportActive.load()) return;
     m_batchActive.store(true);
+    m_cancelExportRequested.store(false);
     m_batchLog.clear();
+    m_exportStartTime = std::chrono::steady_clock::now();
+    m_batchCompletedFiles = 0;
     namespace fs = std::filesystem;
     fs::path logDir = fs::path(getLogDirectory());
     std::error_code ec;
@@ -2816,8 +2827,11 @@ void App::startBatchConversion() {
     m_batchThread = std::thread([this, logFile = std::move(logFile)]() mutable {
         namespace fs = std::filesystem;
         for (size_t i = 0; i < m_fileList.size(); ++i) {
+            if (m_cancelExportRequested.load()) break;
             if (m_window && glfwWindowShouldClose(m_window)) break;
             const std::string& path = m_fileList[i];
+            m_currentFileExportStartTime = std::chrono::steady_clock::now();
+            m_currentExportingFileName = fs::path(path).filename().string();
             m_batchLog.push_back(std::string("Converting ") + fs::path(path).filename().string() + "...");
             if (logFile.is_open()) logFile << "[start] " << fs::path(path).filename().string() << std::endl;
             m_currentFileIndex = static_cast<int>(i);
@@ -2906,10 +2920,92 @@ void App::startBatchConversion() {
                 break;
             }
             if (logFile.is_open()) logFile << "[end] " << fs::path(path).filename().string() << std::endl;
+            if (!m_cancelExportRequested.load()) ++m_batchCompletedFiles;
         }
         m_batchLog.push_back("Batch finished");
         if (logFile.is_open()) logFile << "[summary] total=" << m_fileList.size() << std::endl;
-        m_batchActive.store(false);
+    m_batchActive.store(false);
     });
 }
 #endif
+
+void App::startSingleConversion(int fileIndex) {
+#ifdef MOTIONCAM_CONVERTER
+    if (m_batchActive.load() || m_singleExportActive.load()) return;
+    if (fileIndex < 0 || fileIndex >= static_cast<int>(m_fileList.size())) return;
+    m_singleExportActive.store(true);
+    m_cancelExportRequested.store(false);
+    m_exportStartTime = std::chrono::steady_clock::now();
+    m_batchCompletedFiles = 0;
+    namespace fs = std::filesystem;
+    std::string path = m_fileList[fileIndex];
+    m_currentExportingFileName = fs::path(path).filename().string();
+    ExportFormat fmt = ExportFormat::PRORES_CPU;
+    if (fileIndex < m_fileExportFormats.size()) fmt = m_fileExportFormats[fileIndex];
+    m_batchThread = std::thread([this, path, fmt]() {
+        namespace fs = std::filesystem;
+        m_currentFileExportStartTime = std::chrono::steady_clock::now();
+        loadFileForExport(path);
+        std::string outFolder = m_outputFolder[0] ? std::string(m_outputFolder) : fs::path(path).parent_path().string();
+        std::string stem = fs::path(path).stem().string();
+        std::string outPath;
+        switch (fmt) {
+        case ExportFormat::PRORES_CPU: outPath = (fs::path(outFolder) / (stem + ".mov")).string(); exportCurrentClipToProRes(outPath); break;
+        case ExportFormat::PRORES_GPU: outPath = (fs::path(outFolder) / (stem + ".mov")).string(); convertCurrentClipToProRes(outPath); break;
+        case ExportFormat::DNXHR_CPU: outPath = (fs::path(outFolder) / (stem + ".mov")).string(); exportCurrentClipToDNxHR(outPath); break;
+        case ExportFormat::DNXHR_GPU: outPath = (fs::path(outFolder) / (stem + ".mov")).string(); convertCurrentClipToDNxHR(outPath); break;
+        case ExportFormat::HEVC_CPU: outPath = (fs::path(outFolder) / (stem + ".mp4")).string(); exportCurrentClipToHEVC_AMD(outPath); break;
+        case ExportFormat::HEVC_GPU: outPath = (fs::path(outFolder) / (stem + ".mp4")).string(); convertCurrentClipToHEVC_AMD(outPath); break;
+        case ExportFormat::DNG: convertCurrentFileToDngs(); break;
+        }
+        m_batchCompletedFiles = 1;
+        m_singleExportActive.store(false);
+    });
+#endif
+}
+
+void App::stopAllExports() {
+#ifdef MOTIONCAM_CONVERTER
+    m_cancelExportRequested.store(true);
+#ifdef ENABLE_PRORES_EXPORT
+    if (m_proResThread.joinable()) m_proResThread.join();
+    if (m_dnxhrThread.joinable()) m_dnxhrThread.join();
+    if (m_hevcThread.joinable()) m_hevcThread.join();
+#endif
+    if (m_batchThread.joinable()) m_batchThread.join();
+    m_batchActive.store(false);
+    m_singleExportActive.store(false);
+    m_cancelExportRequested.store(false);
+#endif
+}
+
+double App::getCurrentFileProgress() const {
+#ifdef ENABLE_PRORES_EXPORT
+    if (m_proResStatus.active.load()) return (double)m_proResStatus.currentFrame.load() / std::max(1, m_proResStatus.totalFrames);
+    if (m_dnxhrStatus.active.load()) return (double)m_dnxhrStatus.currentFrame.load() / std::max(1, m_dnxhrStatus.totalFrames);
+    if (m_hevcStatus.active.load()) return (double)m_hevcStatus.currentFrame.load() / std::max(1, m_hevcStatus.totalFrames);
+#endif
+    return 0.0;
+}
+
+double App::getBatchProgress() const {
+#ifdef MOTIONCAM_CONVERTER
+    double cur = getCurrentFileProgress();
+    size_t total = m_singleExportActive.load() ? 1 : m_fileList.size();
+    if (total == 0) return 0.0;
+    return (m_batchCompletedFiles + cur) / (double)total;
+#else
+    return 0.0;
+#endif
+}
+
+double App::calculateTimeRemaining() const {
+#ifdef MOTIONCAM_CONVERTER
+    double progress = getBatchProgress();
+    if (progress <= 0.0) return 0.0;
+    auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_exportStartTime).count();
+    return elapsed * (1.0 - progress) / progress;
+#else
+    return 0.0;
+#endif
+}
