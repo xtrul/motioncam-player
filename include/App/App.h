@@ -83,6 +83,7 @@ public:
     std::string m_cfaStringFromMetadata;
     bool m_showMetrics = false;
     bool m_showHelpPage = false;
+    bool m_showOutputFolderBrowser = false;
 
     double m_gpuWaitTimeMs = 0.0;
     double m_decodeTimeMs = 0.0;
@@ -143,18 +144,21 @@ public:
         HEVC_GPU,
         DNG
     };
-    void startBatchConversion();
+    void startBatchConversion(ExportFormat fmtForAll);
     void startSingleConversion(int fileIndex);
     void stopAllExports();
     double calculateTimeRemaining() const;
     double getCurrentFileProgress() const;
     double getBatchProgress() const;
+    double getCurrentFps() const;
     std::vector<std::string> m_batchLog;
     std::atomic<bool> m_batchActive{ false };
     std::thread m_batchThread;
     int m_selectedBatchIndex = -1;
     char m_outputFolder[1024] = "";
     std::vector<ExportFormat> m_fileExportFormats;
+    ExportFormat m_globalExportFormat{ ExportFormat::PRORES_CPU };
+    std::atomic<int> m_pendingPreviewIndex{ -1 };
     bool m_previewOpen = true;
 #endif
 
@@ -267,6 +271,7 @@ private:
     float m_uiOpacity = 1.0f;
     double m_uiAutoHideDelaySec = 3.0;
     float m_uiFadeSpeed = 3.0f;
+    std::string m_folderBrowserPath;
 
 #ifdef ENABLE_PRORES_EXPORT
     struct ProResExportStatus {
