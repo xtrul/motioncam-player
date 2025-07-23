@@ -165,6 +165,7 @@ set(APP_SOURCES
   src/Gui/GuiSetup.cpp
   src/Gui/GuiRender.cpp
   src/Gui/GuiUtils.cpp
+  src/Gui/GuiWidgets.cpp
   src/Gui/GuiStyles.cpp
 
   src/Playback/PlaybackController.cpp

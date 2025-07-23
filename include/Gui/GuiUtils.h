@@ -6,8 +6,9 @@
 
 namespace GuiUtils {
 
-	std::string formatHMS(int64_t ns);
-	std::string format_mm_ss(double total_seconds);
+        std::string formatHMS(int64_t ns);
+        std::string format_mm_ss(double total_seconds);
+        std::string truncateMiddle(const std::string& text, size_t maxLen);
 
 	// Any other small utility functions for GUI can go here.
 
