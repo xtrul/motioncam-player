@@ -224,13 +224,12 @@ namespace GuiOverlay {
         const float rightPanelWidth = 340.0f; // Fixed width for side panels
         const float filesPanelHeight = 260.0f; // Fixed height for Files panel
         const float controlsPanelMinHeight = 200.0f; // Minimum height for Controls panel
-        const float timelinePanelHeight = 60.0f; // Height for play/timeline controls
-        const float logPanelHeight = 120.0f; // Fixed height for Log panel
+        static float logPanelHeight = 120.0f; // User adjustable
+        const float logPanelMinHeight = 26.0f;
         const float panelSpacing = 3.0f;
 
         float previewWidth = vs.x - rightPanelWidth - panelSpacing;
-        // With timeline moved below preview there are only two gaps
-        float previewHeight = vs.y - timelinePanelHeight - logPanelHeight - panelSpacing * 2;
+        float previewHeight = vs.y - logPanelHeight - panelSpacing;
         float controlsPanelHeight = vs.y - filesPanelHeight - panelSpacing * 2;
         if (controlsPanelHeight < controlsPanelMinHeight) controlsPanelHeight = controlsPanelMinHeight;
 
@@ -248,10 +247,21 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 2. Timeline/Play controls (below Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
-        ImGui::SetNextWindowSize(ImVec2(previewWidth, timelinePanelHeight));
-        ImGui::Begin("TimelineControls", nullptr, fixed_flags);
+        // 2. Timeline/Play controls (floating overlay)
+        const float timelineHeight = 40.0f;
+        const float timelineWidth = previewWidth * 0.6f;
+        ImVec2 overlayPos(vp.x + (previewWidth - timelineWidth) * 0.5f,
+                          vp.y + previewHeight - timelineHeight - 10.0f);
+        ImGuiWindowFlags overlayFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+        ImGui::SetNextWindowPos(overlayPos);
+        ImGui::SetNextWindowSize(ImVec2(timelineWidth, timelineHeight));
+        static float timelineAlpha = 0.8f;
+        float targetAlpha = 0.2f;
+        if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || ImGui::IsAnyItemActive())
+            targetAlpha = 0.9f;
+        timelineAlpha += (targetAlpha - timelineAlpha) * ImGui::GetIO().DeltaTime * 5.0f;
+        ImGui::SetNextWindowBgAlpha(timelineAlpha);
+        ImGui::Begin("TimelineControls", nullptr, overlayFlags);
         {
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
             if (ImGui::Button(paused ? "Play" : "Pause")) {
@@ -390,14 +400,36 @@ namespace GuiOverlay {
         }
         ImGui::End();
 
-        // 5. Log Panel (bottom left, only as wide as Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing + timelinePanelHeight + panelSpacing));
+        // 5. Log Panel (bottom left, adjustable height)
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(previewWidth, logPanelMinHeight), ImVec2(previewWidth, vs.y));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, logPanelHeight));
-        ImGui::Begin("Log", nullptr, fixed_flags);
-        {
-            if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
-            ImGui::BeginChild("LogScrollingRegion", ImVec2(0,0), true);
-            for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
+        static bool logExpanded = false;
+        ImGuiWindowFlags logFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar;
+        ImGui::Begin("Log", nullptr, logFlags);
+        logPanelHeight = ImGui::GetWindowSize().y;
+        if (!logExpanded) {
+            std::string lastLine = appInstance->m_batchLog.empty() ? "Idle" : appInstance->m_batchLog.back();
+            ImVec4 col = ImVec4(0.8f,0.8f,0.8f,1.0f);
+            if (lastLine.find("Error") != std::string::npos) col = ImVec4(1.0f,0.3f,0.3f,1.0f);
+            else if (lastLine.find("Warning") != std::string::npos) col = ImVec4(1.0f,0.7f,0.2f,1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Text, col);
+            ImGui::TextUnformatted(lastLine.c_str());
+            ImGui::PopStyleColor();
+            if (ImGui::InvisibleButton("ExpandLog", ImGui::GetContentRegionAvail())) logExpanded = true;
+        } else {
+            if (ImGui::Button("Collapse")) logExpanded = false;
+            ImGui::SameLine();
+            if (ImGui::Button("Clear")) appInstance->m_batchLog.clear();
+            ImGui::BeginChild("LogScrollingRegion", ImVec2(0,0), false);
+            for (const auto& line : appInstance->m_batchLog) {
+                ImVec4 col = ImVec4(0.8f,0.8f,0.8f,1.0f);
+                if (line.find("Error") != std::string::npos) col = ImVec4(1.0f,0.3f,0.3f,1.0f);
+                else if (line.find("Warning") != std::string::npos) col = ImVec4(1.0f,0.7f,0.2f,1.0f);
+                ImGui::PushStyleColor(ImGuiCol_Text, col);
+                ImGui::TextUnformatted(line.c_str());
+                ImGui::PopStyleColor();
+            }
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
             ImGui::EndChild();
         }
