@@ -241,10 +241,35 @@ namespace GuiOverlay {
         ImGui::SetNextWindowSize(ImVec2(previewWidth, previewHeight));
         ImGui::Begin("Preview", nullptr, fixed_flags);
         {
-            ImVec2 size = ImGui::GetContentRegionAvail();
+            ImVec2 avail = ImGui::GetContentRegionAvail();
             ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
             if (texID)
-                ImGui::Image(texID, size);
+            {
+                float dispW = avail.x;
+                float dispH = avail.y;
+                int imgW = appInstance->getRenderer()->getImageWidth();
+                int imgH = appInstance->getRenderer()->getImageHeight();
+                if (imgW > 0 && imgH > 0)
+                {
+                    float imgAspect = static_cast<float>(imgW) / static_cast<float>(imgH);
+                    float availAspect = avail.x / avail.y;
+                    if (imgAspect > availAspect)
+                    {
+                        dispW = avail.x;
+                        dispH = dispW / imgAspect;
+                    }
+                    else
+                    {
+                        dispH = avail.y;
+                        dispW = dispH * imgAspect;
+                    }
+                }
+
+                ImVec2 cursor = ImGui::GetCursorScreenPos();
+                ImGui::SetCursorScreenPos(ImVec2(cursor.x + (avail.x - dispW) * 0.5f,
+                                                 cursor.y + (avail.y - dispH) * 0.5f));
+                ImGui::Image(texID, ImVec2(dispW, dispH));
+            }
         }
         ImGui::End();
 
