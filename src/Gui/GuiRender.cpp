@@ -422,9 +422,15 @@ namespace GuiOverlay {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
-        if (ImGui::Button(paused ? ICON_MD_PLAY_ARROW : ICON_MD_PAUSE, ImVec2(iconSize, iconSize))) {
+        const char* playIcon = paused ? ICON_MD_PLAY_ARROW : ICON_MD_PAUSE;
+        ImVec2 playGlyph = ImGui::CalcTextSize(playIcon);
+        ImVec2 playPad(std::max(0.0f, (iconSize - playGlyph.x) * 0.5f),
+                       std::max(0.0f, (iconSize - playGlyph.y) * 0.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, playPad);
+        if (ImGui::Button(playIcon, ImVec2(iconSize, iconSize))) {
             appInstance->m_playbackController_ptr->togglePause();
         }
+        ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
         ImGui::PopFont();
 
@@ -450,17 +456,30 @@ namespace GuiOverlay {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
+        const char* nextIcon = ICON_MD_SKIP_NEXT;
+        ImVec2 nextGlyph = ImGui::CalcTextSize(nextIcon);
+        ImVec2 nextPad(std::max(0.0f, (iconSize - nextGlyph.x) * 0.5f),
+                       std::max(0.0f, (iconSize - nextGlyph.y) * 0.5f));
+
+        const char* fullIcon = isFullscreen ? ICON_MD_FULLSCREEN_EXIT : ICON_MD_FULLSCREEN;
+        ImVec2 fullGlyph = ImGui::CalcTextSize(fullIcon);
+        ImVec2 fullPad(std::max(0.0f, (iconSize - fullGlyph.x) * 0.5f),
+                       std::max(0.0f, (iconSize - fullGlyph.y) * 0.5f));
 
         if (!isFullscreen) {
-            if (ImGui::Button(ICON_MD_SKIP_NEXT, ImVec2(iconSize, iconSize))) {
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, nextPad);
+            if (ImGui::Button(nextIcon, ImVec2(iconSize, iconSize))) {
                 appInstance->loadNextFile();
             }
+            ImGui::PopStyleVar();
             ImGui::SameLine();
         }
 
-        if (ImGui::Button(isFullscreen ? ICON_MD_FULLSCREEN_EXIT : ICON_MD_FULLSCREEN, ImVec2(iconSize, iconSize))) {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, fullPad);
+        if (ImGui::Button(fullIcon, ImVec2(iconSize, iconSize))) {
             appInstance->toggleFullscreenPreview();
         }
+        ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
         ImGui::PopFont();
 
