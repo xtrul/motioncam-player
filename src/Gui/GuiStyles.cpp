@@ -103,7 +103,7 @@ namespace GuiStyles {
         style.WindowRounding = 10.0f;
         style.ChildRounding = 8.0f;
         style.PopupRounding = 8.0f;
-        style.FrameRounding = 16.0f; // For pill-shaped buttons if height allows
+        style.FrameRounding = 4.0f;
         style.GrabRounding = 16.0f;
         style.ScrollbarRounding = 8.0f;
 

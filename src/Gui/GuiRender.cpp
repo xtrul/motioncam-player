@@ -211,11 +211,16 @@ namespace GuiOverlay {
             if (texID) {
                 ImGui::Image(texID, viewport->WorkSize);
             }
-            
+
+            // Store the video rect for controls
+            ImRect videoRect{ ImGui::GetItemRectMin(), ImGui::GetItemRectMax() };
+
+            // Render controls over the video
+            renderPlaybackControls(appInstance, videoRect, true);
+
             ImGui::End();
             ImGui::PopStyleVar();
-            return;
-        }
+        } else {
 
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImVec2 vp = viewport->WorkPos;
@@ -248,96 +253,8 @@ namespace GuiOverlay {
 
             ImRect videoRect{ ImGui::GetItemRectMin(), ImGui::GetItemRectMax() };
 
-            // --- POLISH BEGIN ---
-            const float btnSize = std::max(videoRect.GetHeight() * 0.04f, 28.0f);
-            const float margin = btnSize * 0.6f;
-            const float barHeight = btnSize * 0.22f; // thicker timeline bar
-            // --- POLISH END ---
-            bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
-
-            size_t curIdx = 0, total = 0;
-            bool hasVideo = false;
-            if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
-                total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
-                if (total > 0) {
-                    curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
-                    hasVideo = true;
-                }
-            }
-            float progress = (total > 1) ? (float)curIdx / (float)(total - 1) : 0.0f;
-
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-
-            // --- POLISH BEGIN ---
-            if (hasVideo) {
-                ImVec2 btnPos(videoRect.Min.x + margin, videoRect.Max.y - margin - btnSize);
-                ImGui::SetCursorScreenPos(btnPos);
-                ImGui::InvisibleButton("##PlayPause", ImVec2(btnSize, btnSize));
-                if (ImGui::IsItemClicked() && appInstance->m_playbackController_ptr) {
-                    bool wasPaused = paused;
-                    appInstance->m_playbackController_ptr->togglePause();
-                    bool nowPaused = appInstance->m_playbackController_ptr->isPaused();
-                    if (nowPaused != wasPaused) {
-                        if (appInstance->m_audio) appInstance->m_audio->setPaused(nowPaused);
-                        if (nowPaused) appInstance->recordPauseTime();
-                        else appInstance->anchorPlaybackTimeForResume();
-                    }
-                }
-                float iconSize = btnSize * 0.95f;
-                ImVec2 iconPos(btnPos.x + (btnSize - iconSize) * 0.5f,
-                               btnPos.y + (btnSize - iconSize) * 0.5f);
-                ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-                if (paused) {
-                    ImVec2 p0(iconPos.x, iconPos.y);
-                    ImVec2 p1(iconPos.x, iconPos.y + iconSize);
-                    ImVec2 p2(iconPos.x + iconSize, iconPos.y + iconSize * 0.5f);
-                    dl->AddTriangleFilled(p0, p1, p2, col);
-                } else {
-                    float barW = iconSize * 0.3f;
-                    dl->AddRectFilled(ImVec2(iconPos.x, iconPos.y),
-                                      ImVec2(iconPos.x + barW, iconPos.y + iconSize), col);
-                    dl->AddRectFilled(ImVec2(iconPos.x + iconSize - barW, iconPos.y),
-                                      ImVec2(iconPos.x + iconSize, iconPos.y + iconSize), col);
-                }
-            // --- POLISH END ---
-
-            // --- POLISH BEGIN ---
-            float barStartX = videoRect.Min.x + margin + btnSize;
-            float barEndX = videoRect.Max.x - margin;
-            float barMidY = videoRect.Max.y - margin - btnSize * 0.5f;
-            ImVec2 barPos0(barStartX, barMidY - barHeight * 0.5f);
-            ImVec2 barPos1(barEndX, barMidY + barHeight * 0.5f);
-            // --- POLISH END ---
-
-            dl->AddRectFilled(barPos0, barPos1, IM_COL32(0,0,0,120), barHeight*0.5f);
-            dl->AddRectFilled(barPos0, ImVec2(barStartX + progress * (barEndX - barStartX), barPos1.y), IM_COL32(200,200,200,200), barHeight*0.5f);
-
-            int64_t firstFrameTs = 0, curTs = 0, totalTs = 0;
-            if (appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
-                const auto& frames = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames();
-                if (!frames.empty()) {
-                    firstFrameTs = frames.front();
-                    totalTs = frames.back() - firstFrameTs;
-                    if (curIdx < frames.size()) curTs = frames[curIdx] - firstFrameTs;
-                }
-            }
-            std::string timeStr = GuiUtils::formatHMS(curTs) + " / " + GuiUtils::formatHMS(totalTs);
-            ImVec2 textSize = ImGui::CalcTextSize(timeStr.c_str());
-            dl->AddText(ImVec2(barEndX - textSize.x, barPos0.y - textSize.y), ImGui::GetColorU32(ImGuiCol_Text), timeStr.c_str());
-
-            ImGui::SetCursorScreenPos(barPos0);
-            ImGui::InvisibleButton("##Scrub", ImVec2(barEndX - barStartX, barHeight));
-            if (ImGui::IsItemActivated() && !paused && appInstance->m_playbackController_ptr) {
-                appInstance->m_playbackController_ptr->togglePause();
-            }
-            if (ImGui::IsItemActive() && appInstance->m_playbackController_ptr) {
-                float t = (ImGui::GetIO().MousePos.x - barStartX) / (barEndX - barStartX);
-                t = std::clamp(t, 0.0f, 1.0f);
-                int newFrame = static_cast<int>(t * ((total > 0) ? (total - 1) : 0));
-                appInstance->performSeek(newFrame);
-            }
-        } // end hasVideo
-    }
+            renderPlaybackControls(appInstance, videoRect, false);
+        }
         ImGui::End();
 
 
@@ -369,6 +286,7 @@ namespace GuiOverlay {
             ImGui::Separator();
             ImGui::BeginChild("FileListScrollingRegion");
             for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
+                ImGui::PushID(i);
                 bool is_selected = (i == appInstance->m_selectedBatchIndex);
                 std::string name = fs::path(appInstance->m_fileList[i]).filename().string();
                 if (ImGui::Selectable(name.c_str(), is_selected)) {
@@ -377,6 +295,7 @@ namespace GuiOverlay {
                         appInstance->loadFileAtIndex(i);
                     }
                 }
+                ImGui::PopID();
             }
             ImGui::EndChild();
             ImGui::EndDisabled();
@@ -415,12 +334,9 @@ namespace GuiOverlay {
                 std::string folder = appInstance->openFolderDialog();
                 if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
             }
-            ImVec4 btn = ImVec4(0.3f, 0.4f, 0.6f, 1.0f);
-            ImVec4 hover = ImVec4(0.35f, 0.45f, 0.65f, 1.0f);
-            ImVec4 active = ImVec4(0.2f, 0.3f, 0.5f, 1.0f);
-            ImGui::PushStyleColor(ImGuiCol_Button, btn);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, active);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.25f, 0.28f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.30f, 0.33f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.35f, 0.35f, 0.38f, 1.00f));
             if (ImGui::Button("Convert All") && !exporting) {
                 appInstance->startBatchConversion();
             }
@@ -460,17 +376,128 @@ namespace GuiOverlay {
             float logPad = ImGui::GetStyle().ItemSpacing.x * 2.0f;
             ImVec2 oldPos = ImGui::GetCursorPos();
             ImVec2 winSize = ImGui::GetWindowSize();
-            ImVec2 btnSize = ImGui::CalcTextSize("Clear Logs");
-            btnSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-            btnSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
-            ImGui::SetCursorPos(ImVec2(winSize.x - btnSize.x - logPad, winSize.y - btnSize.y - logPad));
+            ImVec2 clearButtonSize = ImGui::CalcTextSize("Clear Logs");
+            clearButtonSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+            clearButtonSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
+            ImGui::SetCursorPos(ImVec2(winSize.x - clearButtonSize.x - logPad, winSize.y - clearButtonSize.y - logPad));
             if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
             ImGui::SetCursorPos(oldPos);
             // --- POLISH END ---
         }
         ImGui::End();
     }
+}
+    void renderPlaybackControls(App* appInstance, const ImRect& videoRect, bool isFullscreen) {
+        bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
+        size_t curIdx = 0, total = 0;
+        bool hasVideo = false;
 
+        if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+            total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
+            if (total > 0) {
+                curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
+                hasVideo = true;
+            }
+        }
+
+        if (!hasVideo) return;
+
+        float progress = (total > 1) ? (float)curIdx / (float)(total - 1) : 0.0f;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        const float controlsHeight = 60.0f;
+        const float margin = 15.0f;
+        const float barHeight = 3.0f;
+        const float handleRadius = 6.0f;
+        const float iconSize = 24.0f;
+
+        float controlsY = videoRect.Max.y - controlsHeight;
+
+        // Semi-transparent background for controls
+        dl->AddRectFilled(ImVec2(videoRect.Min.x, controlsY), videoRect.Max, IM_COL32(0, 0, 0, 100));
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+        // Play/Pause Button
+        ImGui::SetCursorScreenPos(ImVec2(videoRect.Min.x + margin, controlsY + (controlsHeight - iconSize) / 2.0f));
+        ImGui::PushFont(GuiStyles::G_LargeIconFont);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
+        if (ImGui::Button(paused ? ICON_MD_PLAY_ARROW : ICON_MD_PAUSE, ImVec2(iconSize, iconSize))) {
+            appInstance->m_playbackController_ptr->togglePause();
+        }
+        ImGui::PopStyleColor(3);
+        ImGui::PopFont();
+
+        // Timestamp
+        int64_t firstFrameTs = 0, curTs = 0, totalTs = 0;
+        if (appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+            const auto& frames = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames();
+            if (!frames.empty()) {
+                firstFrameTs = frames.front();
+                totalTs = frames.back() - firstFrameTs;
+                if (curIdx < frames.size()) curTs = frames[curIdx] - firstFrameTs;
+            }
+        }
+        std::string timeStr = GuiUtils::formatHMS(curTs) + " / " + GuiUtils::formatHMS(totalTs);
+        ImVec2 textSize = ImGui::CalcTextSize(timeStr.c_str());
+        ImGui::SetCursorScreenPos(ImVec2(videoRect.Min.x + margin + iconSize + 10, controlsY + (controlsHeight - textSize.y) / 2.0f));
+        ImGui::TextUnformatted(timeStr.c_str());
+
+        // Right-side Icons
+        float rightIconsX = videoRect.Max.x - margin - (isFullscreen ? iconSize : (iconSize * 2 + 10));
+        ImGui::SetCursorScreenPos(ImVec2(rightIconsX, controlsY + (controlsHeight - iconSize) / 2.0f));
+        ImGui::PushFont(GuiStyles::G_LargeIconFont);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
+
+        if (!isFullscreen) {
+            if (ImGui::Button(ICON_MD_SKIP_NEXT, ImVec2(iconSize, iconSize))) {
+                appInstance->loadNextFile();
+            }
+            ImGui::SameLine();
+        }
+
+        if (ImGui::Button(isFullscreen ? ICON_MD_FULLSCREEN_EXIT : ICON_MD_FULLSCREEN, ImVec2(iconSize, iconSize))) {
+            appInstance->toggleFullscreenPreview();
+        }
+        ImGui::PopStyleColor(3);
+        ImGui::PopFont();
+
+        // Scrubber Bar
+        float barY = controlsY - barHeight - 5;
+        float barStartX = videoRect.Min.x + margin;
+        float barEndX = videoRect.Max.x - margin;
+        ImVec2 barStart(barStartX, barY);
+        ImVec2 barEnd(barEndX, barY + barHeight);
+        dl->AddRectFilled(barStart, barEnd, IM_COL32(100, 100, 100, 120), barHeight * 0.5f);
+        float progressPx = progress * (barEndX - barStartX);
+        dl->AddRectFilled(barStart, ImVec2(barStartX + progressPx, barEnd.y), IM_COL32(255, 255, 255, 200), barHeight * 0.5f);
+        dl->AddCircleFilled(ImVec2(barStartX + progressPx, barY + barHeight / 2), handleRadius, IM_COL32(255, 255, 255, 255));
+
+        ImGui::SetCursorScreenPos(ImVec2(barStartX, barY - handleRadius));
+        ImGui::InvisibleButton("##Scrub", ImVec2(barEndX - barStartX, handleRadius * 2));
+        
+        bool wasPausedOnActivation = false;
+        if (ImGui::IsItemActivated()) {
+            wasPausedOnActivation = paused;
+            if (!paused && appInstance->m_playbackController_ptr) {
+                appInstance->m_playbackController_ptr->togglePause();
+            }
+        }
+
+        if (ImGui::IsItemActive() && appInstance->m_playbackController_ptr) {
+            float t = (ImGui::GetIO().MousePos.x - barStartX) / (barEndX - barStartX);
+            t = std::clamp(t, 0.0f, 1.0f);
+            int newFrame = static_cast<int>(t * ((total > 0) ? (total - 1) : 0));
+            appInstance->performSeek(newFrame);
+        }
+
+        if (ImGui::IsItemDeactivated() && !wasPausedOnActivation && appInstance->m_playbackController_ptr) {
+            appInstance->m_playbackController_ptr->togglePause();
+        }
+    }
     void endFrame(VkCommandBuffer commandBuffer) {
         ImVec4 originalWindowBg = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
         ImVec4 originalText = ImGui::GetStyle().Colors[ImGuiCol_Text];
@@ -503,3 +530,4 @@ namespace GuiOverlay {
     }
 
 } // namespace GuiOverlay
+

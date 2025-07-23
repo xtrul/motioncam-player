@@ -691,6 +691,10 @@ void App::togglePreviewFullscreen() {
     showActionMessage(m_previewFullscreen ? "Preview Fullscreen" : "Preview Windowed");
 }
 
+void App::toggleFullscreenPreview() {
+    m_previewFullscreen = !m_previewFullscreen;
+}
+
 void App::toggleWindowFullscreen() {
     LogToFile(std::string("[App] Window fullscreen toggled. Was: ") + (m_isFullscreen ? "ON" : "OFF"));
     if (m_isFullscreen) {

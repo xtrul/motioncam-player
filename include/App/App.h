@@ -110,6 +110,8 @@ public:
 
     void handleKey(int key, int mods);
     void loadFileAtIndex(int index);
+    void loadNextFile();
+    void toggleFullscreenPreview();
     void softDeleteCurrentFile();
     void sendCurrentFileToMotionCamFS();
     void sendAllPlaylistFilesToMotionCamFS();

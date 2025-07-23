@@ -14,13 +14,15 @@ namespace GuiUtils {
         s_total -= static_cast<double>(h) * 3600.0;
         int m = static_cast<int>(s_total / 60.0);
         s_total -= static_cast<double>(m) * 60.0;
-        double sec_frac = s_total;
+        int s = static_cast<int>(s_total);
 
         std::ostringstream oss;
         if (is_negative) oss << "-";
-        oss << std::setfill('0') << std::setw(2) << h << ':'
-            << std::setw(2) << m << ':'
-            << std::fixed << std::setprecision(3) << std::setw(6) << sec_frac;
+        if (h > 0) {
+            oss << std::setfill('0') << std::setw(2) << h << ':';
+        }
+        oss << std::setfill('0') << std::setw(2) << m << ':'
+            << std::setw(2) << s;
         return oss.str();
     }
 

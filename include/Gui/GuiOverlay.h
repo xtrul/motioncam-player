@@ -13,6 +13,7 @@ class App; // App class is needed for parameters
 // Required for ImGui Vulkan backend function signatures
 #include <vulkan/vulkan.h>
 
+struct ImRect;
 namespace GuiOverlay {
     // Flag to control the visibility of the auxiliary playlist window.
     extern bool show_playlist_aux;
@@ -68,6 +69,7 @@ namespace GuiOverlay {
     // Defines and renders the ImGui interface.
     void render(App* appInstance);
 
+void renderPlaybackControls(App* appInstance, const ImRect& videoRect, bool isFullscreen);
     // Ends the ImGui frame and records its draw data into the Vulkan command buffer.
     void endFrame(VkCommandBuffer commandBuffer);
 

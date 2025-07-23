@@ -568,6 +568,12 @@ void App::loadFileAtIndex(int index) {
     LogToFile(std::string("[App::loadFileAtIndex] File loading setup complete for: '") + fs::path(newFilePath).filename().string() + "' with LoadID: " + std::to_string(new_load_id));
 }
 
+void App::loadNextFile() {
+    if (!m_fileList.empty()) {
+        loadFileAtIndex((m_currentFileIndex + 1) % static_cast<int>(m_fileList.size()));
+    }
+}
+
 
 void App::performSeek(size_t new_frame_index) {
     if (!m_playbackController_ptr || !m_decoderWrapper_ptr || !m_decoderWrapper_ptr->getDecoder()) {
