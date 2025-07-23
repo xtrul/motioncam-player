@@ -416,7 +416,6 @@ namespace GuiOverlay {
         // Semi-transparent background for controls
         dl->AddRectFilled(ImVec2(videoRect.Min.x, controlsY), videoRect.Max, IM_COL32(0, 0, 0, 100));
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
         // Play/Pause Button
         ImGui::SetCursorScreenPos(ImVec2(videoRect.Min.x + margin, controlsY + (controlsHeight - iconSize) / 2.0f));
         ImGui::PushFont(GuiStyles::G_LargeIconFont);
