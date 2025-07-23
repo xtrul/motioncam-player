@@ -225,6 +225,36 @@ namespace GuiOverlay {
 
         ImGuiViewport* viewport = ImGui::GetMainViewport();
 
+        // --- STAGE 1 BEGIN ---
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGuiWindowFlags video_flags = ImGuiWindowFlags_NoDecoration |
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
+            ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings;
+        if (ImGui::Begin("VideoView", nullptr, video_flags)) {
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            float srcAspect = 1.0f;
+            if (appInstance->m_rendererVk && appInstance->m_rendererVk->getImageHeight() > 0) {
+                srcAspect = static_cast<float>(appInstance->m_rendererVk->getImageWidth()) /
+                            static_cast<float>(appInstance->m_rendererVk->getImageHeight());
+            }
+            float w = avail.x;
+            float h = w / srcAspect;
+            if (h > avail.y) { h = avail.y; w = h * srcAspect; }
+
+            ImVec2 topLeft = ImGui::GetCursorScreenPos() + ImVec2((avail.x - w) * 0.5f, (avail.y - h) * 0.5f);
+            ImGui::SetCursorScreenPos(topLeft);
+            ImTextureID videoTexID = (ImTextureID)appInstance->m_rendererVk->m_descriptorSets[appInstance->m_currentFrame];
+            ImGui::Image(videoTexID, ImVec2(w, h), {0, 0}, {1, 1});
+            ImRect videoRect{ ImGui::GetItemRectMin(), ImGui::GetItemRectMax() };
+            (void)videoRect;
+        }
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+        // --- STAGE 1 END ---
+
         if (GuiOverlay::show_playlist_aux) {
             const float initial_playlist_width = 320.0f;
             float default_playlist_height = viewport->WorkSize.y * 0.80f;
