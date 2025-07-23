@@ -273,6 +273,7 @@ namespace GuiOverlay {
                 ImVec2 btnPos(videoRect.Min.x + margin, videoRect.Max.y - margin - btnSize);
                 ImGui::SetCursorScreenPos(btnPos);
                 ImGui::InvisibleButton("##PlayPause", ImVec2(btnSize, btnSize));
+                ImVec2 actualBtnPos = ImGui::GetItemRectMin();
                 if (ImGui::IsItemClicked() && appInstance->m_playbackController_ptr) {
                     bool wasPaused = paused;
                     appInstance->m_playbackController_ptr->togglePause();
@@ -284,8 +285,8 @@ namespace GuiOverlay {
                     }
                 }
                 float iconSize = btnSize * 0.95f;
-                ImVec2 iconPos(btnPos.x + (btnSize - iconSize) * 0.5f,
-                               btnPos.y + (btnSize - iconSize) * 0.5f);
+                ImVec2 iconPos(actualBtnPos.x + (btnSize - iconSize) * 0.5f,
+                               actualBtnPos.y + (btnSize - iconSize) * 0.5f);
                 ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
                 if (paused) {
                     ImVec2 p0(iconPos.x, iconPos.y);
