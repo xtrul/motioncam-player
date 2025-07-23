@@ -429,7 +429,7 @@ namespace GuiOverlay {
                        std::max(0.0f, (iconSize - playGlyph.y) * 0.5f));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, playPad);
         if (ImGui::Button(playIcon, ImVec2(iconSize, iconSize))) {
-            appInstance->m_playbackController_ptr->togglePause();
+            appInstance->togglePlayback();
         }
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
@@ -459,10 +459,14 @@ namespace GuiOverlay {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.1f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.2f));
-        const char* nextIcon = ICON_MD_SKIP_NEXT;
-        ImVec2 nextGlyph = ImGui::CalcTextSize(nextIcon);
-        ImVec2 nextPad(std::max(0.0f, (iconSize - nextGlyph.x) * 0.5f),
-                       std::max(0.0f, (iconSize - nextGlyph.y) * 0.5f));
+        const char* zoomIcon = ICON_MD_ZOOM_IN;
+        bool isZoomed = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isZoomNativePixels() : false;
+        if (isZoomed) {
+            zoomIcon = ICON_MD_ZOOM_OUT;
+        }
+        ImVec2 zoomGlyph = ImGui::CalcTextSize(zoomIcon);
+        ImVec2 zoomPad(std::max(0.0f, (iconSize - zoomGlyph.x) * 0.5f),
+            std::max(0.0f, (iconSize - zoomGlyph.y) * 0.5f));
 
         const char* fullIcon = isFullscreen ? ICON_MD_FULLSCREEN_EXIT : ICON_MD_FULLSCREEN;
         ImVec2 fullGlyph = ImGui::CalcTextSize(fullIcon);
@@ -470,9 +474,9 @@ namespace GuiOverlay {
                        std::max(0.0f, (iconSize - fullGlyph.y) * 0.5f));
 
         if (!isFullscreen) {
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, nextPad);
-            if (ImGui::Button(nextIcon, ImVec2(iconSize, iconSize))) {
-                appInstance->loadNextFile();
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, zoomPad);
+            if (ImGui::Button(zoomIcon, ImVec2(iconSize, iconSize))) {
+                appInstance->handleKey(GLFW_KEY_Z, 0);
             }
             ImGui::PopStyleVar();
             ImGui::SameLine();

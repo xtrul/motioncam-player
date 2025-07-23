@@ -44,6 +44,8 @@
 
 namespace fs = std::filesystem;
 
+App* App::s_instance = nullptr;
+
 #ifdef _WIN32
 namespace DebugLogHelper {
     std::string wstring_to_utf8(const std::wstring& wstr) {
@@ -155,6 +157,7 @@ App::App(const std::string& filePath) :
     , m_hevcStatus()
 #endif
 {
+    s_instance = this;
     LogToFile(std::string("App::App Constructor called for file: ") + this->m_filePath);
 #ifndef NDEBUG
     std::cout << "App::App Constructor called for file: " << this->m_filePath << std::endl;
@@ -994,3 +997,12 @@ LRESULT App::IpcWndProc(HWND currentHwnd, UINT msg, WPARAM wParam, LPARAM lParam
     return DefWindowProcW(this->_ipcWnd ? this->_ipcWnd : currentHwnd, msg, wParam, lParam);
 }
 #endif
+
+void App::getWindowSize(int& width, int& height) {
+    if (s_instance && s_instance->m_window) {
+        glfwGetFramebufferSize(s_instance->m_window, &width, &height);
+    } else {
+        width = 0;
+        height = 0;
+    }
+}

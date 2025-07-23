@@ -139,6 +139,7 @@ private:
     bool m_zoomNativePixels = false;
     float m_panX = 0.0f;
     float m_panY = 0.0f;
+    bool m_recenterOnNextDraw = false;
 
     // Private methods that remain part of Renderer_VK class
     void updateUniformBuffer(uint32_t currentImageIndex, const ShaderParamsUBO& ubo);

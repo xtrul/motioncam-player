@@ -26,6 +26,8 @@
 #define ICON_MD_FULLSCREEN_EXIT u8"\ue5d1"
 #define ICON_MD_CLOSE u8"\ue5cd"
 #define ICON_MD_SETTINGS u8"\ue8b8"
+#define ICON_MD_ZOOM_IN u8"\ue8ff"
+#define ICON_MD_ZOOM_OUT u8"\ue900"
 
 // Information & Help
 #define ICON_MD_INFO_OUTLINE u8"\ue88f" // General info

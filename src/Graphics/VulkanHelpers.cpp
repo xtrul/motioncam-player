@@ -1,4 +1,5 @@
 #include "Graphics/VulkanHelpers.h"
+#include "App/App.h"
 #include "Utils/DebugLog.h" // For LogToFile
 #include <fstream>
 #include <stdexcept> // For std::runtime_error
@@ -71,3 +72,7 @@ namespace VulkanHelpers {
     }
 
 } // namespace VulkanHelpers
+
+void VulkanHelpers::getFramebufferSizeFromApp(int& width, int& height) {
+    App::getWindowSize(width, height);
+}

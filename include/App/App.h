@@ -45,6 +45,7 @@ class Renderer_VK;
 
 class App {
 public:
+    static App* s_instance;
     struct DngExportResult {
         int successCount = 0;
         int failCount = 0;
@@ -112,6 +113,7 @@ public:
     void loadFileAtIndex(int index);
     void loadNextFile();
     void toggleFullscreenPreview();
+    void togglePlayback();
     void softDeleteCurrentFile();
     void sendCurrentFileToMotionCamFS();
     void sendAllPlaylistFilesToMotionCamFS();
@@ -134,6 +136,7 @@ public:
     void showActionMessage(const std::string& msg);
     void togglePreviewFullscreen();
     void toggleWindowFullscreen();
+    static void getWindowSize(int& width, int& height);
 
 #ifdef MOTIONCAM_CONVERTER
     enum class ExportFormat {

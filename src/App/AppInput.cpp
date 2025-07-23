@@ -207,33 +207,9 @@ void App::handleKey(int key, int mods) {
             LogToFile(std::string("[App::handleKey] Z pressed. Zoom native pixels: ") + (m_playbackController->isZoomNativePixels() ? "ON" : "OFF"));
             if (m_rendererVk) {
                 m_rendererVk->setZoomNativePixels(m_playbackController->isZoomNativePixels());
-                if (m_playbackController->isZoomNativePixels()) {
-                    int winW, winH;
-                    glfwGetWindowSize(m_window, &winW, &winH);
-                    int imgW = m_rendererVk->getImageWidth();
-                    int imgH = m_rendererVk->getImageHeight();
-
-                    if (imgW > 0 && imgH > 0) {
-                        float pan_x = (static_cast<float>(winW) - static_cast<float>(imgW)) / 2.0f;
-                        float pan_y = (static_cast<float>(winH) - static_cast<float>(imgH)) / 2.0f;
-                        m_rendererVk->setPanOffsets(pan_x, pan_y);
-#ifndef NDEBUG
-                        LogToFile(std::string("[App::handleKey] Zoom ON. Centered pan: ") + std::to_string(pan_x) + ", " + std::to_string(pan_y));
-#endif
-                    }
-                    else {
-                        m_rendererVk->resetPanOffsets();
-#ifndef NDEBUG
-                        LogToFile("[App::handleKey] Zoom ON. No valid image dims, pan reset.");
-#endif
-                    }
-                }
-                else {
+                if (!m_playbackController->isZoomNativePixels()) {
                     m_rendererVk->resetPanOffsets();
                     if (m_isPanning) { m_isPanning = false; }
-#ifndef NDEBUG
-                    LogToFile("[App::handleKey] Zoom OFF. Pan reset.");
-#endif
                 }
             }
         }
@@ -312,10 +288,10 @@ void App::handleKey(int key, int mods) {
     }
 
     if (!keyHandledByAppLogic) {
-        bool wasPaused = m_playbackController->isPaused();
-        m_playbackController->handleKey(key, m_window);
         if (key == GLFW_KEY_SPACE) {
-            showActionMessage(wasPaused ? "Play" : "Pause");
+            togglePlayback();
+        } else {
+            m_playbackController->handleKey(key, m_window);
         }
     }
 
@@ -342,6 +318,26 @@ void App::handleKey(int key, int mods) {
         // So, this specific else-if branch might not need additional action here, as performSeek should handle it.
         // LogToFile("[App::handleKey] Seek action occurred while paused. Anchor already updated by performSeek. Audio reset by performSeek.");
     }
+}
+
+void App::togglePlayback() {
+    if (!m_playbackController) return;
+
+    bool wasPaused = m_playbackController->isPaused();
+    m_playbackController->togglePause();
+    showActionMessage(wasPaused ? "Play" : "Pause");
+
+    bool isPausedAfterToggle = m_playbackController->isPaused();
+
+    if (m_audio) m_audio->setPaused(isPausedAfterToggle);
+
+    if (isPausedAfterToggle) {
+        recordPauseTime();
+    }
+    else {
+        anchorPlaybackTimeForResume();
+    }
+    m_ioThreadFileCv.notify_all();
 }
 
 void App::handleDrop(int count, const char** paths) {

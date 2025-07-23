@@ -29,6 +29,7 @@ namespace VulkanHelpers {
 
     std::vector<char> readFile(const std::string& filename);
     VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code);
+    void getFramebufferSizeFromApp(int& width, int& height);
 
     // For single-time commands, they need access to device, command pool, and queue.
     // These could be passed as parameters or the functions could be members of a helper class

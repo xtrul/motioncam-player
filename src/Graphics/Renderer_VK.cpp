@@ -437,6 +437,16 @@ void Renderer_VK::recordDrawCommands(
         scissor.offset = { 0, 0 }; scissor.extent = { (uint32_t)windowWidth, (uint32_t)windowHeight };
     }
     else if (m_zoomNativePixels) {
+        if (m_recenterOnNextDraw) {
+            float w = (float)m_currentRawW;
+            float h = (float)m_currentRawH;
+            if (m_currentOrientationDegrees == 90 || m_currentOrientationDegrees == 270) {
+                std::swap(w, h);
+            }
+            m_panX = ((float)windowWidth - w) / 2.0f;
+            m_panY = ((float)windowHeight - h) / 2.0f;
+            m_recenterOnNextDraw = false;
+        }
         viewport.x = m_panX; viewport.y = m_panY;
         float w = (float)m_currentRawW;
         float h = (float)m_currentRawH;
@@ -497,9 +507,43 @@ int Renderer_VK::getCfaType(const std::string& c) {
     return 0;
 }
 
-void Renderer_VK::setZoomNativePixels(bool n) { m_zoomNativePixels = n; }
-void Renderer_VK::setPanOffsets(float x, float y) { m_panX = x; m_panY = y; }
-void Renderer_VK::resetPanOffsets() { m_panX = 0.0f; m_panY = 0.0f; }
+void Renderer_VK::setZoomNativePixels(bool n) {
+    m_zoomNativePixels = n;
+    if (m_zoomNativePixels) {
+        m_recenterOnNextDraw = true;
+    }
+}
+void Renderer_VK::setPanOffsets(float x, float y) {
+    if (!m_zoomNativePixels) {
+        m_panX = 0.0f;
+        m_panY = 0.0f;
+        return;
+    }
+
+    int winW, winH;
+    VulkanHelpers::getFramebufferSizeFromApp(winW, winH);
+
+    float imgW = (float)m_currentRawW;
+    float imgH = (float)m_currentRawH;
+    if (m_currentOrientationDegrees == 90 || m_currentOrientationDegrees == 270) {
+        std::swap(imgW, imgH);
+    }
+
+    float minPanX = std::min(0.0f, (float)winW - imgW);
+    float maxPanX = std::max(0.0f, (float)winW - imgW);
+    float minPanY = std::min(0.0f, (float)winH - imgH);
+    float maxPanY = std::max(0.0f, (float)winH - imgH);
+
+    m_panX = std::clamp(x, minPanX, maxPanX);
+    m_panY = std::clamp(y, minPanY, maxPanY);
+}
+void Renderer_VK::resetPanOffsets() {
+    m_panX = 0.0f;
+    m_panY = 0.0f;
+    if (m_zoomNativePixels) {
+        m_recenterOnNextDraw = true;
+    }
+}
 float Renderer_VK::getPanX() const { return m_panX; }
 float Renderer_VK::getPanY() const { return m_panY; }
 int Renderer_VK::getImageWidth() const { return m_currentRawW; }
