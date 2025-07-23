@@ -220,16 +220,24 @@ namespace GuiOverlay {
         ImVec2 vp = viewport->WorkPos;
         ImVec2 vs = viewport->WorkSize;
 
+        static float g_rightPanelWidth = 340.0f;
+        static bool  g_rightPanelCollapsed = false;
+        static float g_logPanelHeight = 120.0f;
+        static bool  g_logCollapsed = false;
+
         // Layout constants
-        const float rightPanelWidth = 340.0f; // Fixed width for side panels
         const float filesPanelHeight = 260.0f; // Fixed height for Files panel
         const float controlsPanelMinHeight = 200.0f; // Minimum height for Controls panel
         const float timelinePanelHeight = 60.0f; // Height for play/timeline controls
-        const float logPanelHeight = 120.0f; // Fixed height for Log panel
         const float panelSpacing = 3.0f;
 
+        if (g_rightPanelWidth < 220.0f) g_rightPanelWidth = 220.0f;
+        if (g_logPanelHeight < 80.0f) g_logPanelHeight = 80.0f;
+
+        float rightPanelWidth = g_rightPanelCollapsed ? 0.0f : g_rightPanelWidth;
+        float logPanelHeight = g_logCollapsed ? 0.0f : g_logPanelHeight;
+
         float previewWidth = vs.x - rightPanelWidth - panelSpacing;
-        // With timeline moved below preview there are only two gaps
         float previewHeight = vs.y - timelinePanelHeight - logPanelHeight - panelSpacing * 2;
         float controlsPanelHeight = vs.y - filesPanelHeight - panelSpacing * 2;
         if (controlsPanelHeight < controlsPanelMinHeight) controlsPanelHeight = controlsPanelMinHeight;
@@ -241,20 +249,40 @@ namespace GuiOverlay {
         ImGui::SetNextWindowSize(ImVec2(previewWidth, previewHeight));
         ImGui::Begin("Preview", nullptr, fixed_flags);
         {
-            ImVec2 size = ImGui::GetContentRegionAvail();
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            float videoW = static_cast<float>(appInstance->m_decodedWidth);
+            float videoH = static_cast<float>(appInstance->m_decodedHeight);
+            if (videoW <= 0.f || videoH <= 0.f) {
+                videoW = avail.x; videoH = avail.y;
+            }
+            float videoAspect = videoH > 0.f ? (videoW / videoH) : 1.f;
+            float availAspect = avail.y > 0.f ? (avail.x / avail.y) : 1.f;
+            ImVec2 imageSize = avail;
+            if (availAspect > videoAspect) {
+                imageSize.x = avail.y * videoAspect;
+            } else {
+                imageSize.y = avail.x / videoAspect;
+            }
+            ImVec2 cursor = ImGui::GetCursorScreenPos();
+            ImVec2 offset = (avail - imageSize) * 0.5f;
+            ImGui::SetCursorScreenPos(cursor + offset);
             ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
             if (texID)
-                ImGui::Image(texID, size);
+                ImGui::Image(texID, imageSize);
+            ImGui::SetCursorScreenPos(cursor);
         }
         ImGui::End();
 
-        // 2. Timeline/Play controls (below Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
+        // 2. Timeline/Play controls overlay on Preview
+        ImGui::SetNextWindowBgAlpha(0.6f);
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight - timelinePanelHeight - 6));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, timelinePanelHeight));
-        ImGui::Begin("TimelineControls", nullptr, fixed_flags);
+        ImGuiWindowFlags timeline_flags = fixed_flags | ImGuiWindowFlags_NoBackground;
+        ImGui::Begin("TimelineControls", nullptr, timeline_flags);
         {
+            ImGui::PushFont(GuiStyles::G_SmallIconFont);
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
-            if (ImGui::Button(paused ? "Play" : "Pause")) {
+            if (ImGui::Button(paused ? ICON_MD_PLAY_ARROW : ICON_MD_PAUSE)) {
                 if (appInstance->m_playbackController_ptr) {
                     bool wasPaused = paused;
                     appInstance->m_playbackController_ptr->togglePause();
@@ -282,36 +310,64 @@ namespace GuiOverlay {
             }
             ImGui::PopItemWidth();
             ImGui::SameLine();
-            ImGui::Text("%zu / %zu", curIdx + 1, total);
+            std::string timeStr = GuiUtils::format_mm_ss(GuiOverlay::gatherData(appInstance).currentVideoTimeSec);
+            std::string totalStr = GuiUtils::format_mm_ss(GuiOverlay::gatherData(appInstance).totalDurationSec);
+            ImGui::Text("%s / %s", timeStr.c_str(), totalStr.c_str());
+            ImGui::SameLine();
+            bool zoomNative = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isZoomNativePixels() : false;
+            std::string zoomLabel = zoomNative ? "Fit" : "100%";
+            if (ImGui::Button(zoomLabel.c_str())) {
+                if (appInstance->m_playbackController_ptr) {
+                    appInstance->m_playbackController_ptr->toggleZoomNativePixels();
+                    if (appInstance->getRenderer()) appInstance->getRenderer()->setZoomNativePixels(appInstance->m_playbackController_ptr->isZoomNativePixels());
+                }
+            }
+            ImGui::PopFont();
         }
         ImGui::End();
 
-        // 3. Files Panel (fixed size, top right)
-        ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y));
-        ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, filesPanelHeight));
-        ImGui::Begin("Files", nullptr, fixed_flags);
-        {
-            bool exporting = appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load()
+        // Right panel resize/collapse handle
+        ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth, vp.y));
+        ImGui::SetNextWindowSize(ImVec2(panelSpacing * 2, vs.y));
+        ImGui::Begin("RightPanelHandle", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs);
+        ImGui::InvisibleButton("##right_drag", ImVec2(panelSpacing * 2, vs.y));
+        if (ImGui::IsItemActive()) g_rightPanelWidth -= ImGui::GetIO().MouseDelta.x;
+        ImGui::SetCursorPos(ImVec2(0.0f, vs.y * 0.5f - ImGui::GetFrameHeight()));
+        ImGui::PushFont(GuiStyles::G_SmallIconFont);
+        if (ImGui::Button(g_rightPanelCollapsed ? ICON_MD_KEYBOARD_ARROW_RIGHT : ICON_MD_KEYBOARD_ARROW_LEFT))
+            g_rightPanelCollapsed = !g_rightPanelCollapsed;
+        ImGui::PopFont();
+        ImGui::End();
+
+        // 3. Files Panel (top right)
+        if (!g_rightPanelCollapsed) {
+            ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y));
+            ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, filesPanelHeight));
+            ImGui::Begin("Files", nullptr, fixed_flags);
+            {
+                bool exporting = appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load()
 #ifdef ENABLE_PRORES_EXPORT
-                || appInstance->m_proResStatus.active.load() || appInstance->m_dnxhrStatus.active.load() || appInstance->m_hevcStatus.active.load()
+                    || appInstance->m_proResStatus.active.load() || appInstance->m_dnxhrStatus.active.load() || appInstance->m_hevcStatus.active.load()
 #endif
-                ;
-            ImGui::BeginDisabled(exporting);
-            if (ImGui::Button("Add")) { appInstance->triggerOpenFileViaDialog(); }
+                    ;
+                ImGui::BeginDisabled(exporting);
+            ImGui::PushFont(GuiStyles::G_SmallIconFont);
+            if (ImGui::Button((std::string(ICON_MD_FOLDER_OPEN) + " Add").c_str())) { appInstance->triggerOpenFileViaDialog(); }
             ImGui::SameLine();
-            if (ImGui::Button("Remove") && appInstance->m_selectedBatchIndex != -1) {
+            if (ImGui::Button((std::string(ICON_MD_DELETE) + " Remove").c_str()) && appInstance->m_selectedBatchIndex != -1) {
                 appInstance->m_fileList.erase(appInstance->m_fileList.begin() + appInstance->m_selectedBatchIndex);
                 appInstance->m_fileExportFormats.erase(appInstance->m_fileExportFormats.begin() + appInstance->m_selectedBatchIndex);
                 appInstance->m_selectedBatchIndex = -1;
             }
             ImGui::SameLine();
-            if (ImGui::Button("Clear")) {
+            if (ImGui::Button((std::string(ICON_MD_CLOSE) + " Clear").c_str())) {
                 appInstance->m_fileList.clear();
                 appInstance->m_fileExportFormats.clear();
                 appInstance->m_selectedBatchIndex = -1;
             }
+            ImGui::PopFont();
             ImGui::Separator();
-            ImGui::BeginChild("FileListScrollingRegion");
+            ImGui::BeginChild("FileListScrollingRegion", ImVec2(0,0), true, ImGuiWindowFlags_HorizontalScrollbar);
             for (int i = 0; i < (int)appInstance->m_fileList.size(); ++i) {
                 bool is_selected = (i == appInstance->m_selectedBatchIndex);
                 std::string name = fs::path(appInstance->m_fileList[i]).filename().string();
@@ -321,22 +377,25 @@ namespace GuiOverlay {
                         appInstance->loadFileAtIndex(i);
                     }
                 }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", appInstance->m_fileList[i].c_str());
             }
             ImGui::EndChild();
             ImGui::EndDisabled();
+            }
+            ImGui::End();
         }
-        ImGui::End();
 
-        // 4. Controls & Export Panel (fixed width, fills right column below Files)
-        ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y + filesPanelHeight + panelSpacing));
-        ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, controlsPanelHeight));
-        ImGui::Begin("Controls & Export", nullptr, fixed_flags);
-        {
-            bool exporting = appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load()
+        // 4. Controls & Export Panel
+        if (!g_rightPanelCollapsed) {
+            ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y + filesPanelHeight + panelSpacing));
+            ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, controlsPanelHeight));
+            ImGui::Begin("Controls & Export", nullptr, fixed_flags);
+            {
+                bool exporting = appInstance->m_batchActive.load() || appInstance->m_singleExportActive.load()
 #ifdef ENABLE_PRORES_EXPORT
-                || appInstance->m_proResStatus.active.load() || appInstance->m_dnxhrStatus.active.load() || appInstance->m_hevcStatus.active.load()
+                    || appInstance->m_proResStatus.active.load() || appInstance->m_dnxhrStatus.active.load() || appInstance->m_hevcStatus.active.load()
 #endif
-                ;
+                    ;
 
             ImGui::BeginDisabled(exporting);
             if (appInstance->m_selectedBatchIndex != -1) {
@@ -349,7 +408,7 @@ namespace GuiOverlay {
                     appInstance->m_fileExportFormats[appInstance->m_selectedBatchIndex] = (App::ExportFormat)fmt;
                 }
             }
-            ImGui::InputText("Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
+            ImGui::InputText(u8"Choose Output Folder", appInstance->m_outputFolder, sizeof(appInstance->m_outputFolder));
             if (ImGui::IsItemActivated() && ImGui::IsMouseDoubleClicked(0)) {
                 std::string folder = appInstance->openFolderDialog();
                 if (!folder.empty()) strncpy(appInstance->m_outputFolder, folder.c_str(), sizeof(appInstance->m_outputFolder)-1);
@@ -365,13 +424,15 @@ namespace GuiOverlay {
             ImGui::PushStyleColor(ImGuiCol_Button, btn);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, active);
-            if (ImGui::Button("Convert All") && !exporting) {
+            ImGui::PushFont(GuiStyles::G_SmallIconFont);
+            if (ImGui::Button((std::string(ICON_MD_COLLECTIONS) + " Convert All").c_str()) && !exporting) {
                 appInstance->startBatchConversion();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Convert Selected") && appInstance->m_selectedBatchIndex != -1 && !exporting) {
+            if (ImGui::Button((std::string(ICON_MD_SAVE) + " Convert Selected").c_str()) && appInstance->m_selectedBatchIndex != -1 && !exporting) {
                 appInstance->startSingleConversion(appInstance->m_selectedBatchIndex);
             }
+            ImGui::PopFont();
             ImGui::PopStyleColor(3);
             ImGui::EndDisabled();
 
@@ -387,21 +448,39 @@ namespace GuiOverlay {
                 double eta = appInstance->calculateTimeRemaining();
                 if (eta > 0.0) ImGui::Text("ETA %.1fs", eta);
             }
+            }
+            ImGui::End();
         }
+
+        // Log panel resize/collapse handle
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing + timelinePanelHeight));
+        ImGui::SetNextWindowSize(ImVec2(previewWidth, panelSpacing * 2));
+        ImGui::Begin("LogHandle", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs);
+        ImGui::InvisibleButton("##log_drag", ImVec2(previewWidth, panelSpacing * 2));
+        if (ImGui::IsItemActive()) g_logPanelHeight -= ImGui::GetIO().MouseDelta.y;
+        ImGui::SetCursorPos(ImVec2(previewWidth * 0.5f - ImGui::GetFrameHeight(), 0));
+        ImGui::PushFont(GuiStyles::G_SmallIconFont);
+        if (ImGui::Button(g_logCollapsed ? ICON_MD_KEYBOARD_ARROW_UP : ICON_MD_KEYBOARD_ARROW_DOWN))
+            g_logCollapsed = !g_logCollapsed;
+        ImGui::PopFont();
         ImGui::End();
 
-        // 5. Log Panel (bottom left, only as wide as Preview)
+        // 5. Log Panel
         ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing + timelinePanelHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, logPanelHeight));
-        ImGui::Begin("Log", nullptr, fixed_flags);
+        if (!g_logCollapsed)
         {
-            if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
-            ImGui::BeginChild("LogScrollingRegion", ImVec2(0,0), true);
-            for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
-            if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
-            ImGui::EndChild();
+            ImGui::Begin("Log", nullptr, fixed_flags);
+            {
+                if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
+                ImGui::BeginChild("LogScrollingRegion", ImVec2(0,-ImGui::GetFrameHeightWithSpacing()), true, ImGuiWindowFlags_HorizontalScrollbar);
+                for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
+                if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
+                ImGui::EndChild();
+                ImGui::TextUnformatted("Status: Idle");
+            }
+            ImGui::End();
         }
-        ImGui::End();
     }
 
     void endFrame(VkCommandBuffer commandBuffer) {
