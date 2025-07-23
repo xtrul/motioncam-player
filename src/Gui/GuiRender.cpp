@@ -20,6 +20,7 @@
 
 
 #include <imgui.h>
+#include <imgui_internal.h> // ImRect
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 
@@ -224,13 +225,12 @@ namespace GuiOverlay {
         const float rightPanelWidth = 340.0f; // Fixed width for side panels
         const float filesPanelHeight = 260.0f; // Fixed height for Files panel
         const float controlsPanelMinHeight = 200.0f; // Minimum height for Controls panel
-        const float timelinePanelHeight = 60.0f; // Height for play/timeline controls
-        const float logPanelHeight = 120.0f; // Fixed height for Log panel
+        static float logPanelHeight = 180.0f; // Default height for Log panel
         const float panelSpacing = 3.0f;
 
         float previewWidth = vs.x - rightPanelWidth - panelSpacing;
-        // With timeline moved below preview there are only two gaps
-        float previewHeight = vs.y - timelinePanelHeight - logPanelHeight - panelSpacing * 2;
+        // With scrubber overlay the preview only leaves room for the log pane
+        float previewHeight = vs.y - logPanelHeight - panelSpacing;
         float controlsPanelHeight = vs.y - filesPanelHeight - panelSpacing * 2;
         if (controlsPanelHeight < controlsPanelMinHeight) controlsPanelHeight = controlsPanelMinHeight;
 
@@ -245,46 +245,77 @@ namespace GuiOverlay {
             ImTextureID texID = (ImTextureID)appInstance->getRenderer()->getPreviewDescriptorSet();
             if (texID)
                 ImGui::Image(texID, size);
-        }
-        ImGui::End();
 
-        // 2. Timeline/Play controls (below Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
-        ImGui::SetNextWindowSize(ImVec2(previewWidth, timelinePanelHeight));
-        ImGui::Begin("TimelineControls", nullptr, fixed_flags);
-        {
+            ImRect videoRect{ ImGui::GetItemRectMin(), ImGui::GetItemRectMax() };
+
+            const float pad = 6.0f;
+            const float barHeight = 8.0f;
             bool paused = appInstance->m_playbackController_ptr ? appInstance->m_playbackController_ptr->isPaused() : true;
-            if (ImGui::Button(paused ? "Play" : "Pause")) {
-                if (appInstance->m_playbackController_ptr) {
-                    bool wasPaused = paused;
-                    appInstance->m_playbackController_ptr->togglePause();
-                    bool nowPaused = appInstance->m_playbackController_ptr->isPaused();
-                    if (nowPaused != wasPaused) {
-                        if (appInstance->m_audio) appInstance->m_audio->setPaused(nowPaused);
-                        if (nowPaused) appInstance->recordPauseTime();
-                        else appInstance->anchorPlaybackTimeForResume();
-                    }
-                }
-            }
-            ImGui::SameLine();
+
             size_t curIdx = 0, total = 0;
             if (appInstance->m_playbackController_ptr && appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
                 curIdx = appInstance->m_playbackController_ptr->getCurrentFrameIndex();
                 total = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames().size();
             }
-            int frame_int = (int)curIdx;
-            ImGui::PushItemWidth(-1);
-            if (ImGui::SliderInt("##Seek", &frame_int, 0, (total > 0) ? (int)total - 1 : 0, "")) {
-                if (ImGui::IsItemActive()) {
-                    if (!paused) appInstance->m_playbackController_ptr->togglePause();
-                    appInstance->performSeek(frame_int);
+            float progress = (total > 1) ? (float)curIdx / (float)(total - 1) : 0.0f;
+
+            const char* icon = paused ? ICON_MD_PLAY_ARROW : ICON_MD_PAUSE;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+
+            ImGui::PushFont(GuiStyles::G_AuxOverlayIconFont);
+            ImVec2 iconSize = ImGui::CalcTextSize(icon);
+            ImVec2 iconPos(videoRect.Min.x + pad, videoRect.Max.y - pad - iconSize.y);
+            ImGui::SetCursorScreenPos(iconPos);
+            ImGui::InvisibleButton("##PlayPause", iconSize);
+            if (ImGui::IsItemClicked() && appInstance->m_playbackController_ptr) {
+                bool wasPaused = paused;
+                appInstance->m_playbackController_ptr->togglePause();
+                bool nowPaused = appInstance->m_playbackController_ptr->isPaused();
+                if (nowPaused != wasPaused) {
+                    if (appInstance->m_audio) appInstance->m_audio->setPaused(nowPaused);
+                    if (nowPaused) appInstance->recordPauseTime();
+                    else appInstance->anchorPlaybackTimeForResume();
                 }
             }
-            ImGui::PopItemWidth();
-            ImGui::SameLine();
-            ImGui::Text("%zu / %zu", curIdx + 1, total);
+            dl->AddText(iconPos, ImGui::GetColorU32(ImGuiCol_Text), icon);
+            ImGui::PopFont();
+
+            float barStartX = iconPos.x + iconSize.x + pad;
+            float barEndX = videoRect.Max.x - pad;
+            ImVec2 barPos0(barStartX, videoRect.Max.y - pad - barHeight);
+            ImVec2 barPos1(barEndX, videoRect.Max.y - pad);
+
+            dl->AddRectFilled(barPos0, barPos1, IM_COL32(0,0,0,120), barHeight*0.5f);
+            dl->AddRectFilled(barPos0, ImVec2(barStartX + progress * (barEndX - barStartX), barPos1.y), IM_COL32(200,200,200,200), barHeight*0.5f);
+
+            int64_t firstFrameTs = 0, curTs = 0, totalTs = 0;
+            if (appInstance->m_decoderWrapper_ptr && appInstance->m_decoderWrapper_ptr->getDecoder()) {
+                const auto& frames = appInstance->m_decoderWrapper_ptr->getDecoder()->getFrames();
+                if (!frames.empty()) {
+                    firstFrameTs = frames.front();
+                    totalTs = frames.back() - firstFrameTs;
+                    if (curIdx < frames.size()) curTs = frames[curIdx] - firstFrameTs;
+                }
+            }
+            std::string timeStr = GuiUtils::formatHMS(curTs) + " / " + GuiUtils::formatHMS(totalTs);
+            ImVec2 textSize = ImGui::CalcTextSize(timeStr.c_str());
+            dl->AddText(ImVec2(barEndX - textSize.x, barPos0.y - textSize.y - 2.0f), ImGui::GetColorU32(ImGuiCol_Text), timeStr.c_str());
+
+            ImGui::SetCursorScreenPos(barPos0);
+            ImGui::InvisibleButton("##Scrub", ImVec2(barEndX - barStartX, barHeight));
+            if (ImGui::IsItemActivated() && !paused && appInstance->m_playbackController_ptr) {
+                appInstance->m_playbackController_ptr->togglePause();
+            }
+            if (ImGui::IsItemActive() && appInstance->m_playbackController_ptr) {
+                float t = (ImGui::GetIO().MousePos.x - barStartX) / (barEndX - barStartX);
+                t = std::clamp(t, 0.0f, 1.0f);
+                int newFrame = static_cast<int>(t * ((total > 0) ? (total - 1) : 0));
+                appInstance->performSeek(newFrame);
+            }
         }
         ImGui::End();
+
+
 
         // 3. Files Panel (fixed size, top right)
         ImGui::SetNextWindowPos(ImVec2(vp.x + previewWidth + panelSpacing, vp.y));
@@ -391,15 +422,24 @@ namespace GuiOverlay {
         ImGui::End();
 
         // 5. Log Panel (bottom left, only as wide as Preview)
-        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing + timelinePanelHeight + panelSpacing));
+        ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y + previewHeight + panelSpacing));
         ImGui::SetNextWindowSize(ImVec2(previewWidth, logPanelHeight));
         ImGui::Begin("Log", nullptr, fixed_flags);
         {
-            if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
             ImGui::BeginChild("LogScrollingRegion", ImVec2(0,0), true);
             for (const auto& line : appInstance->m_batchLog) ImGui::TextUnformatted(line.c_str());
             if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) ImGui::SetScrollHereY(1.0f);
             ImGui::EndChild();
+
+            const float margin = 4.0f;
+            ImVec2 oldPos = ImGui::GetCursorPos();
+            ImVec2 winSize = ImGui::GetWindowSize();
+            ImVec2 btnSize = ImGui::CalcTextSize("Clear Logs");
+            btnSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+            btnSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
+            ImGui::SetCursorPos(ImVec2(winSize.x - btnSize.x - margin, winSize.y - btnSize.y - margin));
+            if (ImGui::Button("Clear Logs")) appInstance->m_batchLog.clear();
+            ImGui::SetCursorPos(oldPos);
         }
         ImGui::End();
     }
