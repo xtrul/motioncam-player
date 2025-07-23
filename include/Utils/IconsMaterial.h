@@ -19,6 +19,8 @@
 #define ICON_MD_VOLUME_OFF u8"\ue04f"
 #define ICON_MD_KEYBOARD_ARROW_LEFT u8"\uE314"
 #define ICON_MD_KEYBOARD_ARROW_RIGHT u8"\uE315"
+#define ICON_MD_KEYBOARD_ARROW_UP u8"\uE316"
+#define ICON_MD_KEYBOARD_ARROW_DOWN u8"\uE313"
 
 // UI & Navigation
 #define ICON_MD_MENU u8"\ue5d2"         // Hamburger menu

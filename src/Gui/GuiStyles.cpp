@@ -95,6 +95,10 @@ namespace GuiStyles {
         aux_overlay_icons_config.GlyphOffset.y = 0.0f * dpi_scale;
         G_AuxOverlayIconFont = io.Fonts->AddFontFromFileTTF(icon_font_load_path_str.c_str(), G_AuxOverlayIconFontSize, &aux_overlay_icons_config, icons_ranges);
         IM_ASSERT(G_AuxOverlayIconFont != nullptr && "Failed to load auxiliary overlay icon font!");
+
+        // Ensure regular UI text uses the Roboto font by default. Icon fonts are
+        // explicitly pushed only for buttons or glyph elements.
+        io.FontDefault = G_TextFont;
     }
 
 
