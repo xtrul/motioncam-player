@@ -1,0 +1,96 @@
+#version 460
+#extension GL_EXT_shader_16bit_storage : require
+layout(set = 0, binding = 0, r16ui) readonly uniform uimage2D rawImg;
+layout(set = 0, binding = 1, rgba32f) writeonly uniform image2D rgbImg;
+
+layout(local_size_x = 32, local_size_y = 16, local_size_z = 1) in;
+
+layout(push_constant, std140) uniform PC1 {
+    uint width;
+    uint height;
+    uint cfaType;
+    float black;
+    float white;
+    float invScale;
+    float _pad;
+} pc;
+
+uint readRaw(int x, int y){
+    ivec2 c = ivec2(clamp(x,0,int(pc.width-1)), clamp(y,0,int(pc.height-1)));
+    return imageLoad(rawImg, c).r;
+}
+
+float lin(int x,int y){
+    return clamp((float(readRaw(x,y)) - pc.black) * pc.invScale, 0.0, 1.0);
+}
+
+void main(){
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if(gid.x >= int(pc.width) || gid.y >= int(pc.height)) return;
+    int x = gid.x;
+    int y = gid.y;
+
+    bool xe = (x & 1)==0;
+    bool ye = (y & 1)==0;
+
+    float r=0.0, g=0.0, b=0.0;
+
+    float n = lin(x, y-1);
+    float s = lin(x, y+1);
+    float w = lin(x-1, y);
+    float e = lin(x+1, y);
+    float nw = lin(x-1,y-1);
+    float ne = lin(x+1,y-1);
+    float sw = lin(x-1,y+1);
+    float se = lin(x+1,y+1);
+
+    float dv = abs(n-s) + abs(nw-sw) + abs(ne-se);
+    float dh = abs(w-e) + abs(nw-ne) + abs(sw-se);
+    float weightV = 1.0/(dv+0.0001);
+    float weightH = 1.0/(dh+0.0001);
+    float gV = 0.5*(n+s);
+    float gH = 0.5*(w+e);
+    float gInterp = (weightV*gV + weightH*gH)/(weightV+weightH);
+
+switch(pc.cfaType){
+case 0u: // BGGR
+        if(ye){
+            if(xe){ b=lin(x,y); g=gInterp; r=0.25*(nw+ne+sw+se); }
+            else   { g=lin(x,y); b=0.5*(w+e); r=0.5*(n+s); }
+        }else{
+            if(xe){ g=lin(x,y); b=0.5*(n+s); r=0.5*(w+e); }
+            else   { r=lin(x,y); g=gInterp; b=0.25*(nw+ne+sw+se); }
+        }
+        break;
+case 1u: // RGGB
+        if(ye){
+            if(xe){ r=lin(x,y); g=gInterp; b=0.25*(nw+ne+sw+se); }
+            else   { g=lin(x,y); r=0.5*(w+e); b=0.5*(n+s); }
+        }else{
+            if(xe){ g=lin(x,y); r=0.5*(n+s); b=0.5*(w+e); }
+            else   { b=lin(x,y); g=gInterp; r=0.25*(nw+ne+sw+se); }
+        }
+        break;
+case 2u: // GBRG
+        if(ye){
+            if(xe){ g=lin(x,y); b=0.5*(w+e); r=0.5*(n+s); }
+            else   { b=lin(x,y); g=gInterp; r=0.25*(nw+ne+sw+se); }
+        }else{
+            if(xe){ r=lin(x,y); g=gInterp; b=0.25*(nw+ne+sw+se); }
+            else   { g=lin(x,y); r=0.5*(w+e); b=0.5*(n+s); }
+        }
+        break;
+case 3u: // GRBG
+        if(ye){
+            if(xe){ g=lin(x,y); r=0.5*(w+e); b=0.5*(n+s); }
+            else   { r=lin(x,y); g=gInterp; b=0.25*(nw+ne+sw+se); }
+        }else{
+            if(xe){ b=lin(x,y); g=gInterp; r=0.25*(nw+ne+sw+se); }
+            else   { g=lin(x,y); b=0.5*(w+e); r=0.5*(n+s); }
+        }
+        break;
+    }
+
+    imageStore(rgbImg, gid, vec4(r, g, b, 1.0));
+}
+
