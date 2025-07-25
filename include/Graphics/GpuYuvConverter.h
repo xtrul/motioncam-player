@@ -33,6 +33,15 @@ private:
     VmaAllocation m_yuvAlloc{VK_NULL_HANDLE};
     VkImageView m_yuvView{VK_NULL_HANDLE};
 
+    VkImage m_rgbImage{VK_NULL_HANDLE};
+    VmaAllocation m_rgbAlloc{VK_NULL_HANDLE};
+    VkImageView m_rgbView{VK_NULL_HANDLE};
+
+    VkPipeline m_amazePipeline{VK_NULL_HANDLE};
+    VkPipelineLayout m_amazePipelineLayout{VK_NULL_HANDLE};
+    VkPipeline m_rgb2yuvPipeline{VK_NULL_HANDLE};
+    VkPipelineLayout m_rgb2yuvPipelineLayout{VK_NULL_HANDLE};
+
     VkCommandPool m_cmdPool{VK_NULL_HANDLE};
 
     VkImage m_rawImage{VK_NULL_HANDLE};
