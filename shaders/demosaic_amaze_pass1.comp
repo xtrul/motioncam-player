@@ -1,0 +1,136 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+
+layout(set = 0, binding = 0, r16ui   ) readonly  uniform uimage2D  rawImg;
+layout(set = 0, binding = 1, rgba32f ) writeonly uniform image2D   rgbTmp;
+
+layout(push_constant, std140) uniform PC1 {
+    uint  width;
+    uint  height;
+    uint  cfaType;   // 0 BGGR | 1 RGGB | 2 GBRG | 3 GRBG
+    float black;
+    float white;
+    float invScale;  // 1/(white-black)
+} pc;
+
+float normRaw(uint v){
+    return clamp(float(v) - pc.black, 0.0, pc.white - pc.black) * pc.invScale;
+}
+
+float readNorm(int x, int y){
+    ivec2 p = clamp(ivec2(x,y), ivec2(0), ivec2(int(pc.width)-1, int(pc.height)-1));
+    return normRaw(imageLoad(rawImg, p).r);
+}
+
+vec3 demosaicBilinear(int x, int y){
+    // Adapted from the previous single pass shader but outputting linear RGB
+    bool xe = (x & 1) == 0;
+    bool ye = (y & 1) == 0;
+    float r=0.0, g=0.0, b=0.0;
+    switch(pc.cfaType){
+    case 0u: // BGGR
+        if(ye){
+            if(xe){
+                b=readNorm(x,y);
+                g=(readNorm(x-1,y)+readNorm(x+1,y)+readNorm(x,y-1)+readNorm(x,y+1))*0.25;
+                r=(readNorm(x-1,y-1)+readNorm(x+1,y-1)+readNorm(x-1,y+1)+readNorm(x+1,y+1))*0.25;
+            }else{
+                g=readNorm(x,y);
+                b=(readNorm(x-1,y)+readNorm(x+1,y))*0.5;
+                r=(readNorm(x,y-1)+readNorm(x,y+1))*0.5;
+            }
+        }else{
+            if(xe){
+                g=readNorm(x,y);
+                b=(readNorm(x,y-1)+readNorm(x,y+1))*0.5;
+                r=(readNorm(x-1,y)+readNorm(x+1,y))*0.5;
+            }else{
+                r=readNorm(x,y);
+                g=(readNorm(x-1,y)+readNorm(x+1,y)+readNorm(x,y-1)+readNorm(x,y+1))*0.25;
+                b=(readNorm(x-1,y-1)+readNorm(x+1,y-1)+readNorm(x-1,y+1)+readNorm(x+1,y+1))*0.25;
+            }
+        }
+        break;
+    case 1u: // RGGB
+        if(ye){
+            if(xe){
+                r=readNorm(x,y);
+                g=(readNorm(x-1,y)+readNorm(x+1,y)+readNorm(x,y-1)+readNorm(x,y+1))*0.25;
+                b=(readNorm(x-1,y-1)+readNorm(x+1,y-1)+readNorm(x-1,y+1)+readNorm(x+1,y+1))*0.25;
+            }else{
+                g=readNorm(x,y);
+                r=(readNorm(x-1,y)+readNorm(x+1,y))*0.5;
+                b=(readNorm(x,y-1)+readNorm(x,y+1))*0.5;
+            }
+        }else{
+            if(xe){
+                g=readNorm(x,y);
+                r=(readNorm(x,y-1)+readNorm(x,y+1))*0.5;
+                b=(readNorm(x-1,y)+readNorm(x+1,y))*0.5;
+            }else{
+                b=readNorm(x,y);
+                g=(readNorm(x-1,y)+readNorm(x+1,y)+readNorm(x,y-1)+readNorm(x,y+1))*0.25;
+                r=(readNorm(x-1,y-1)+readNorm(x+1,y-1)+readNorm(x-1,y+1)+readNorm(x+1,y+1))*0.25;
+            }
+        }
+        break;
+    case 2u: // GBRG
+        if(ye){
+            if(xe){
+                g=readNorm(x,y);
+                b=(readNorm(x-1,y)+readNorm(x+1,y))*0.5;
+                r=(readNorm(x,y-1)+readNorm(x,y+1))*0.5;
+            }else{
+                b=readNorm(x,y);
+                g=(readNorm(x-1,y)+readNorm(x+1,y)+readNorm(x,y-1)+readNorm(x,y+1))*0.25;
+                r=(readNorm(x-1,y-1)+readNorm(x+1,y-1)+readNorm(x-1,y+1)+readNorm(x+1,y+1))*0.25;
+            }
+        }else{
+            if(xe){
+                r=readNorm(x,y);
+                g=(readNorm(x-1,y)+readNorm(x+1,y)+readNorm(x,y-1)+readNorm(x,y+1))*0.25;
+                b=(readNorm(x-1,y-1)+readNorm(x+1,y-1)+readNorm(x-1,y+1)+readNorm(x+1,y+1))*0.25;
+            }else{
+                g=readNorm(x,y);
+                r=(readNorm(x-1,y)+readNorm(x+1,y))*0.5;
+                b=(readNorm(x,y-1)+readNorm(x,y+1))*0.5;
+            }
+        }
+        break;
+    case 3u: // GRBG
+        if(ye){
+            if(xe){
+                g=readNorm(x,y);
+                r=(readNorm(x-1,y)+readNorm(x+1,y))*0.5;
+                b=(readNorm(x,y-1)+readNorm(x,y+1))*0.5;
+            }else{
+                r=readNorm(x,y);
+                g=(readNorm(x-1,y)+readNorm(x+1,y)+readNorm(x,y-1)+readNorm(x,y+1))*0.25;
+                b=(readNorm(x-1,y-1)+readNorm(x+1,y-1)+readNorm(x-1,y+1)+readNorm(x+1,y+1))*0.25;
+            }
+        }else{
+            if(xe){
+                b=readNorm(x,y);
+                g=(readNorm(x-1,y)+readNorm(x+1,y)+readNorm(x,y-1)+readNorm(x,y+1))*0.25;
+                r=(readNorm(x-1,y-1)+readNorm(x+1,y-1)+readNorm(x-1,y+1)+readNorm(x+1,y+1))*0.25;
+            }else{
+                g=readNorm(x,y);
+                b=(readNorm(x-1,y)+readNorm(x+1,y))*0.5;
+                r=(readNorm(x,y-1)+readNorm(x,y+1))*0.5;
+            }
+        }
+        break;
+    }
+
+    return vec3(r,g,b);
+}
+
+layout(local_size_x = 32, local_size_y = 16, local_size_z = 1) in;
+void main(){
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if(gid.x >= int(pc.width) || gid.y >= int(pc.height)) return;
+
+    vec3 rgb = demosaicBilinear(gid.x, gid.y);
+    imageStore(rgbTmp, gid, vec4(rgb, 1.0));
+}
+
