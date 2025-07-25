@@ -1,0 +1,52 @@
+#version 460
+layout(set=0,binding=0, rgba32f) readonly uniform image2D rgbImg;
+layout(set=0,binding=1, rgba32ui) writeonly uniform uimage2D yuvImg;
+
+layout(local_size_x=32, local_size_y=16, local_size_z=1) in;
+
+layout(push_constant, std140) uniform PC2 {
+    uint width;
+    uint height;
+    uint fullSwing;
+    float hueSmooth;
+} pc;
+
+const vec3 kBT709 = vec3(0.2126, 0.7152, 0.0722);
+const float kUscale = 0.5389;
+const float kVscale = 0.6350;
+
+void main(){
+    uvec2 gid = gl_GlobalInvocationID.xy;
+    uint x0 = gid.x * 2u;
+    if(x0 >= pc.width || gid.y >= pc.height) return;
+    uint x1 = min(x0 + 1u, pc.width - 1u);
+
+    vec3 rgb0 = imageLoad(rgbImg, ivec2(x0, gid.y)).rgb;
+    vec3 rgb1 = imageLoad(rgbImg, ivec2(x1, gid.y)).rgb;
+
+    if(pc.hueSmooth > 0.0){
+        vec3 avg = (rgb0 + rgb1) * 0.5;
+        rgb0 = mix(rgb0, avg, pc.hueSmooth);
+        rgb1 = mix(rgb1, avg, pc.hueSmooth);
+    }
+
+    float y0 = dot(rgb0, kBT709);
+    float y1 = dot(rgb1, kBT709);
+    float u = kUscale * ((rgb0.b + rgb1.b) - (y0 + y1));
+    float v = kVscale * ((rgb0.r + rgb1.r) - (y0 + y1));
+
+    if(pc.fullSwing == 0u){
+        y0 = y0 * 876.0 + 64.0;
+        y1 = y1 * 876.0 + 64.0;
+        u = u * 448.0 + 512.0;
+        v = v * 448.0 + 512.0;
+    }else{
+        y0 *= 1023.0;
+        y1 *= 1023.0;
+        u = u * 511.5 + 512.0;
+        v = v * 511.5 + 512.0;
+    }
+
+    uvec4 mp = uvec4(uint(y0+0.5), uint(u+0.5), uint(y1+0.5), uint(v+0.5));
+    imageStore(yuvImg, ivec2(gid), mp);
+}
