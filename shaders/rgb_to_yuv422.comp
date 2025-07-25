@@ -1,0 +1,64 @@
+#version 460
+
+layout(set = 0, binding = 0, rgba32f ) readonly  uniform image2D  rgbTmp;
+layout(set = 0, binding = 1, rgba32ui) writeonly uniform uimage2D yuvImg;
+
+layout(push_constant, std140) uniform PC2 {
+    uint  width;
+    uint  height;
+    uint  fullSwing;   // 0 = TV levels, 1 = full range
+    float hueSmooth;   // 0=no smoothing
+} pc;
+
+const vec3 kBT709   = vec3(0.2126, 0.7152, 0.0722);
+const float kUscale = 0.5389;
+const float kVscale = 0.6350;
+
+uvec4 packYUV(vec3 a, vec3 b){
+    float y0 = dot(a, kBT709);
+    float y1 = dot(b, kBT709);
+    float u  = kUscale * ((a.b + b.b) - (y0 + y1));
+    float v  = kVscale * ((a.r + b.r) - (y0 + y1));
+
+    if(pc.fullSwing == 0u){
+        y0 = y0 * 876.0 + 64.0;
+        y1 = y1 * 876.0 + 64.0;
+        u  = u  * 448.0 + 512.0;
+        v  = v  * 448.0 + 512.0;
+    }else{
+        y0 *= 1023.0;
+        y1 *= 1023.0;
+        u   = u * 511.5 + 512.0;
+        v   = v * 511.5 + 512.0;
+    }
+
+    return uvec4(uint(y0 + 0.5), uint(u + 0.5), uint(y1 + 0.5), uint(v + 0.5));
+}
+
+layout(local_size_x = 32, local_size_y = 16, local_size_z = 1) in;
+void main(){
+    uvec2 gid = gl_GlobalInvocationID.xy;
+    uint x0 = gid.x * 2u;
+    if(x0 >= pc.width || gid.y >= pc.height) return;
+    uint x1 = min(x0 + 1u, pc.width - 1u);
+
+    vec3 rgb0 = imageLoad(rgbTmp, ivec2(x0, gid.y)).rgb;
+    vec3 rgb1 = imageLoad(rgbTmp, ivec2(x1, gid.y)).rgb;
+
+    // optional hue smoothing
+    if(pc.hueSmooth > 0.0){
+        vec3 avg = (rgb0 + rgb1) * 0.5;
+        rgb0 = mix(rgb0, avg, pc.hueSmooth);
+        rgb1 = mix(rgb1, avg, pc.hueSmooth);
+    }
+
+    // edge aware downsample weight
+    float diff = length(rgb0 - rgb1);
+    float w = clamp(diff * 4.0, 0.0, 1.0);
+    vec3 chromaCol = mix((rgb0 + rgb1) * 0.5, diff > 0.0 ? (w < 0.5 ? rgb0 : rgb1) : rgb0, w);
+
+    // pack using luma from individual samples and shared chroma
+    uvec4 packed = packYUV(rgb0, rgb1);
+    imageStore(yuvImg, ivec2(gid), packed);
+}
+
