@@ -109,6 +109,8 @@ set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
     "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
+    "${APP_SHADERS_SRC_DIR}/demosaic_amaze_pass1.comp"
+    "${APP_SHADERS_SRC_DIR}/rgb_to_yuv422.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -253,20 +255,26 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
-set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
+if(WIN32)
+    set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
+    set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+    target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
 
-target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
-
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    avcodec.lib
-    avformat.lib
-    avutil.lib
-    swscale.lib
-    swresample.lib
-)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        avcodec.lib
+        avformat.lib
+        avutil.lib
+        swscale.lib
+        swresample.lib
+    )
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FFMPEG REQUIRED libavcodec libavformat libavutil libswscale libswresample)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
+endif()
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
