@@ -64,18 +64,26 @@ set(GLM_TEST_ENABLE OFF CACHE BOOL "Disable GLM tests" FORCE)
 add_subdirectory(${GLM_SOURCE_DIR} ${CMAKE_BINARY_DIR}/glm_build EXCLUDE_FROM_ALL)
 message(STATUS "Configured GLM from: ${GLM_SOURCE_DIR}")
 
-set(GLFW_PATH "${APP_EXTERNAL_DIR}/glfw" CACHE PATH "Path to GLFW pre-built libraries and headers")
-if(NOT EXISTS "${GLFW_PATH}/include/GLFW/glfw3.h")
-    message(FATAL_ERROR "GLFW headers not found at ${GLFW_PATH}/include. Check GLFW_PATH.")
+if(WIN32)
+    set(GLFW_PATH "${APP_EXTERNAL_DIR}/glfw" CACHE PATH "Path to GLFW pre-built libraries and headers")
+    if(NOT EXISTS "${GLFW_PATH}/include/GLFW/glfw3.h")
+        message(FATAL_ERROR "GLFW headers not found at ${GLFW_PATH}/include. Check GLFW_PATH.")
+    endif()
+    set(glfw3_DIR "${APP_CMAKE_DIR}" CACHE INTERNAL "Path to custom glfw3Config.cmake")
+    message(STATUS "Using pre-built GLFW from: ${GLFW_PATH}")
+else()
+    find_package(glfw3 REQUIRED)
 endif()
-set(glfw3_DIR "${APP_CMAKE_DIR}" CACHE INTERNAL "Path to custom glfw3Config.cmake")
-message(STATUS "Using pre-built GLFW from: ${GLFW_PATH}")
 
-set(SDL2_PATH "${APP_EXTERNAL_DIR}/SDL2" CACHE PATH "Path to SDL2 development libraries")
-if(NOT EXISTS "${SDL2_PATH}/include/SDL.h")
-    message(FATAL_ERROR "SDL2 headers not found at ${SDL2_PATH}/include. Check SDL2_PATH.")
+if(WIN32)
+    set(SDL2_PATH "${APP_EXTERNAL_DIR}/SDL2" CACHE PATH "Path to SDL2 development libraries")
+    if(NOT EXISTS "${SDL2_PATH}/include/SDL.h")
+        message(FATAL_ERROR "SDL2 headers not found at ${SDL2_PATH}/include. Check SDL2_PATH.")
+    endif()
+    message(STATUS "Using pre-built SDL2 from: ${SDL2_PATH}")
+else()
+    find_package(SDL2 REQUIRED)
 endif()
-message(STATUS "Using pre-built SDL2 from: ${SDL2_PATH}")
 
 set(VMA_INCLUDE_DIR "${APP_EXTERNAL_DIR}/vma")
 if(NOT EXISTS "${VMA_INCLUDE_DIR}/vk_mem_alloc.h")
@@ -109,6 +117,8 @@ set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
     "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
+    "${APP_SHADERS_SRC_DIR}/demosaic_amaze_pass1.comp"
+    "${APP_SHADERS_SRC_DIR}/rgb_to_yuv422.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -220,8 +230,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
   "${VMA_INCLUDE_DIR}"
   "${Vulkan_INCLUDE_DIRS}"
-  "${GLFW_PATH}/include"
-  "${SDL2_PATH}/include"
+  $<$<BOOL:WIN32>:${GLFW_PATH}/include>
+  $<$<BOOL:WIN32>:${SDL2_PATH}/include>
 
   "${APP_ROOT_DIR}/motioncam-decoder/lib/include"
   "${APP_ROOT_DIR}/motioncam-decoder/thirdparty"
@@ -231,42 +241,64 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${APP_EXTERNAL_DIR}/tinydngwriter"
 )
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(SDL2_ARCH_SUFFIX "x64")
+if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(SDL2_ARCH_SUFFIX "x64")
+    else()
+        set(SDL2_ARCH_SUFFIX "x86")
+    endif()
+    set(SDL2_LIBRARY_DIR "${SDL2_PATH}/lib/${SDL2_ARCH_SUFFIX}")
+
+    set(GLFW_LIB_PATH_VC_SPECIFIC "${GLFW_PATH}/lib-vc2022/glfw3.lib")
+    if(NOT EXISTS "${GLFW_LIB_PATH_VC_SPECIFIC}" AND MSVC)
+        message(FATAL_ERROR "Pre-built GLFW library not found at ${GLFW_LIB_PATH_VC_SPECIFIC}. Please check GLFW_PATH or adjust for your compiler.")
+    endif()
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        motioncam_decoder
+        imgui
+        glm
+        "${GLFW_LIB_PATH_VC_SPECIFIC}"
+        "${SDL2_LIBRARY_DIR}/SDL2.lib"
+        ${Vulkan_LIBRARIES}
+    )
 else()
-    set(SDL2_ARCH_SUFFIX "x86")
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        motioncam_decoder
+        imgui
+        glm
+        glfw
+        SDL2::SDL2
+        ${Vulkan_LIBRARIES}
+    )
 endif()
-set(SDL2_LIBRARY_DIR "${SDL2_PATH}/lib/${SDL2_ARCH_SUFFIX}")
-
-set(GLFW_LIB_PATH_VC_SPECIFIC "${GLFW_PATH}/lib-vc2022/glfw3.lib")
-if(NOT EXISTS "${GLFW_LIB_PATH_VC_SPECIFIC}" AND WIN32 AND MSVC)
-    message(FATAL_ERROR "Pre-built GLFW library not found at ${GLFW_LIB_PATH_VC_SPECIFIC}. Please check GLFW_PATH or adjust for your compiler.")
-endif()
-
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    motioncam_decoder
-    imgui
-    glm
-    "${GLFW_LIB_PATH_VC_SPECIFIC}"
-    "${SDL2_LIBRARY_DIR}/SDL2.lib"
-    ${Vulkan_LIBRARIES}
-)
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
-set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+if(WIN32)
+    set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
+    set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
 
-target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
+    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+    target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
+endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    avcodec.lib
-    avformat.lib
-    avutil.lib
-    swscale.lib
-    swresample.lib
-)
+# On Windows we link against the prebuilt FFmpeg static libraries from vcpkg
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        avcodec.lib
+        avformat.lib
+        avutil.lib
+        swscale.lib
+        swresample.lib
+    )
+else()
+    # On other platforms rely on pkg-config discovered libraries
+    if(FFMPEG_FOUND)
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
+        target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    endif()
+endif()
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)

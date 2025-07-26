@@ -18,10 +18,19 @@ GpuYuvConverter::~GpuYuvConverter() { cleanup(); }
 
 bool GpuYuvConverter::init(int width, int height) {
     namespace fs = std::filesystem;
-    fs::path shaderPath = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_yuv422.comp.spv";
-    auto code = VulkanHelpers::readFile(shaderPath.string());
+    fs::path rawToYuvPath = fs::path(g_AppBasePath) / "shaders_spv" / "raw_to_yuv422.comp.spv";
+    auto code = VulkanHelpers::readFile(rawToYuvPath.string());
     VkShaderModule module = VulkanHelpers::createShaderModule(m_renderer->m_device_p, code);
-    LogProRes("[GPU] Creating RAW->YUV compute pipeline");
+
+    fs::path pass1Path = fs::path(g_AppBasePath) / "shaders_spv" / "demosaic_amaze_pass1.comp.spv";
+    auto pass1Code = VulkanHelpers::readFile(pass1Path.string());
+    VkShaderModule pass1Module = VulkanHelpers::createShaderModule(m_renderer->m_device_p, pass1Code);
+
+    fs::path pass2Path = fs::path(g_AppBasePath) / "shaders_spv" / "rgb_to_yuv422.comp.spv";
+    auto pass2Code = VulkanHelpers::readFile(pass2Path.string());
+    VkShaderModule pass2Module = VulkanHelpers::createShaderModule(m_renderer->m_device_p, pass2Code);
+
+    LogProRes("[GPU] Creating RAW->YUV compute pipelines");
     LogProRes("[GPU] init start");
 
     // Create a private command pool for all converter operations
@@ -80,7 +89,37 @@ bool GpuYuvConverter::init(int width, int height) {
     cp.layout = m_pipelineLayout;
     VK_CHECK_RENDERER(vkCreateComputePipelines(m_renderer->m_device_p, VK_NULL_HANDLE, 1, &cp, nullptr, &m_pipeline));
 
+    // AMaZE pass-1 pipeline
+    VkPushConstantRange pc1Range{};
+    pc1Range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pc1Range.offset = 0;
+    pc1Range.size = 24;
+
+    pli.pPushConstantRanges = &pc1Range;
+    VK_CHECK_RENDERER(vkCreatePipelineLayout(m_renderer->m_device_p, &pli, nullptr, &m_amazePipelineLayout));
+
+    stage.module = pass1Module;
+    cp.stage = stage;
+    cp.layout = m_amazePipelineLayout;
+    VK_CHECK_RENDERER(vkCreateComputePipelines(m_renderer->m_device_p, VK_NULL_HANDLE, 1, &cp, nullptr, &m_amazePipeline));
+
+    // RGB to YUV pipeline
+    VkPushConstantRange pc2Range{};
+    pc2Range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pc2Range.offset = 0;
+    pc2Range.size = 16;
+
+    pli.pPushConstantRanges = &pc2Range;
+    VK_CHECK_RENDERER(vkCreatePipelineLayout(m_renderer->m_device_p, &pli, nullptr, &m_rgb2yuvPipelineLayout));
+
+    stage.module = pass2Module;
+    cp.stage = stage;
+    cp.layout = m_rgb2yuvPipelineLayout;
+    VK_CHECK_RENDERER(vkCreateComputePipelines(m_renderer->m_device_p, VK_NULL_HANDLE, 1, &cp, nullptr, &m_rgb2yuvPipeline));
+
     vkDestroyShaderModule(m_renderer->m_device_p, module, nullptr);
+    vkDestroyShaderModule(m_renderer->m_device_p, pass1Module, nullptr);
+    vkDestroyShaderModule(m_renderer->m_device_p, pass2Module, nullptr);
 
     VkDescriptorPoolSize poolSizes[2]{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -102,6 +141,45 @@ bool GpuYuvConverter::init(int width, int height) {
     VK_CHECK_RENDERER(vkAllocateDescriptorSets(m_renderer->m_device_p, &ai, &m_descSet));
     LogProRes("[GPU] Compute pipeline initialized");
     LogProRes("[GPU] init complete");
+
+    // Create RGBA32F temporary image for pass-1 output
+    VkImageCreateInfo rgbInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+    rgbInfo.imageType = VK_IMAGE_TYPE_2D;
+    rgbInfo.extent.width = static_cast<uint32_t>(width);
+    rgbInfo.extent.height = static_cast<uint32_t>(height);
+    rgbInfo.extent.depth = 1;
+    rgbInfo.mipLevels = 1;
+    rgbInfo.arrayLayers = 1;
+    rgbInfo.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    rgbInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    rgbInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    rgbInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+    rgbInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    rgbInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+
+    VmaAllocationCreateInfo rgbAllocInfo{};
+    rgbAllocInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    VK_CHECK_RENDERER(vmaCreateImage(m_renderer->m_allocator_p, &rgbInfo, &rgbAllocInfo,
+                                     &m_rgbImage, &m_rgbAlloc, nullptr));
+
+    VkImageViewCreateInfo rgbViewCI{ VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+    rgbViewCI.image = m_rgbImage;
+    rgbViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    rgbViewCI.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    rgbViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    rgbViewCI.subresourceRange.baseMipLevel = 0;
+    rgbViewCI.subresourceRange.levelCount = 1;
+    rgbViewCI.subresourceRange.baseArrayLayer = 0;
+    rgbViewCI.subresourceRange.layerCount = 1;
+    VK_CHECK_RENDERER(vkCreateImageView(m_renderer->m_device_p, &rgbViewCI, nullptr, &m_rgbView));
+
+    ImageResource::transitionImageLayout(
+        m_renderer->m_device_p,
+        m_cmdPool,
+        m_renderer->m_graphicsQueue_p,
+        m_rgbImage,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL);
 
     // Create RGBA32UI image for compute output (macropixels)
     VkImageCreateInfo imageInfo{};
@@ -206,6 +284,15 @@ void GpuYuvConverter::cleanup() {
         m_yuvImage = VK_NULL_HANDLE;
         m_yuvAlloc = VK_NULL_HANDLE;
     }
+    if (m_rgbView != VK_NULL_HANDLE) {
+        vkDestroyImageView(m_renderer->m_device_p, m_rgbView, nullptr);
+        m_rgbView = VK_NULL_HANDLE;
+    }
+    if (m_rgbImage != VK_NULL_HANDLE) {
+        vmaDestroyImage(m_renderer->m_allocator_p, m_rgbImage, m_rgbAlloc);
+        m_rgbImage = VK_NULL_HANDLE;
+        m_rgbAlloc = VK_NULL_HANDLE;
+    }
     if (m_descPool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(m_renderer->m_device_p, m_descPool, nullptr);
         m_descPool = VK_NULL_HANDLE;
@@ -214,9 +301,25 @@ void GpuYuvConverter::cleanup() {
         vkDestroyPipeline(m_renderer->m_device_p, m_pipeline, nullptr);
         m_pipeline = VK_NULL_HANDLE;
     }
+    if (m_amazePipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(m_renderer->m_device_p, m_amazePipeline, nullptr);
+        m_amazePipeline = VK_NULL_HANDLE;
+    }
+    if (m_rgb2yuvPipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(m_renderer->m_device_p, m_rgb2yuvPipeline, nullptr);
+        m_rgb2yuvPipeline = VK_NULL_HANDLE;
+    }
     if (m_pipelineLayout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(m_renderer->m_device_p, m_pipelineLayout, nullptr);
         m_pipelineLayout = VK_NULL_HANDLE;
+    }
+    if (m_amazePipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(m_renderer->m_device_p, m_amazePipelineLayout, nullptr);
+        m_amazePipelineLayout = VK_NULL_HANDLE;
+    }
+    if (m_rgb2yuvPipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(m_renderer->m_device_p, m_rgb2yuvPipelineLayout, nullptr);
+        m_rgb2yuvPipelineLayout = VK_NULL_HANDLE;
     }
     if (m_setLayout != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(m_renderer->m_device_p, m_setLayout, nullptr);
@@ -325,7 +428,7 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     inputInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     VkDescriptorImageInfo outInfo{};
-    outInfo.imageView = m_yuvView;
+    outInfo.imageView = m_rgbView;
     outInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     VkWriteDescriptorSet writes[2]{};
@@ -343,33 +446,58 @@ bool GpuYuvConverter::convertToFrame(const uint16_t* raw, int width, int height,
     writes[1].pImageInfo = &outInfo;
     vkUpdateDescriptorSets(m_renderer->m_device_p, 2, writes, 0, nullptr);
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipeline);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_pipelineLayout, 0, 1, &m_descSet, 0, nullptr);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_amazePipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_amazePipelineLayout, 0, 1, &m_descSet, 0, nullptr);
 
-    struct Push {
-        uint32_t width, height, cfaType, fullSwing;
-        float wbR, wbG, wbB, _pad0;
-        float colMat[12];
-        uint32_t black, white;
-    } push{};
-    push.width = width;
-    push.height = height;
-    push.cfaType = params.cfaType;
-    push.fullSwing = params.fullSwing;
-    push.wbR = params.wbR;
-    push.wbG = params.wbG;
-    push.wbB = params.wbB;
-    // mat3 uses std430 layout -> each column occupies a vec4 slot
-    for(int c=0;c<3;++c){
-        for(int r=0;r<3;++r){
-            push.colMat[c*4 + r] = params.colorMatrix[c*3 + r];
-        }
-        push.colMat[c*4 + 3] = 0.0f; // padding
-    }
-    push.black = params.black;
-    push.white = params.white;
-    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Push), &push);
+    struct PC1 {
+        uint32_t width;
+        uint32_t height;
+        uint32_t cfaType;
+        float black;
+        float white;
+        float invScale;
+    } pc1{};
+    pc1.width = width;
+    pc1.height = height;
+    pc1.cfaType = params.cfaType;
+    pc1.black = static_cast<float>(params.black);
+    pc1.white = static_cast<float>(params.white);
+    pc1.invScale = 1.0f / (pc1.white - pc1.black);
+    vkCmdPushConstants(cmd, m_amazePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, sizeof(PC1), &pc1);
+    vkCmdDispatch(cmd, (uint32_t)((width + 31) / 32), (uint32_t)((height + 15) / 16), 1);
 
+    // barrier RGB write -> read
+    VkImageMemoryBarrier rgbBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+    rgbBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    rgbBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    rgbBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    rgbBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    rgbBarrier.image = m_rgbImage;
+    rgbBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    rgbBarrier.subresourceRange.baseMipLevel = 0;
+    rgbBarrier.subresourceRange.levelCount = 1;
+    rgbBarrier.subresourceRange.baseArrayLayer = 0;
+    rgbBarrier.subresourceRange.layerCount = 1;
+    rgbBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    rgbBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        0, 0,nullptr, 0,nullptr, 1,&rgbBarrier);
+
+    inputInfo.imageView = m_rgbView;
+    outInfo.imageView = m_yuvView;
+    vkUpdateDescriptorSets(m_renderer->m_device_p, 2, writes, 0, nullptr);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_rgb2yuvPipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, m_rgb2yuvPipelineLayout, 0, 1, &m_descSet, 0, nullptr);
+
+    struct PC2 { uint32_t width, height, fullSwing; float hueSmooth; } pc2{};
+    pc2.width = width;
+    pc2.height = height;
+    pc2.fullSwing = params.fullSwing;
+    pc2.hueSmooth = 0.0f;
+    vkCmdPushConstants(cmd, m_rgb2yuvPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PC2), &pc2);
     vkCmdDispatch(cmd, (uint32_t)((width + 31) / 32), (uint32_t)((height + 15) / 16), 1);
     LogProRes("[GPU] compute dispatched");
 
