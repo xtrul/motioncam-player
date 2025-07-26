@@ -74,6 +74,8 @@ runtime DLLs will be copied automatically.
 - The log prints `MODE = GPU (Vulkan hw_frames)` when this path is used.
 - If initialization of Vulkan hardware frames fails it falls back to the CPU path automatically.
 - When GPU processing is active additional `[GPU]` log lines confirm the compute pipeline ran.
+- The new GPU path performs an AMaZE-based demosaic in two compute passes for higher quality.
+- Detailed GPU debug output is written to `gpu_debug_log.txt` in the Logs directory.
 
 ## DNxHR Export
 
