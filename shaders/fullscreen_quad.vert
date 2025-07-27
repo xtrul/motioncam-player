@@ -6,7 +6,7 @@ layout(binding = 1) uniform ShaderParams {
     int W; int H; int cfaType; float exposure;
     float blackLevel; float whiteLevel; float invBlackWhiteRange;
     float gainR; float gainG; float gainB;
-    mat4 CCM; float saturationAdjustment; int orientationDegrees;
+    mat4 CCM; float saturationAdjustment; int orientationDegrees; int demosaicMode;
 } params;
 
 // Fullscreen quad/triangle vertices. No actual vertex buffer needed.
