@@ -29,6 +29,35 @@ float normRaw(uint r){
 
 #define RAW(xx,yy) normRaw(readRaw(xx,yy))
 
+// helper functions for RCD demosaicing
+float vhEdge(int ix, int iy){
+    float v = 0.0, h = 0.0;
+    for(int i=-1;i<=1;i++){
+        v += RAW(ix+i,iy-3) - 3.0*RAW(ix+i,iy-2) - RAW(ix+i,iy-1) + 6.0*RAW(ix+i,iy) - RAW(ix+i,iy+1) - 3.0*RAW(ix+i,iy+2) + RAW(ix+i,iy+3);
+        h += RAW(ix-3,iy+i) - 3.0*RAW(ix-2,iy+i) - RAW(ix-1,iy+i) + 6.0*RAW(ix,iy+i) - RAW(ix+1,iy+i) - 3.0*RAW(ix+2,iy+i) + RAW(ix+3,iy+i);
+    }
+    v*=v; h*=h;
+    return v / (1e-5 + v + h);
+}
+
+float interpGreen(int ix,int iy){
+    float vhVal = vhEdge(ix,iy);
+    float vhNbr = 0.25*(vhEdge(ix-1,iy-1)+vhEdge(ix+1,iy-1)+vhEdge(ix-1,iy+1)+vhEdge(ix+1,iy+1));
+    float vhDiscr = abs(0.5 - vhVal) < abs(0.5 - vhNbr) ? vhNbr : vhVal;
+    float eps=1e-5;
+    float nGrad = eps + abs(RAW(ix,iy-1)-RAW(ix,iy+1)) + abs(RAW(ix,iy)-RAW(ix,iy-2));
+    float sGrad = eps + abs(RAW(ix,iy+1)-RAW(ix,iy-1)) + abs(RAW(ix,iy)-RAW(ix,iy+2));
+    float eGrad = eps + abs(RAW(ix-1,iy)-RAW(ix+1,iy)) + abs(RAW(ix,iy)-RAW(ix-2,iy));
+    float wGrad = eps + abs(RAW(ix+1,iy)-RAW(ix-1,iy)) + abs(RAW(ix,iy)-RAW(ix+2,iy));
+    float gV = (sGrad*RAW(ix,iy-1) + nGrad*RAW(ix,iy+1))/(nGrad+sGrad);
+    float gH = (eGrad*RAW(ix-1,iy) + wGrad*RAW(ix+1,iy))/(eGrad+wGrad);
+    return mix(gV,gH,vhDiscr);
+}
+
+float interpHoriz(int ix,int iy){ return 0.5*(RAW(ix+1,iy)+RAW(ix-1,iy)); }
+float interpVert (int ix,int iy){ return 0.5*(RAW(ix,iy+1)+RAW(ix,iy-1)); }
+float interpDiag (int ix,int iy){ return 0.25*(RAW(ix+1,iy+1)+RAW(ix-1,iy+1)+RAW(ix+1,iy-1)+RAW(ix-1,iy-1)); }
+
 // -----------------------------------------------------------
 vec3 bayerToRGB(uint x, uint y)
 {
@@ -41,41 +70,41 @@ vec3 bayerToRGB(uint x, uint y)
     // BGGR --------------------------------------------------
     case 0u:
         if(ye){
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ b=RAW(x,y); g=interpGreen(int(x),int(y)); r=interpDiag(int(x),int(y)); }
+            else   { g=RAW(x,y); r=interpVert(int(x),int(y)); b=interpHoriz(int(x),int(y)); }
         }else{
-            if(xe){ g=RAW(x,y); b=(RAW(x,y-1)+RAW(x,y+1))*0.5; r=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ g=RAW(x,y); r=interpHoriz(int(x),int(y)); b=interpVert(int(x),int(y)); }
+            else   { r=RAW(x,y); g=interpGreen(int(x),int(y)); b=interpDiag(int(x),int(y)); }
         }
         break;
     // RGGB --------------------------------------------------
     case 1u:
         if(ye){
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ r=RAW(x,y); g=interpGreen(int(x),int(y)); b=interpDiag(int(x),int(y)); }
+            else   { g=RAW(x,y); r=interpHoriz(int(x),int(y)); b=interpVert(int(x),int(y)); }
         }else{
-            if(xe){ g=RAW(x,y); r=(RAW(x,y-1)+RAW(x,y+1))*0.5; b=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ g=RAW(x,y); r=interpVert(int(x),int(y)); b=interpHoriz(int(x),int(y)); }
+            else   { b=RAW(x,y); g=interpGreen(int(x),int(y)); r=interpDiag(int(x),int(y)); }
         }
         break;
     // GBRG --------------------------------------------------
     case 2u:
         if(ye){
-            if(xe){ g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ g=RAW(x,y); r=interpVert(int(x),int(y)); b=interpHoriz(int(x),int(y)); }
+            else   { b=RAW(x,y); g=interpGreen(int(x),int(y)); r=interpDiag(int(x),int(y)); }
         }else{
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ r=RAW(x,y); g=interpGreen(int(x),int(y)); b=interpDiag(int(x),int(y)); }
+            else   { g=RAW(x,y); r=interpHoriz(int(x),int(y)); b=interpVert(int(x),int(y)); }
         }
         break;
     // GRBG --------------------------------------------------
     case 3u:
         if(ye){
-            if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ g=RAW(x,y); r=interpHoriz(int(x),int(y)); b=interpVert(int(x),int(y)); }
+            else   { r=RAW(x,y); g=interpGreen(int(x),int(y)); b=interpDiag(int(x),int(y)); }
         }else{
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ b=RAW(x,y); g=interpGreen(int(x),int(y)); r=interpDiag(int(x),int(y)); }
+            else   { g=RAW(x,y); b=interpHoriz(int(x),int(y)); r=interpVert(int(x),int(y)); }
         }
         break;
     }

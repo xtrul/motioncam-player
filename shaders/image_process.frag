@@ -38,20 +38,36 @@ float lin(uint v_u16) {
     return clamp(t * params.exposure, 0.0, 1.0);
 }
 
-float interpG(int x, int y) {
-    return 0.25 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y)) +
-                   lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1)));
+float vhEdge(int x, int y) {
+    float v = 0.0, h = 0.0;
+    for (int i = -1; i <= 1; i++) {
+        v += lin(readU16_val(x + i, y - 3)) - 3.0 * lin(readU16_val(x + i, y - 2)) - lin(readU16_val(x + i, y - 1)) +
+             6.0 * lin(readU16_val(x + i, y)) - lin(readU16_val(x + i, y + 1)) - 3.0 * lin(readU16_val(x + i, y + 2)) + lin(readU16_val(x + i, y + 3));
+        h += lin(readU16_val(x - 3, y + i)) - 3.0 * lin(readU16_val(x - 2, y + i)) - lin(readU16_val(x - 1, y + i)) +
+             6.0 * lin(readU16_val(x, y + i)) - lin(readU16_val(x + 1, y + i)) - 3.0 * lin(readU16_val(x + 2, y + i)) + lin(readU16_val(x + 3, y + i));
+    }
+    v *= v; h *= h;
+    return v / (1e-5 + v + h);
 }
-float interpH(int x, int y) { 
-    return 0.5 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y)));
+
+float interpGreen(int x, int y) {
+    float vhVal = vhEdge(x, y);
+    float vhNbr = 0.25 * (vhEdge(x - 1, y - 1) + vhEdge(x + 1, y - 1) + vhEdge(x - 1, y + 1) + vhEdge(x + 1, y + 1));
+    float vhDiscr = abs(0.5 - vhVal) < abs(0.5 - vhNbr) ? vhNbr : vhVal;
+    float eps = 1e-5;
+    float nGrad = eps + abs(lin(readU16_val(x, y - 1)) - lin(readU16_val(x, y + 1))) + abs(lin(readU16_val(x, y)) - lin(readU16_val(x, y - 2)));
+    float sGrad = eps + abs(lin(readU16_val(x, y + 1)) - lin(readU16_val(x, y - 1))) + abs(lin(readU16_val(x, y)) - lin(readU16_val(x, y + 2)));
+    float eGrad = eps + abs(lin(readU16_val(x - 1, y)) - lin(readU16_val(x + 1, y))) + abs(lin(readU16_val(x, y)) - lin(readU16_val(x - 2, y)));
+    float wGrad = eps + abs(lin(readU16_val(x + 1, y)) - lin(readU16_val(x - 1, y))) + abs(lin(readU16_val(x, y)) - lin(readU16_val(x + 2, y)));
+    float gV = (sGrad * lin(readU16_val(x, y - 1)) + nGrad * lin(readU16_val(x, y + 1))) / (nGrad + sGrad);
+    float gH = (eGrad * lin(readU16_val(x - 1, y)) + wGrad * lin(readU16_val(x + 1, y))) / (eGrad + wGrad);
+    return mix(gV, gH, vhDiscr);
 }
-float interpV(int x, int y) { 
-    return 0.5 * (lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1)));
-}
-float interpD(int x, int y) { 
-    return 0.25 * (lin(readU16_val(x + 1, y + 1)) + lin(readU16_val(x - 1, y + 1)) +
-                   lin(readU16_val(x + 1, y - 1)) + lin(readU16_val(x - 1, y - 1)));
-}
+
+float interpHoriz(int x, int y) { return 0.5 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y))); }
+float interpVert(int x, int y)  { return 0.5 * (lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1))); }
+float interpDiag(int x, int y)  { return 0.25 * (lin(readU16_val(x + 1, y + 1)) + lin(readU16_val(x - 1, y + 1)) +
+                                                  lin(readU16_val(x + 1, y - 1)) + lin(readU16_val(x - 1, y - 1))); }
 
 void main() {
     ivec2 p = ivec2(inTexCoord * vec2(params.W, params.H));
@@ -71,90 +87,90 @@ void main() {
     // ... (your existing demosaicing logic remains the same) ...
     if (params.cfaType == 0) { // BGGR
         if (ye) { 
-            if (xe) { 
+            if (xe) {
                 b_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
-                r_demosaiced = interpD(x, y);
-            } else { 
+                g_demosaiced = interpGreen(x, y);
+                r_demosaiced = interpDiag(x, y);
+            } else {
                 g_demosaiced = lin(readU16_val(x, y));
-                r_demosaiced = interpV(x, y); 
-                b_demosaiced = interpH(x, y); 
+                r_demosaiced = interpVert(x, y);
+                b_demosaiced = interpHoriz(x, y);
             }
-        } else { 
-            if (xe) { 
+        } else {
+            if (xe) {
                 g_demosaiced = lin(readU16_val(x, y));
-                r_demosaiced = interpH(x, y); 
-                b_demosaiced = interpV(x, y); 
-            } else { 
+                r_demosaiced = interpHoriz(x, y);
+                b_demosaiced = interpVert(x, y);
+            } else {
                 r_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
-                b_demosaiced = interpD(x, y);
+                g_demosaiced = interpGreen(x, y);
+                b_demosaiced = interpDiag(x, y);
             }
         }
     } else if (params.cfaType == 1) { // RGGB
         if (ye) {
-            if (xe) { 
+            if (xe) {
                 r_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
-                b_demosaiced = interpD(x, y);
-            } else { 
+                g_demosaiced = interpGreen(x, y);
+                b_demosaiced = interpDiag(x, y);
+            } else {
                 g_demosaiced = lin(readU16_val(x, y));
-                r_demosaiced = interpH(x, y);
-                b_demosaiced = interpV(x, y);
+                r_demosaiced = interpHoriz(x, y);
+                b_demosaiced = interpVert(x, y);
             }
         } else {
-            if (xe) { 
+            if (xe) {
                 g_demosaiced = lin(readU16_val(x, y));
-                r_demosaiced = interpV(x, y);
-                b_demosaiced = interpH(x, y);
-            } else { 
+                r_demosaiced = interpVert(x, y);
+                b_demosaiced = interpHoriz(x, y);
+            } else {
                 b_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
-                r_demosaiced = interpD(x, y);
+                g_demosaiced = interpGreen(x, y);
+                r_demosaiced = interpDiag(x, y);
             }
         }
     } else if (params.cfaType == 2) { // GBRG
          if (ye) {
-            if (xe) { 
+            if (xe) {
                 g_demosaiced = lin(readU16_val(x,y));
-                r_demosaiced = interpV(x,y);
-                b_demosaiced = interpH(x,y);
-            } else { 
+                r_demosaiced = interpVert(x,y);
+                b_demosaiced = interpHoriz(x,y);
+            } else {
                 b_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
-                r_demosaiced = interpD(x,y);
+                g_demosaiced = interpGreen(x,y);
+                r_demosaiced = interpDiag(x,y);
             }
         } else {
-            if (xe) { 
+            if (xe) {
                 r_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
-                b_demosaiced = interpD(x,y);
-            } else { 
+                g_demosaiced = interpGreen(x,y);
+                b_demosaiced = interpDiag(x,y);
+            } else {
                 g_demosaiced = lin(readU16_val(x,y));
-                r_demosaiced = interpH(x,y);
-                b_demosaiced = interpV(x,y);
+                r_demosaiced = interpHoriz(x,y);
+                b_demosaiced = interpVert(x,y);
             }
         }
     } else { // GRBG (cfaType == 3 or default)
         if (ye) {
-            if (xe) { 
+            if (xe) {
                 g_demosaiced = lin(readU16_val(x,y));
-                r_demosaiced = interpH(x,y);
-                b_demosaiced = interpV(x,y);
-            } else { 
+                r_demosaiced = interpHoriz(x,y);
+                b_demosaiced = interpVert(x,y);
+            } else {
                 r_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
-                b_demosaiced = interpD(x,y);
+                g_demosaiced = interpGreen(x,y);
+                b_demosaiced = interpDiag(x,y);
             }
         } else {
-            if (xe) { 
+            if (xe) {
                 b_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
-                r_demosaiced = interpD(x,y);
-            } else { 
+                g_demosaiced = interpGreen(x,y);
+                r_demosaiced = interpDiag(x,y);
+            } else {
                 g_demosaiced = lin(readU16_val(x,y));
-                r_demosaiced = interpV(x,y);
-                b_demosaiced = interpH(x,y);
+                r_demosaiced = interpVert(x,y);
+                b_demosaiced = interpHoriz(x,y);
             }
         }
     }

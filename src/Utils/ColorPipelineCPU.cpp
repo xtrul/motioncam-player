@@ -31,10 +31,31 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
     auto lin = [&](int x, int y) -> float {
         return linFromRaw(readU16(raw,x,y,p.width,p.height), p.blackLevel, invRange);
     };
-    auto interpG = [&](int x, int y)->float{ return 0.25f*(lin(x+1,y)+lin(x-1,y)+lin(x,y+1)+lin(x,y-1));};
-    auto interpH = [&](int x, int y)->float{ return 0.5f*(lin(x+1,y)+lin(x-1,y));};
-    auto interpV = [&](int x, int y)->float{ return 0.5f*(lin(x,y+1)+lin(x,y-1));};
-    auto interpD = [&](int x, int y)->float{ return 0.25f*(lin(x+1,y+1)+lin(x-1,y+1)+lin(x+1,y-1)+lin(x-1,y-1));};
+    auto vhEdge = [&](int x, int y){
+        float v=0.0f,h=0.0f;
+        for(int i=-1;i<=1;++i){
+            v += lin(x+i,y-3) - 3.0f*lin(x+i,y-2) - lin(x+i,y-1) + 6.0f*lin(x+i,y) - lin(x+i,y+1) - 3.0f*lin(x+i,y+2) + lin(x+i,y+3);
+            h += lin(x-3,y+i) - 3.0f*lin(x-2,y+i) - lin(x-1,y+i) + 6.0f*lin(x,y+i) - lin(x+1,y+i) - 3.0f*lin(x+2,y+i) + lin(x+3,y+i);
+        }
+        v*=v; h*=h;
+        return v / (1e-5f + v + h);
+    };
+    auto interpGreen = [&](int x,int y){
+        float vhVal = vhEdge(x,y);
+        float vhNbr = 0.25f*(vhEdge(x-1,y-1)+vhEdge(x+1,y-1)+vhEdge(x-1,y+1)+vhEdge(x+1,y+1));
+        float vhDiscr = (std::abs(0.5f-vhVal) < std::abs(0.5f-vhNbr)) ? vhNbr : vhVal;
+        float eps=1e-5f;
+        float nGrad = eps + std::abs(lin(x,y-1)-lin(x,y+1)) + std::abs(lin(x,y)-lin(x,y-2));
+        float sGrad = eps + std::abs(lin(x,y+1)-lin(x,y-1)) + std::abs(lin(x,y)-lin(x,y+2));
+        float eGrad = eps + std::abs(lin(x-1,y)-lin(x+1,y)) + std::abs(lin(x,y)-lin(x-2,y));
+        float wGrad = eps + std::abs(lin(x+1,y)-lin(x-1,y)) + std::abs(lin(x,y)-lin(x+2,y));
+        float gV = (sGrad*lin(x,y-1) + nGrad*lin(x,y+1))/(nGrad+sGrad);
+        float gH = (eGrad*lin(x-1,y) + wGrad*lin(x+1,y))/(eGrad+wGrad);
+        return gV*(1.0f-vhDiscr) + gH*vhDiscr;
+    };
+    auto interpHoriz = [&](int x,int y){ return 0.5f*(lin(x+1,y)+lin(x-1,y)); };
+    auto interpVert  = [&](int x,int y){ return 0.5f*(lin(x,y+1)+lin(x,y-1)); };
+    auto interpDiag  = [&](int x,int y){ return 0.25f*(lin(x+1,y+1)+lin(x-1,y+1)+lin(x+1,y-1)+lin(x-1,y-1)); };
 
     const float* ccm = p.ccm.data();
 
@@ -46,38 +67,38 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
             switch(p.cfaType){
                 case 0: // BGGR
                     if(ye){
-                        if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
-                        else { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
+                        if(xe){ b=lin(x,y); g=interpGreen(x,y); r=interpDiag(x,y); }
+                        else { g=lin(x,y); r=interpVert(x,y); b=interpHoriz(x,y); }
                     }else{
-                        if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
-                        else { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+                        if(xe){ g=lin(x,y); r=interpHoriz(x,y); b=interpVert(x,y); }
+                        else { r=lin(x,y); g=interpGreen(x,y); b=interpDiag(x,y); }
                     }
                     break;
                 case 1: // RGGB
                     if(ye){
-                        if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
-                        else { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
+                        if(xe){ r=lin(x,y); g=interpGreen(x,y); b=interpDiag(x,y); }
+                        else { g=lin(x,y); r=interpHoriz(x,y); b=interpVert(x,y); }
                     }else{
-                        if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
-                        else { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+                        if(xe){ g=lin(x,y); r=interpVert(x,y); b=interpHoriz(x,y); }
+                        else { b=lin(x,y); g=interpGreen(x,y); r=interpDiag(x,y); }
                     }
                     break;
                 case 2: // GBRG
                     if(ye){
-                        if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
-                        else { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+                        if(xe){ g=lin(x,y); r=interpVert(x,y); b=interpHoriz(x,y); }
+                        else { b=lin(x,y); g=interpGreen(x,y); r=interpDiag(x,y); }
                     }else{
-                        if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
-                        else { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
+                        if(xe){ r=lin(x,y); g=interpGreen(x,y); b=interpDiag(x,y); }
+                        else { g=lin(x,y); r=interpHoriz(x,y); b=interpVert(x,y); }
                     }
                     break;
                 default: // GRBG
                     if(ye){
-                        if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
-                        else { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+                        if(xe){ g=lin(x,y); r=interpHoriz(x,y); b=interpVert(x,y); }
+                        else { r=lin(x,y); g=interpGreen(x,y); b=interpDiag(x,y); }
                     }else{
-                        if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
-                        else { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
+                        if(xe){ b=lin(x,y); g=interpGreen(x,y); r=interpDiag(x,y); }
+                        else { g=lin(x,y); r=interpVert(x,y); b=interpHoriz(x,y); }
                     }
                     break;
             }
