@@ -264,8 +264,7 @@ void Renderer_VK::prepareAndUploadFrameData(
     double staticBlack, double staticWhite, int cfaTypeOverride,
     bool forceUpload,
     OrientationTag defaultOrientation,
-    bool containerFlipped,
-    int demosaicMode
+    bool containerFlipped
 ) {
     if (frameWidth <= 0 || frameHeight <= 0) {
         LogToFile(std::string("[Renderer_VK::prepareAndUploadFrameData] Invalid dimensions ") + std::to_string(frameWidth) + "x" + std::to_string(frameHeight) + ". Skipping upload.");
@@ -414,7 +413,6 @@ void Renderer_VK::prepareAndUploadFrameData(
         defaultOrientation);
     ubo.orientationDegrees = orientationDegreesFromTag(tag);
     m_currentOrientationDegrees = ubo.orientationDegrees;
-    ubo.demosaicMode = demosaicMode;
 
     updateUniformBuffer(uboBindingIndex, ubo);
 }
