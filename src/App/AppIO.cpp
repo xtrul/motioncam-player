@@ -1585,7 +1585,7 @@ void App::exportCurrentClipToProRes(const std::string& outputPathOverride) {
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             } else {
-                convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
+                convertRawToRGB24_RCD(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_proResStatus.errorMsg = "frame not writable"; break; }
@@ -2127,7 +2127,7 @@ void App::exportCurrentClipToDNxHR(const std::string& outputPathOverride) {
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
             } else {
-                convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
+                convertRawToRGB24_RCD(asU16(raw), cpParams, rgbBuf, threads);
                 t1 = std::chrono::steady_clock::now();
                 rgbUS += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
                 if (av_frame_make_writable(frame) < 0) { m_dnxhrStatus.errorMsg = "frame not writable"; break; }
@@ -2660,7 +2660,7 @@ void App::exportCurrentClipToHEVC_AMD(const std::string& outputPathOverride) {
                 int srcStride[3] = { gpuFrame->linesize[0], gpuFrame->linesize[1], gpuFrame->linesize[2] };
                 sws_scale(sws422, srcSlices, srcStride, 0, height, frame->data, frame->linesize);
             } else {
-                convertRawToRGB24(asU16(raw), cpParams, rgbBuf, threads);
+                convertRawToRGB24_RCD(asU16(raw), cpParams, rgbBuf, threads);
                 const uint8_t* srcSlice[1] = { rgbBuf.data() };
                 int srcStride[1] = { width * 3 };
                 sws_scale(swsRgb, srcSlice, srcStride, 0, height, frame->data, frame->linesize);

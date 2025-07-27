@@ -18,3 +18,6 @@ struct CPUColorParams {
 
 void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& params,
                        std::vector<uint8_t>& outRGB, unsigned threads = 1);
+// Edge‑aware demosaicing using a simplified Residual Color Difference approach
+void convertRawToRGB24_RCD(const uint16_t* raw, const CPUColorParams& params,
+                           std::vector<uint8_t>& outRGB, unsigned threads = 1);
