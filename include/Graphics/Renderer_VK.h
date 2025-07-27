@@ -52,7 +52,8 @@ public:
         double staticBlack, double staticWhite, int cfaTypeOverride,
         bool forceUpload,
         OrientationTag defaultOrientation,
-        bool containerFlipped
+        bool containerFlipped,
+        int demosaicMode
     );
 
     void recordDrawCommands(
@@ -130,6 +131,7 @@ private:
         alignas(16) glm::mat4 CCM;
         alignas(4) float saturationAdjustment;
         alignas(4) int orientationDegrees;
+        alignas(4) int demosaicMode;
     };
 
     // Internal state not directly manipulated by namespaced helpers
