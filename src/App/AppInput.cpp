@@ -225,6 +225,12 @@ void App::handleKey(int key, int mods) {
         m_cfaOverride = key - GLFW_KEY_1;
         LogToFile(std::string("[App::handleKey] ") + std::to_string(key - GLFW_KEY_0) + " pressed. CFA override set to: " + std::to_string(m_cfaOverride.value()));
     }
+    else if (key == GLFW_KEY_M) {
+        keyHandledByAppLogic = true;
+        m_demosaicMode = (m_demosaicMode == 0) ? 1 : 0;
+        LogToFile(std::string("[App::handleKey] M pressed. Demosaic mode now ") + (m_demosaicMode ? "VG" : "Bilinear"));
+        showActionMessage(m_demosaicMode ? "VG" : "Bilinear");
+    }
     else if (key == GLFW_KEY_F11) {
         keyHandledByAppLogic = true;
         toggleWindowFullscreen();

@@ -1515,11 +1515,13 @@ void App::exportCurrentClipToProRes(const std::string& outputPathOverride) {
         cpParams.width = width;
         cpParams.height = height;
         cpParams.cfaType = m_cfaTypeFromMetadata;
+        cpParams.demosaicMode = m_demosaicMode;
         cpParams.blackLevel = m_staticBlack;
         cpParams.whiteLevel = m_staticWhite;
 
         GpuColorParams gpuParams{};
         gpuParams.cfaType = m_cfaTypeFromMetadata;
+        gpuParams.demosaicMode = m_demosaicMode;
         gpuParams.fullSwing = 0;
         gpuParams.black = static_cast<unsigned int>(m_staticBlack);
         gpuParams.white = static_cast<unsigned int>(m_staticWhite);
@@ -2058,11 +2060,13 @@ void App::exportCurrentClipToDNxHR(const std::string& outputPathOverride) {
         cpParams.width = width;
         cpParams.height = height;
         cpParams.cfaType = m_cfaTypeFromMetadata;
+        cpParams.demosaicMode = m_demosaicMode;
         cpParams.blackLevel = m_staticBlack;
         cpParams.whiteLevel = m_staticWhite;
 
         GpuColorParams gpuParams{};
         gpuParams.cfaType = m_cfaTypeFromMetadata;
+        gpuParams.demosaicMode = m_demosaicMode;
         gpuParams.fullSwing = 0;
         gpuParams.black = static_cast<unsigned int>(m_staticBlack);
         gpuParams.white = static_cast<unsigned int>(m_staticWhite);
@@ -2623,11 +2627,13 @@ void App::exportCurrentClipToHEVC_AMD(const std::string& outputPathOverride) {
         cpParams.width = width;
         cpParams.height = height;
         cpParams.cfaType = m_cfaTypeFromMetadata;
+        cpParams.demosaicMode = m_demosaicMode;
         cpParams.blackLevel = m_staticBlack;
         cpParams.whiteLevel = m_staticWhite;
 
         GpuColorParams gpuParams{};
         gpuParams.cfaType = m_cfaTypeFromMetadata;
+        gpuParams.demosaicMode = m_demosaicMode;
         gpuParams.fullSwing = 0;
         gpuParams.black = static_cast<unsigned int>(m_staticBlack);
         gpuParams.white = static_cast<unsigned int>(m_staticWhite);
