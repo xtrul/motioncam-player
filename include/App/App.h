@@ -81,6 +81,7 @@ public:
     std::vector<std::string> m_fileList;
     int m_currentFileIndex = -1;
     std::optional<int> m_cfaOverride;
+    int m_demosaicMode = 1;
     std::string m_cfaStringFromMetadata;
     bool m_showMetrics = false;
     bool m_showHelpPage = false;
