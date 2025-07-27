@@ -218,8 +218,95 @@ vec3 demosaicVG(int x,int y){
     return rgb;
 }
 
+float vh_calc(int x,int y){
+    float sx=0.0, sy=0.0;
+    for(int i=-1;i<=1;++i){
+        sx += RAW(x+i,y-3) - 3.0*RAW(x+i,y-2) - RAW(x+i,y-1) + 6.0*RAW(x+i,y) - RAW(x+i,y+1) - 3.0*RAW(x+i,y+2) + RAW(x+i,y+3);
+        sy += RAW(x-3,y+i) - 3.0*RAW(x-2,y+i) - RAW(x-1,y+i) + 6.0*RAW(x,y+i) - RAW(x+1,y+i) - 3.0*RAW(x+2,y+i) + RAW(x+3,y+i);
+    }
+    float sx2=sx*sx, sy2=sy*sy;
+    return sx2/(1e-5 + sx2 + sy2);
+}
+
+float pq_calc(int x,int y){
+    float a=1e-5, bv=1e-5;
+    for(int i=-1;i<=1;++i){
+        a += RAW(x-3+i,y-3+i) - RAW(x+1+i,y-1+i) - RAW(x+1+i,y+1+i) + RAW(x+3+i,y+3+i)
+           -3.0*(RAW(x-2+i,y-2+i)+RAW(x+2+i,y+2+i)) + 6.0*RAW(x+i,y+i);
+        bv += RAW(x+3+i,y-3-i) - RAW(x+1+i,y-1-i) - RAW(x-1+i,y+1-i) + RAW(x-3+i,y+3-i)
+           -3.0*(RAW(x+2+i,y-2-i)+RAW(x-2+i,y+2-i)) + 6.0*RAW(x+i,y-i);
+    }
+    a*=a; bv*=bv; return a/(a+bv);
+}
+
+float lp_calc(int x,int y){
+    float lp=0.0; int off=((x & 1)==1)?-1:1; const float w[3]={0.5,1.0,0.5};
+    for(int j=-1;j<=1;++j) for(int i=-1;i<=1;++i) lp+=w[j+1]*w[i+1]*RAW(x+i+off,y+j);
+    return max(1e-6, lp);
+}
+
+vec3 demosaicRCD(int x,int y){
+    bool is_green=((x+y)&1)==1;
+    bool is_red=!is_green && ((y&1)==0);
+    const float eps=1e-5;
+    vec3 rgb=vec3(0.0);
+    if(is_green){
+        rgb.g = RAW(x,y);
+        float vh_val=vh_calc(x,y);
+        float vh_neighbor=0.25*(vh_calc(x-1,y-1)+vh_calc(x+1,y-1)+vh_calc(x-1,y+1)+vh_calc(x+1,y+1));
+        float vh_discr=abs(0.5 - vh_val) < abs(0.5 - vh_neighbor) ? vh_val : vh_neighbor;
+        float N_grad=eps+abs(RAW(x,y-1)-RAW(x,y+1))+abs(RAW(x,y)-RAW(x,y-2));
+        float S_grad=eps+abs(RAW(x,y-1)-RAW(x,y+1))+abs(RAW(x,y)-RAW(x,y+2));
+        float W_grad=eps+abs(RAW(x-1,y)-RAW(x+1,y))+abs(RAW(x,y)-RAW(x-2,y));
+        float E_grad=eps+abs(RAW(x-1,y)-RAW(x+1,y))+abs(RAW(x,y)-RAW(x+2,y));
+        float lp=lp_calc(x,y);
+        float r_N=RAW(x,y-1)*2.0*lp/(eps+lp+lp_calc(x,y-2));
+        float r_S=RAW(x,y+1)*2.0*lp/(eps+lp+lp_calc(x,y+2));
+        float r_W=RAW(x-1,y)*2.0*lp/(eps+lp+lp_calc(x-2,y));
+        float r_E=RAW(x+1,y)*2.0*lp/(eps+lp+lp_calc(x+2,y));
+        float r_v=(S_grad*r_N+N_grad*r_S)/(N_grad+S_grad);
+        float r_h=(E_grad*r_W+W_grad*r_E)/(E_grad+W_grad);
+        rgb.r=mix(r_v,r_h,vh_discr);
+        float b_N=RAW(x,y-1)*2.0*lp/(eps+lp+lp_calc(x,y-2));
+        float b_S=RAW(x,y+1)*2.0*lp/(eps+lp+lp_calc(x,y+2));
+        float b_W=RAW(x-1,y)*2.0*lp/(eps+lp+lp_calc(x-2,y));
+        float b_E=RAW(x+1,y)*2.0*lp/(eps+lp+lp_calc(x+2,y));
+        float b_v=(S_grad*b_N+N_grad*b_S)/(N_grad+S_grad);
+        float b_h=(E_grad*b_W+W_grad*b_E)/(E_grad+W_grad);
+        rgb.b=mix(b_v,b_h,vh_discr);
+    } else {
+        float c=RAW(x,y);
+        float vh_val=vh_calc(x,y);
+        float vh_neighbor=0.25*(vh_calc(x-1,y-1)+vh_calc(x+1,y-1)+vh_calc(x-1,y+1)+vh_calc(x+1,y+1));
+        float vh_discr=abs(0.5 - vh_val) < abs(0.5 - vh_neighbor) ? vh_val : vh_neighbor;
+        float N=RAW(x,y-1); float S=RAW(x,y+1); float W=RAW(x-1,y); float E=RAW(x+1,y);
+        float N_grad=eps+abs(N-RAW(x,y+1))+abs(RAW(x,y-1)-RAW(x,y-3));
+        float S_grad=eps+abs(S-RAW(x,y-1))+abs(RAW(x,y+1)-RAW(x,y+3));
+        float W_grad=eps+abs(W-RAW(x+1,y))+abs(RAW(x-1,y)-RAW(x-3,y));
+        float E_grad=eps+abs(E-RAW(x-1,y))+abs(RAW(x+1,y)-RAW(x+3,y));
+        float lp=lp_calc(x,y);
+        float g_N=N*2.0*lp/(eps+lp+lp_calc(x,y-2));
+        float g_S=S*2.0*lp/(eps+lp+lp_calc(x,y+2));
+        float g_W=W*2.0*lp/(eps+lp+lp_calc(x-2,y));
+        float g_E=E*2.0*lp/(eps+lp+lp_calc(x+2,y));
+        float g_v=(S_grad*g_N+N_grad*g_S)/(N_grad+S_grad);
+        float g_h=(E_grad*g_W+W_grad*g_E)/(E_grad+W_grad);
+        rgb.g=mix(g_v,g_h,vh_discr);
+        float pq_val=pq_calc(x,y);
+        float pq_neighbor=0.25*(pq_calc(x-1,y-1)+pq_calc(x+1,y-1)+pq_calc(x-1,y+1)+pq_calc(x+1,y+1));
+        float pq_discr=abs(0.5-pq_val)<abs(0.5-pq_neighbor)?pq_val:pq_neighbor;
+        float NW=RAW(x-1,y-1)-(RAW(x-1,y)+RAW(x,y-1))*0.5+rgb.g;
+        float NE=RAW(x+1,y-1)-(RAW(x+1,y)+RAW(x,y-1))*0.5+rgb.g;
+        float SW=RAW(x-1,y+1)-(RAW(x-1,y)+RAW(x,y+1))*0.5+rgb.g;
+        float SE=RAW(x+1,y+1)-(RAW(x+1,y)+RAW(x,y+1))*0.5+rgb.g;
+        float p=(NW+SE)*0.5; float q=(NE+SW)*0.5; float other=mix(p,q,pq_discr);
+        if(is_red){ rgb.r=c; rgb.b=other; } else { rgb.b=c; rgb.r=other; }
+    }
+    return rgb;
+}
+
 vec3 bayerToRGB(uint x, uint y){
-    vec3 rgb = demosaicVG(int(x), int(y));
+    vec3 rgb = demosaicRCD(int(x), int(y));
     rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);        // white balance
     rgb = pc.colMat * rgb;                      // sensor -> BT.709
     return clamp(rgb, 0.0, 1.0);

@@ -67,7 +67,7 @@ runtime DLLs will be copied automatically.
   video packets were written.
 - You can override the detected CFA pattern at runtime by pressing the number
   keys `1`‑`4` which map to **BGGR**, **RGGB**, **GBRG**, and **GRBG** respectively.
-- Variable gradient demosaicing is always used for all export and preview paths.
+- RCD demosaicing is used for all export and preview paths.
 
 ### GPU ProRes Conversion
 
