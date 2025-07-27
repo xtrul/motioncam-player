@@ -20,7 +20,11 @@ layout(push_constant, std430) uniform PC {
 } pc;
 
 // -----------------------------------------------------------
-uint readRaw(uint x, uint y) { return imageLoad(rawImg, ivec2(x, y)).r; }
+uint readRaw(uint x, uint y) {
+    x = clamp(x, 0u, pc.width - 1u);
+    y = clamp(y, 0u, pc.height - 1u);
+    return imageLoad(rawImg, ivec2(x, y)).r;
+}
 
 float normRaw(uint r){
     return clamp(float(r) - float(pc.black), 0.0, float(pc.white - pc.black))
@@ -30,52 +34,146 @@ float normRaw(uint r){
 #define RAW(xx,yy) normRaw(readRaw(xx,yy))
 
 // -----------------------------------------------------------
+float vh(uint x, uint y){
+    float xs=0.0, ys=0.0;
+    for(int i=-1;i<=1;i++){
+        xs += RAW(x+i,y-3) - 3.0*RAW(x+i,y-2) - RAW(x+i,y-1) + 6.0*RAW(x+i,y) - RAW(x+i,y+1) - 3.0*RAW(x+i,y+2) + RAW(x+i,y+3);
+        ys += RAW(x-3,y+i) - 3.0*RAW(x-2,y+i) - RAW(x-1,y+i) + 6.0*RAW(x,y+i) - RAW(x+1,y+i) - 3.0*RAW(x+2,y+i) + RAW(x+3,y+i);
+    }
+    xs*=xs; ys*=ys;
+    return xs / (1e-5 + xs + ys);
+}
+
+float greenAtRB(uint x, uint y){
+    float v = vh(x,y);
+    float n = 0.25*(vh(x-1,y-1)+vh(x+1,y-1)+vh(x-1,y+1)+vh(x+1,y+1));
+    float w = abs(0.5 - v) < abs(0.5 - n) ? n : v;
+    float eps = 1e-5;
+    float Ng = eps + abs(RAW(x,y-1)-RAW(x,y+1)) + abs(RAW(x,y)-RAW(x,y-2));
+    float Sg = eps + abs(RAW(x,y-1)-RAW(x,y+1)) + abs(RAW(x,y)-RAW(x,y+2));
+    float Eg = eps + abs(RAW(x-1,y)-RAW(x+1,y)) + abs(RAW(x,y)-RAW(x+2,y));
+    float Wg = eps + abs(RAW(x-1,y)-RAW(x+1,y)) + abs(RAW(x,y)-RAW(x-2,y));
+    float gv = (Sg*(RAW(x,y-1)+RAW(x,y+1))*0.5 + Ng*(RAW(x,y-1)+RAW(x,y+1))*0.5)/(Ng+Sg);
+    float gh = (Eg*(RAW(x-1,y)+RAW(x+1,y))*0.5 + Wg*(RAW(x-1,y)+RAW(x+1,y))*0.5)/(Eg+Wg);
+    return mix(gv,gh,w);
+}
+
+float greenAt(uint x, uint y){
+    bool ye=(y&1u)==0u;
+    bool xe=(x&1u)==0u;
+    switch(pc.cfaType){
+        case 0u: return ye ? (xe ? greenAtRB(x,y) : RAW(x,y)) : (xe ? RAW(x,y) : greenAtRB(x,y));
+        case 1u: return ye ? (xe ? RAW(x,y) : greenAtRB(x,y)) : (xe ? greenAtRB(x,y) : RAW(x,y));
+        case 2u: return ye ? (xe ? RAW(x,y) : greenAtRB(x,y)) : (xe ? greenAtRB(x,y) : RAW(x,y));
+        default: return ye ? (xe ? greenAtRB(x,y) : RAW(x,y)) : (xe ? RAW(x,y) : greenAtRB(x,y));
+    }
+}
+
 vec3 bayerToRGB(uint x, uint y)
 {
-    bool xe = (x & 1u) == 0u;
-    bool ye = (y & 1u) == 0u;
-    float r = 0.0, g = 0.0, b = 0.0;
+    float r=0.0,g=0.0,b=0.0;
+    bool ye=(y&1u)==0u;
+    bool xe=(x&1u)==0u;
 
-    switch(pc.cfaType)
-    {
-    // BGGR --------------------------------------------------
-    case 0u:
+    switch(pc.cfaType){
+    case 0u: // BGGR
         if(ye){
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){
+                g=greenAtRB(x,y); b=RAW(x,y);
+                float dr=(RAW(x-1,y-1)-greenAt(x-1,y-1)+RAW(x+1,y-1)-greenAt(x+1,y-1)+RAW(x-1,y+1)-greenAt(x-1,y+1)+RAW(x+1,y+1)-greenAt(x+1,y+1))*0.25;
+                r=g+dr;
+            }else{
+                g=RAW(x,y);
+                float dr=(RAW(x,y-1)-greenAt(x,y-1)+RAW(x,y+1)-greenAt(x,y+1))*0.5;
+                float db=(RAW(x-1,y)-greenAt(x-1,y)+RAW(x+1,y)-greenAt(x+1,y))*0.5;
+                r=g+dr; b=g+db;
+            }
         }else{
-            if(xe){ g=RAW(x,y); b=(RAW(x,y-1)+RAW(x,y+1))*0.5; r=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){
+                g=RAW(x,y);
+                float dr=(RAW(x-1,y)-greenAt(x-1,y)+RAW(x+1,y)-greenAt(x+1,y))*0.5;
+                float db=(RAW(x,y-1)-greenAt(x,y-1)+RAW(x,y+1)-greenAt(x,y+1))*0.5;
+                r=g+dr; b=g+db;
+            }else{
+                g=greenAtRB(x,y); r=RAW(x,y);
+                float db=(RAW(x-1,y-1)-greenAt(x-1,y-1)+RAW(x+1,y-1)-greenAt(x+1,y-1)+RAW(x-1,y+1)-greenAt(x-1,y+1)+RAW(x+1,y+1)-greenAt(x+1,y+1))*0.25;
+                b=g+db;
+            }
         }
         break;
-    // RGGB --------------------------------------------------
-    case 1u:
+    case 1u: // RGGB
         if(ye){
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){
+                g=greenAtRB(x,y); r=RAW(x,y);
+                float db=(RAW(x-1,y-1)-greenAt(x-1,y-1)+RAW(x+1,y-1)-greenAt(x+1,y-1)+RAW(x-1,y+1)-greenAt(x-1,y+1)+RAW(x+1,y+1)-greenAt(x+1,y+1))*0.25;
+                b=g+db;
+            }else{
+                g=RAW(x,y);
+                float dr=(RAW(x-1,y)-greenAt(x-1,y)+RAW(x+1,y)-greenAt(x+1,y))*0.5;
+                float db=(RAW(x,y-1)-greenAt(x,y-1)+RAW(x,y+1)-greenAt(x,y+1))*0.5;
+                r=g+dr; b=g+db;
+            }
         }else{
-            if(xe){ g=RAW(x,y); r=(RAW(x,y-1)+RAW(x,y+1))*0.5; b=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){
+                g=RAW(x,y);
+                float dr=(RAW(x,y-1)-greenAt(x,y-1)+RAW(x,y+1)-greenAt(x,y+1))*0.5;
+                float db=(RAW(x-1,y)-greenAt(x-1,y)+RAW(x+1,y)-greenAt(x+1,y))*0.5;
+                r=g+dr; b=g+db;
+            }else{
+                g=greenAtRB(x,y); b=RAW(x,y);
+                float dr=(RAW(x-1,y-1)-greenAt(x-1,y-1)+RAW(x+1,y-1)-greenAt(x+1,y-1)+RAW(x-1,y+1)-greenAt(x-1,y+1)+RAW(x+1,y+1)-greenAt(x+1,y+1))*0.25;
+                r=g+dr;
+            }
         }
         break;
-    // GBRG --------------------------------------------------
-    case 2u:
+    case 2u: // GBRG
         if(ye){
-            if(xe){ g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){
+                g=RAW(x,y);
+                float db=(RAW(x-1,y)-greenAt(x-1,y)+RAW(x+1,y)-greenAt(x+1,y))*0.5;
+                float dr=(RAW(x,y-1)-greenAt(x,y-1)+RAW(x,y+1)-greenAt(x,y+1))*0.5;
+                b=g+db; r=g+dr;
+            }else{
+                g=greenAtRB(x,y); b=RAW(x,y);
+                float dr=(RAW(x-1,y-1)-greenAt(x-1,y-1)+RAW(x+1,y-1)-greenAt(x+1,y-1)+RAW(x-1,y+1)-greenAt(x-1,y+1)+RAW(x+1,y+1)-greenAt(x+1,y+1))*0.25;
+                r=g+dr;
+            }
         }else{
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){
+                g=greenAtRB(x,y); r=RAW(x,y);
+                float db=(RAW(x-1,y-1)-greenAt(x-1,y-1)+RAW(x+1,y-1)-greenAt(x+1,y-1)+RAW(x-1,y+1)-greenAt(x-1,y+1)+RAW(x+1,y+1)-greenAt(x+1,y+1))*0.25;
+                b=g+db;
+            }else{
+                g=RAW(x,y);
+                float dr=(RAW(x-1,y)-greenAt(x-1,y)+RAW(x+1,y)-greenAt(x+1,y))*0.5;
+                float db=(RAW(x,y-1)-greenAt(x,y-1)+RAW(x,y+1)-greenAt(x,y+1))*0.5;
+                r=g+dr; b=g+db;
+            }
         }
         break;
-    // GRBG --------------------------------------------------
-    case 3u:
+    default: // GRBG
         if(ye){
-            if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){
+                g=RAW(x,y);
+                float dr=(RAW(x-1,y)-greenAt(x-1,y)+RAW(x+1,y)-greenAt(x+1,y))*0.5;
+                float db=(RAW(x,y-1)-greenAt(x,y-1)+RAW(x,y+1)-greenAt(x,y+1))*0.5;
+                r=g+dr; b=g+db;
+            }else{
+                g=greenAtRB(x,y); r=RAW(x,y);
+                float db=(RAW(x-1,y-1)-greenAt(x-1,y-1)+RAW(x+1,y-1)-greenAt(x+1,y-1)+RAW(x-1,y+1)-greenAt(x-1,y+1)+RAW(x+1,y+1)-greenAt(x+1,y+1))*0.25;
+                b=g+db;
+            }
         }else{
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){
+                g=greenAtRB(x,y); b=RAW(x,y);
+                float dr=(RAW(x-1,y-1)-greenAt(x-1,y-1)+RAW(x+1,y-1)-greenAt(x+1,y-1)+RAW(x-1,y+1)-greenAt(x-1,y+1)+RAW(x+1,y+1)-greenAt(x+1,y+1))*0.25;
+                r=g+dr;
+            }else{
+                g=RAW(x,y);
+                float dr=(RAW(x,y-1)-greenAt(x,y-1)+RAW(x,y+1)-greenAt(x,y+1))*0.5;
+                float db=(RAW(x-1,y)-greenAt(x-1,y)+RAW(x+1,y)-greenAt(x+1,y))*0.5;
+                r=g+dr; b=g+db;
+            }
         }
         break;
     }

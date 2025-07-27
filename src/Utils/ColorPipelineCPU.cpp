@@ -31,56 +31,164 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
     auto lin = [&](int x, int y) -> float {
         return linFromRaw(readU16(raw,x,y,p.width,p.height), p.blackLevel, invRange);
     };
-    auto interpG = [&](int x, int y)->float{ return 0.25f*(lin(x+1,y)+lin(x-1,y)+lin(x,y+1)+lin(x,y-1));};
-    auto interpH = [&](int x, int y)->float{ return 0.5f*(lin(x+1,y)+lin(x-1,y));};
-    auto interpV = [&](int x, int y)->float{ return 0.5f*(lin(x,y+1)+lin(x,y-1));};
-    auto interpD = [&](int x, int y)->float{ return 0.25f*(lin(x+1,y+1)+lin(x-1,y+1)+lin(x+1,y-1)+lin(x-1,y-1));};
+    auto vh = [&](int x, int y)->float {
+        float xs = 0.0f, ys = 0.0f;
+        for(int i=-1;i<=1;++i){
+            xs += lin(x+i,y-3) - 3.0f*lin(x+i,y-2) - lin(x+i,y-1) + 6.0f*lin(x+i,y)
+                 - lin(x+i,y+1) - 3.0f*lin(x+i,y+2) + lin(x+i,y+3);
+            ys += lin(x-3,y+i) - 3.0f*lin(x-2,y+i) - lin(x-1,y+i) + 6.0f*lin(x,y+i)
+                 - lin(x+1,y+i) - 3.0f*lin(x+2,y+i) + lin(x+3,y+i);
+        }
+        xs *= xs; ys *= ys;
+        return xs / (1e-5f + xs + ys);
+    };
+
+    auto greenAtRB = [&](int x, int y)->float {
+        float vhVal = vh(x,y);
+        float vhNeigh = 0.25f*(vh(x-1,y-1)+vh(x+1,y-1)+vh(x-1,y+1)+vh(x+1,y+1));
+        float vhDiscr = std::abs(0.5f - vhVal) < std::abs(0.5f - vhNeigh) ? vhNeigh : vhVal;
+        float eps = 1e-5f;
+        float N_grad = eps + std::abs(lin(x, y-1) - lin(x, y+1)) + std::abs(lin(x, y) - lin(x, y-2));
+        float S_grad = eps + std::abs(lin(x, y-1) - lin(x, y+1)) + std::abs(lin(x, y) - lin(x, y+2));
+        float E_grad = eps + std::abs(lin(x-1, y) - lin(x+1, y)) + std::abs(lin(x, y) - lin(x+2, y));
+        float W_grad = eps + std::abs(lin(x-1, y) - lin(x+1, y)) + std::abs(lin(x, y) - lin(x-2, y));
+        float g_v = (S_grad * (lin(x, y-1)+lin(x, y+1))*0.5f + N_grad * (lin(x, y-1)+lin(x, y+1))*0.5f)/(N_grad + S_grad);
+        float g_h = (E_grad * (lin(x-1, y)+lin(x+1, y))*0.5f + W_grad * (lin(x-1, y)+lin(x+1, y))*0.5f)/(E_grad + W_grad);
+        return g_v*(1.0f - vhDiscr) + g_h*vhDiscr;
+    };
+
+    auto greenAt = [&](int x, int y)->float {
+        bool ye = (y%2)==0;
+        bool xe = (x%2)==0;
+        switch(p.cfaType){
+            case 0: // BGGR
+                return ye ? (xe ? greenAtRB(x,y) : lin(x,y))
+                          : (xe ? lin(x,y) : greenAtRB(x,y));
+            case 1: // RGGB
+                return ye ? (xe ? lin(x,y) : greenAtRB(x,y))
+                          : (xe ? greenAtRB(x,y) : lin(x,y));
+            case 2: // GBRG
+                return ye ? (xe ? lin(x,y) : greenAtRB(x,y))
+                          : (xe ? greenAtRB(x,y) : lin(x,y));
+            default: // GRBG
+                return ye ? (xe ? greenAtRB(x,y) : lin(x,y))
+                          : (xe ? lin(x,y) : greenAtRB(x,y));
+        }
+    };
+
+    auto rcdPixel = [&](int x, int y, float& r, float& g, float& b){
+        bool ye = (y%2)==0;
+        bool xe = (x%2)==0;
+        switch(p.cfaType){
+            case 0: // BGGR
+                if(ye){
+                    if(xe){
+                        g=greenAtRB(x,y); b=lin(x,y);
+                        float dr=(lin(x-1,y-1)-greenAt(x-1,y-1)+lin(x+1,y-1)-greenAt(x+1,y-1)+lin(x-1,y+1)-greenAt(x-1,y+1)+lin(x+1,y+1)-greenAt(x+1,y+1))*0.25f;
+                        r=g+dr;
+                    }else{
+                        g=lin(x,y);
+                        float dr=(lin(x,y-1)-greenAt(x,y-1)+lin(x,y+1)-greenAt(x,y+1))*0.5f;
+                        float db=(lin(x-1,y)-greenAt(x-1,y)+lin(x+1,y)-greenAt(x+1,y))*0.5f;
+                        r=g+dr; b=g+db;
+                    }
+                }else{
+                    if(xe){
+                        g=lin(x,y);
+                        float dr=(lin(x-1,y)-greenAt(x-1,y)+lin(x+1,y)-greenAt(x+1,y))*0.5f;
+                        float db=(lin(x,y-1)-greenAt(x,y-1)+lin(x,y+1)-greenAt(x,y+1))*0.5f;
+                        r=g+dr; b=g+db;
+                    }else{
+                        g=greenAtRB(x,y); r=lin(x,y);
+                        float db=(lin(x-1,y-1)-greenAt(x-1,y-1)+lin(x+1,y-1)-greenAt(x+1,y-1)+lin(x-1,y+1)-greenAt(x-1,y+1)+lin(x+1,y+1)-greenAt(x+1,y+1))*0.25f;
+                        b=g+db;
+                    }
+                }
+                break;
+            case 1: // RGGB
+                if(ye){
+                    if(xe){
+                        g=greenAtRB(x,y); r=lin(x,y);
+                        float db=(lin(x-1,y-1)-greenAt(x-1,y-1)+lin(x+1,y-1)-greenAt(x+1,y-1)+lin(x-1,y+1)-greenAt(x-1,y+1)+lin(x+1,y+1)-greenAt(x+1,y+1))*0.25f;
+                        b=g+db;
+                    }else{
+                        g=lin(x,y);
+                        float dr=(lin(x-1,y)-greenAt(x-1,y)+lin(x+1,y)-greenAt(x+1,y))*0.5f;
+                        float db=(lin(x,y-1)-greenAt(x,y-1)+lin(x,y+1)-greenAt(x,y+1))*0.5f;
+                        r=g+dr; b=g+db;
+                    }
+                }else{
+                    if(xe){
+                        g=lin(x,y);
+                        float dr=(lin(x,y-1)-greenAt(x,y-1)+lin(x,y+1)-greenAt(x,y+1))*0.5f;
+                        float db=(lin(x-1,y)-greenAt(x-1,y)+lin(x+1,y)-greenAt(x+1,y))*0.5f;
+                        r=g+dr; b=g+db;
+                    }else{
+                        g=greenAtRB(x,y); b=lin(x,y);
+                        float dr=(lin(x-1,y-1)-greenAt(x-1,y-1)+lin(x+1,y-1)-greenAt(x+1,y-1)+lin(x-1,y+1)-greenAt(x-1,y+1)+lin(x+1,y+1)-greenAt(x+1,y+1))*0.25f;
+                        r=g+dr;
+                    }
+                }
+                break;
+            case 2: // GBRG
+                if(ye){
+                    if(xe){
+                        g=lin(x,y);
+                        float db=(lin(x-1,y)-greenAt(x-1,y)+lin(x+1,y)-greenAt(x+1,y))*0.5f;
+                        float dr=(lin(x,y-1)-greenAt(x,y-1)+lin(x,y+1)-greenAt(x,y+1))*0.5f;
+                        b=g+db; r=g+dr;
+                    }else{
+                        g=greenAtRB(x,y); b=lin(x,y);
+                        float dr=(lin(x-1,y-1)-greenAt(x-1,y-1)+lin(x+1,y-1)-greenAt(x+1,y-1)+lin(x-1,y+1)-greenAt(x-1,y+1)+lin(x+1,y+1)-greenAt(x+1,y+1))*0.25f;
+                        r=g+dr;
+                    }
+                }else{
+                    if(xe){
+                        g=greenAtRB(x,y); r=lin(x,y);
+                        float db=(lin(x-1,y-1)-greenAt(x-1,y-1)+lin(x+1,y-1)-greenAt(x+1,y-1)+lin(x-1,y+1)-greenAt(x-1,y+1)+lin(x+1,y+1)-greenAt(x+1,y+1))*0.25f;
+                        b=g+db;
+                    }else{
+                        g=lin(x,y);
+                        float dr=(lin(x-1,y)-greenAt(x-1,y)+lin(x+1,y)-greenAt(x+1,y))*0.5f;
+                        float db=(lin(x,y-1)-greenAt(x,y-1)+lin(x,y+1)-greenAt(x,y+1))*0.5f;
+                        r=g+dr; b=g+db;
+                    }
+                }
+                break;
+            default: // GRBG
+                if(ye){
+                    if(xe){
+                        g=lin(x,y);
+                        float dr=(lin(x-1,y)-greenAt(x-1,y)+lin(x+1,y)-greenAt(x+1,y))*0.5f;
+                        float db=(lin(x,y-1)-greenAt(x,y-1)+lin(x,y+1)-greenAt(x,y+1))*0.5f;
+                        r=g+dr; b=g+db;
+                    }else{
+                        g=greenAtRB(x,y); r=lin(x,y);
+                        float db=(lin(x-1,y-1)-greenAt(x-1,y-1)+lin(x+1,y-1)-greenAt(x+1,y-1)+lin(x-1,y+1)-greenAt(x-1,y+1)+lin(x+1,y+1)-greenAt(x+1,y+1))*0.25f;
+                        b=g+db;
+                    }
+                }else{
+                    if(xe){
+                        g=greenAtRB(x,y); b=lin(x,y);
+                        float dr=(lin(x-1,y-1)-greenAt(x-1,y-1)+lin(x+1,y-1)-greenAt(x+1,y-1)+lin(x-1,y+1)-greenAt(x-1,y+1)+lin(x+1,y+1)-greenAt(x+1,y+1))*0.25f;
+                        r=g+dr;
+                    }else{
+                        g=lin(x,y);
+                        float dr=(lin(x,y-1)-greenAt(x,y-1)+lin(x,y+1)-greenAt(x,y+1))*0.5f;
+                        float db=(lin(x-1,y)-greenAt(x-1,y)+lin(x+1,y)-greenAt(x+1,y))*0.5f;
+                        r=g+dr; b=g+db;
+                    }
+                }
+                break;
+        }
+    };
 
     const float* ccm = p.ccm.data();
 
     auto processRow = [&](int y){
         for(int x=0;x<p.width;++x){
-            bool ye = (y%2)==0;
-            bool xe = (x%2)==0;
             float r=0,g=0,b=0;
-            switch(p.cfaType){
-                case 0: // BGGR
-                    if(ye){
-                        if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
-                        else { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
-                    }else{
-                        if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
-                        else { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
-                    }
-                    break;
-                case 1: // RGGB
-                    if(ye){
-                        if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
-                        else { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
-                    }else{
-                        if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
-                        else { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
-                    }
-                    break;
-                case 2: // GBRG
-                    if(ye){
-                        if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
-                        else { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
-                    }else{
-                        if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
-                        else { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
-                    }
-                    break;
-                default: // GRBG
-                    if(ye){
-                        if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
-                        else { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
-                    }else{
-                        if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
-                        else { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
-                    }
-                    break;
-            }
+            rcdPixel(x,y,r,g,b);
             float r_wb = std::clamp(r * p.gainR, 0.0f, 1.0f);
             float g_wb = std::clamp(g * p.gainG, 0.0f, 1.0f);
             float b_wb = std::clamp(b * p.gainB, 0.0f, 1.0f);

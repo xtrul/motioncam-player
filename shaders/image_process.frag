@@ -38,19 +38,37 @@ float lin(uint v_u16) {
     return clamp(t * params.exposure, 0.0, 1.0);
 }
 
-float interpG(int x, int y) {
-    return 0.25 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y)) +
-                   lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1)));
+float vh(int x, int y){
+    float xs=0.0, ys=0.0;
+    for(int i=-1;i<=1;i++){
+        xs += lin(readU16_val(x+i,y-3)) - 3.0*lin(readU16_val(x+i,y-2)) - lin(readU16_val(x+i,y-1)) + 6.0*lin(readU16_val(x+i,y)) - lin(readU16_val(x+i,y+1)) - 3.0*lin(readU16_val(x+i,y+2)) + lin(readU16_val(x+i,y+3));
+        ys += lin(readU16_val(x-3,y+i)) - 3.0*lin(readU16_val(x-2,y+i)) - lin(readU16_val(x-1,y+i)) + 6.0*lin(readU16_val(x,y+i)) - lin(readU16_val(x+1,y+i)) - 3.0*lin(readU16_val(x+2,y+i)) + lin(readU16_val(x+3,y+i));
+    }
+    xs*=xs; ys*=ys;
+    return xs / (1e-5 + xs + ys);
 }
-float interpH(int x, int y) { 
-    return 0.5 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y)));
+
+float greenAtRB(int x, int y){
+    float v = vh(x,y);
+    float n = 0.25*(vh(x-1,y-1)+vh(x+1,y-1)+vh(x-1,y+1)+vh(x+1,y+1));
+    float w = abs(0.5 - v) < abs(0.5 - n) ? n : v;
+    float eps = 1e-5;
+    float Ng = eps + abs(lin(readU16_val(x, y-1)) - lin(readU16_val(x, y+1))) + abs(lin(readU16_val(x, y)) - lin(readU16_val(x, y-2)));
+    float Sg = eps + abs(lin(readU16_val(x, y-1)) - lin(readU16_val(x, y+1))) + abs(lin(readU16_val(x, y)) - lin(readU16_val(x, y+2)));
+    float Eg = eps + abs(lin(readU16_val(x-1, y)) - lin(readU16_val(x+1, y))) + abs(lin(readU16_val(x, y)) - lin(readU16_val(x+2, y)));
+    float Wg = eps + abs(lin(readU16_val(x-1, y)) - lin(readU16_val(x+1, y))) + abs(lin(readU16_val(x, y)) - lin(readU16_val(x-2, y)));
+    float gv = (Sg*(lin(readU16_val(x, y-1))+lin(readU16_val(x, y+1)))*0.5 + Ng*(lin(readU16_val(x, y-1))+lin(readU16_val(x, y+1)))*0.5)/(Ng+Sg);
+    float gh = (Eg*(lin(readU16_val(x-1, y))+lin(readU16_val(x+1, y)))*0.5 + Wg*(lin(readU16_val(x-1, y))+lin(readU16_val(x+1, y)))*0.5)/(Eg+Wg);
+    return mix(gv,gh,w);
 }
-float interpV(int x, int y) { 
-    return 0.5 * (lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1)));
-}
-float interpD(int x, int y) { 
-    return 0.25 * (lin(readU16_val(x + 1, y + 1)) + lin(readU16_val(x - 1, y + 1)) +
-                   lin(readU16_val(x + 1, y - 1)) + lin(readU16_val(x - 1, y - 1)));
+
+float greenAt(int x, int y){
+    bool ye = (y % 2) == 0;
+    bool xe = (x % 2) == 0;
+    if(params.cfaType==0) return ye? (xe? greenAtRB(x,y): lin(readU16_val(x,y))) : (xe? lin(readU16_val(x,y)): greenAtRB(x,y));
+    if(params.cfaType==1) return ye? (xe? lin(readU16_val(x,y)): greenAtRB(x,y)) : (xe? greenAtRB(x,y): lin(readU16_val(x,y)));
+    if(params.cfaType==2) return ye? (xe? lin(readU16_val(x,y)): greenAtRB(x,y)) : (xe? greenAtRB(x,y): lin(readU16_val(x,y)));
+    return ye? (xe? greenAtRB(x,y): lin(readU16_val(x,y))) : (xe? lin(readU16_val(x,y)): greenAtRB(x,y));
 }
 
 void main() {
@@ -68,96 +86,108 @@ void main() {
 
     float r_demosaiced = 0.0, g_demosaiced = 0.0, b_demosaiced = 0.0;
 
-    // ... (your existing demosaicing logic remains the same) ...
-    if (params.cfaType == 0) { // BGGR
-        if (ye) { 
-            if (xe) { 
-                b_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
-                r_demosaiced = interpD(x, y);
-            } else { 
-                g_demosaiced = lin(readU16_val(x, y));
-                r_demosaiced = interpV(x, y); 
-                b_demosaiced = interpH(x, y); 
+    float rcd_r = 0.0, rcd_g = 0.0, rcd_b = 0.0;
+    if(params.cfaType == 0){ // BGGR
+        if(ye){
+            if(xe){
+                rcd_g = greenAtRB(x,y); rcd_b = lin(readU16_val(x,y));
+                float dr = (lin(readU16_val(x-1,y-1))-greenAt(x-1,y-1)+lin(readU16_val(x+1,y-1))-greenAt(x+1,y-1)+lin(readU16_val(x-1,y+1))-greenAt(x-1,y+1)+lin(readU16_val(x+1,y+1))-greenAt(x+1,y+1))*0.25;
+                rcd_r = rcd_g + dr;
+            }else{
+                rcd_g = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x,y-1))-greenAt(x,y-1)+lin(readU16_val(x,y+1))-greenAt(x,y+1))*0.5;
+                float db=(lin(readU16_val(x-1,y))-greenAt(x-1,y)+lin(readU16_val(x+1,y))-greenAt(x+1,y))*0.5;
+                rcd_r = rcd_g + dr; rcd_b = rcd_g + db;
             }
-        } else { 
-            if (xe) { 
-                g_demosaiced = lin(readU16_val(x, y));
-                r_demosaiced = interpH(x, y); 
-                b_demosaiced = interpV(x, y); 
-            } else { 
-                r_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
-                b_demosaiced = interpD(x, y);
-            }
-        }
-    } else if (params.cfaType == 1) { // RGGB
-        if (ye) {
-            if (xe) { 
-                r_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
-                b_demosaiced = interpD(x, y);
-            } else { 
-                g_demosaiced = lin(readU16_val(x, y));
-                r_demosaiced = interpH(x, y);
-                b_demosaiced = interpV(x, y);
-            }
-        } else {
-            if (xe) { 
-                g_demosaiced = lin(readU16_val(x, y));
-                r_demosaiced = interpV(x, y);
-                b_demosaiced = interpH(x, y);
-            } else { 
-                b_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
-                r_demosaiced = interpD(x, y);
+        }else{
+            if(xe){
+                rcd_g = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x-1,y))-greenAt(x-1,y)+lin(readU16_val(x+1,y))-greenAt(x+1,y))*0.5;
+                float db=(lin(readU16_val(x,y-1))-greenAt(x,y-1)+lin(readU16_val(x,y+1))-greenAt(x,y+1))*0.5;
+                rcd_r = rcd_g + dr; rcd_b = rcd_g + db;
+            }else{
+                rcd_g = greenAtRB(x,y); rcd_r = lin(readU16_val(x,y));
+                float db=(lin(readU16_val(x-1,y-1))-greenAt(x-1,y-1)+lin(readU16_val(x+1,y-1))-greenAt(x+1,y-1)+lin(readU16_val(x-1,y+1))-greenAt(x-1,y+1)+lin(readU16_val(x+1,y+1))-greenAt(x+1,y+1))*0.25;
+                rcd_b = rcd_g + db;
             }
         }
-    } else if (params.cfaType == 2) { // GBRG
-         if (ye) {
-            if (xe) { 
-                g_demosaiced = lin(readU16_val(x,y));
-                r_demosaiced = interpV(x,y);
-                b_demosaiced = interpH(x,y);
-            } else { 
-                b_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
-                r_demosaiced = interpD(x,y);
+    }else if(params.cfaType == 1){ // RGGB
+        if(ye){
+            if(xe){
+                rcd_g = greenAtRB(x,y); rcd_r = lin(readU16_val(x,y));
+                float db=(lin(readU16_val(x-1,y-1))-greenAt(x-1,y-1)+lin(readU16_val(x+1,y-1))-greenAt(x+1,y-1)+lin(readU16_val(x-1,y+1))-greenAt(x-1,y+1)+lin(readU16_val(x+1,y+1))-greenAt(x+1,y+1))*0.25;
+                rcd_b = rcd_g + db;
+            }else{
+                rcd_g = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x-1,y))-greenAt(x-1,y)+lin(readU16_val(x+1,y))-greenAt(x+1,y))*0.5;
+                float db=(lin(readU16_val(x,y-1))-greenAt(x,y-1)+lin(readU16_val(x,y+1))-greenAt(x,y+1))*0.5;
+                rcd_r = rcd_g + dr; rcd_b = rcd_g + db;
             }
-        } else {
-            if (xe) { 
-                r_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
-                b_demosaiced = interpD(x,y);
-            } else { 
-                g_demosaiced = lin(readU16_val(x,y));
-                r_demosaiced = interpH(x,y);
-                b_demosaiced = interpV(x,y);
+        }else{
+            if(xe){
+                rcd_g = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x,y-1))-greenAt(x,y-1)+lin(readU16_val(x,y+1))-greenAt(x,y+1))*0.5;
+                float db=(lin(readU16_val(x-1,y))-greenAt(x-1,y)+lin(readU16_val(x+1,y))-greenAt(x+1,y))*0.5;
+                rcd_r = rcd_g + dr; rcd_b = rcd_g + db;
+            }else{
+                rcd_g = greenAtRB(x,y); rcd_b = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x-1,y-1))-greenAt(x-1,y-1)+lin(readU16_val(x+1,y-1))-greenAt(x+1,y-1)+lin(readU16_val(x-1,y+1))-greenAt(x-1,y+1)+lin(readU16_val(x+1,y+1))-greenAt(x+1,y+1))*0.25;
+                rcd_r = rcd_g + dr;
             }
         }
-    } else { // GRBG (cfaType == 3 or default)
-        if (ye) {
-            if (xe) { 
-                g_demosaiced = lin(readU16_val(x,y));
-                r_demosaiced = interpH(x,y);
-                b_demosaiced = interpV(x,y);
-            } else { 
-                r_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
-                b_demosaiced = interpD(x,y);
+    }else if(params.cfaType == 2){ // GBRG
+        if(ye){
+            if(xe){
+                rcd_g = lin(readU16_val(x,y));
+                float db=(lin(readU16_val(x-1,y))-greenAt(x-1,y)+lin(readU16_val(x+1,y))-greenAt(x+1,y))*0.5;
+                float dr=(lin(readU16_val(x,y-1))-greenAt(x,y-1)+lin(readU16_val(x,y+1))-greenAt(x,y+1))*0.5;
+                rcd_b = rcd_g + db; rcd_r = rcd_g + dr;
+            }else{
+                rcd_g = greenAtRB(x,y); rcd_b = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x-1,y-1))-greenAt(x-1,y-1)+lin(readU16_val(x+1,y-1))-greenAt(x+1,y-1)+lin(readU16_val(x-1,y+1))-greenAt(x-1,y+1)+lin(readU16_val(x+1,y+1))-greenAt(x+1,y+1))*0.25;
+                rcd_r = rcd_g + dr;
             }
-        } else {
-            if (xe) { 
-                b_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
-                r_demosaiced = interpD(x,y);
-            } else { 
-                g_demosaiced = lin(readU16_val(x,y));
-                r_demosaiced = interpV(x,y);
-                b_demosaiced = interpH(x,y);
+        }else{
+            if(xe){
+                rcd_g = greenAtRB(x,y); rcd_r = lin(readU16_val(x,y));
+                float db=(lin(readU16_val(x-1,y-1))-greenAt(x-1,y-1)+lin(readU16_val(x+1,y-1))-greenAt(x+1,y-1)+lin(readU16_val(x-1,y+1))-greenAt(x-1,y+1)+lin(readU16_val(x+1,y+1))-greenAt(x+1,y+1))*0.25;
+                rcd_b = rcd_g + db;
+            }else{
+                rcd_g = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x-1,y))-greenAt(x-1,y)+lin(readU16_val(x+1,y))-greenAt(x+1,y))*0.5;
+                float db=(lin(readU16_val(x,y-1))-greenAt(x,y-1)+lin(readU16_val(x,y+1))-greenAt(x,y+1))*0.5;
+                rcd_r = rcd_g + dr; rcd_b = rcd_g + db;
+            }
+        }
+    }else{ // GRBG
+        if(ye){
+            if(xe){
+                rcd_g = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x-1,y))-greenAt(x-1,y)+lin(readU16_val(x+1,y))-greenAt(x+1,y))*0.5;
+                float db=(lin(readU16_val(x,y-1))-greenAt(x,y-1)+lin(readU16_val(x,y+1))-greenAt(x,y+1))*0.5;
+                rcd_r = rcd_g + dr; rcd_b = rcd_g + db;
+            }else{
+                rcd_g = greenAtRB(x,y); rcd_r = lin(readU16_val(x,y));
+                float db=(lin(readU16_val(x-1,y-1))-greenAt(x-1,y-1)+lin(readU16_val(x+1,y-1))-greenAt(x+1,y-1)+lin(readU16_val(x-1,y+1))-greenAt(x-1,y+1)+lin(readU16_val(x+1,y+1))-greenAt(x+1,y+1))*0.25;
+                rcd_b = rcd_g + db;
+            }
+        }else{
+            if(xe){
+                rcd_g = greenAtRB(x,y); rcd_b = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x-1,y-1))-greenAt(x-1,y-1)+lin(readU16_val(x+1,y-1))-greenAt(x+1,y-1)+lin(readU16_val(x-1,y+1))-greenAt(x-1,y+1)+lin(readU16_val(x+1,y+1))-greenAt(x+1,y+1))*0.25;
+                rcd_r = rcd_g + dr;
+            }else{
+                rcd_g = lin(readU16_val(x,y));
+                float dr=(lin(readU16_val(x,y-1))-greenAt(x,y-1)+lin(readU16_val(x,y+1))-greenAt(x,y+1))*0.5;
+                float db=(lin(readU16_val(x-1,y))-greenAt(x-1,y)+lin(readU16_val(x+1,y))-greenAt(x+1,y))*0.5;
+                rcd_r = rcd_g + dr; rcd_b = rcd_g + db;
             }
         }
     }
+
+    r_demosaiced = rcd_r;
+    g_demosaiced = rcd_g;
+    b_demosaiced = rcd_b;
 
     float r_wb = clamp(r_demosaiced * params.gainR, 0.0, 1.0);
     float g_wb = clamp(g_demosaiced * params.gainG, 0.0, 1.0);
