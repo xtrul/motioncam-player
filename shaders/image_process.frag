@@ -19,7 +19,6 @@ layout(binding = 1) uniform ShaderParams {
     mat4 CCM; // Pass as mat4, use top-left 3x3
     float saturationAdjustment; // e.g., 1.0 for no change, 1.25 for +25%
     int orientationDegrees;
-    int demosaicMode; // 0 bilinear, 1 variable gradient
 } params;
 
 // sRGB EOTF (gamma correction)
@@ -317,6 +316,106 @@ vec3 demosaicVG(int x,int y){
     return rgb;
 }
 
+float vh_calc(int x,int y){
+    float sx = 0.0;
+    float sy = 0.0;
+    for(int i=-1;i<=1;++i){
+        sx += lin(readU16_val(x+i,y-3)) - 3.0*lin(readU16_val(x+i,y-2)) - lin(readU16_val(x+i,y-1)) +
+              6.0*lin(readU16_val(x+i,y)) - lin(readU16_val(x+i,y+1)) - 3.0*lin(readU16_val(x+i,y+2)) +
+              lin(readU16_val(x+i,y+3));
+        sy += lin(readU16_val(x-3,y+i)) - 3.0*lin(readU16_val(x-2,y+i)) - lin(readU16_val(x-1,y+i)) +
+              6.0*lin(readU16_val(x,y+i)) - lin(readU16_val(x+1,y+i)) - 3.0*lin(readU16_val(x+2,y+i)) +
+              lin(readU16_val(x+3,y+i));
+    }
+    float sx2=sx*sx, sy2=sy*sy;
+    return sx2/(1e-5 + sx2 + sy2);
+}
+
+float pq_calc(int x,int y){
+    float a=1e-5, bv=1e-5;
+    for(int i=-1;i<=1;++i){
+        a += lin(readU16_val(x-3+i,y-3+i)) - lin(readU16_val(x+1+i,y-1+i)) - lin(readU16_val(x+1+i,y+1+i)) +
+             lin(readU16_val(x+3+i,y+3+i)) - 3.0*(lin(readU16_val(x-2+i,y-2+i)) + lin(readU16_val(x+2+i,y+2+i))) +
+             6.0*lin(readU16_val(x+i,y+i));
+        bv += lin(readU16_val(x+3+i,y-3-i)) - lin(readU16_val(x+1+i,y-1-i)) - lin(readU16_val(x-1+i,y+1-i)) +
+              lin(readU16_val(x-3+i,y+3-i)) - 3.0*(lin(readU16_val(x+2+i,y-2-i)) + lin(readU16_val(x-2+i,y+2-i))) +
+              6.0*lin(readU16_val(x+i,y-i));
+    }
+    a*=a; bv*=bv; return a/(a+bv);
+}
+
+float lp_calc(int x,int y){
+    float lp=0.0; int off=((x & 1)==1)?-1:1; float w[3] = float[3](0.5,1.0,0.5);
+    for(int j=-1;j<=1;++j) for(int i=-1;i<=1;++i)
+        lp += w[j+1]*w[i+1]*lin(readU16_val(x+i+off,y+j));
+    return max(1e-6, lp);
+}
+
+vec3 demosaicRCD(int x,int y){
+    bool is_green=((x+y)&1)==1;
+    bool is_red=!is_green && ((y&1)==0);
+    const float eps=1e-5;
+    vec3 rgb=vec3(0.0);
+    if(is_green){
+        rgb.g = lin(readU16_val(x,y));
+        float vh_val=vh_calc(x,y);
+        float vh_neighbor=0.25*(vh_calc(x-1,y-1)+vh_calc(x+1,y-1)+vh_calc(x-1,y+1)+vh_calc(x+1,y+1));
+        float vh_discr=abs(0.5 - vh_val) < abs(0.5 - vh_neighbor) ? vh_val : vh_neighbor;
+        float N_grad=eps+abs(lin(readU16_val(x,y-1))-lin(readU16_val(x,y+1)))+abs(lin(readU16_val(x,y))-lin(readU16_val(x,y-2)));
+        float S_grad=eps+abs(lin(readU16_val(x,y-1))-lin(readU16_val(x,y+1)))+abs(lin(readU16_val(x,y))-lin(readU16_val(x,y+2)));
+        float W_grad=eps+abs(lin(readU16_val(x-1,y))-lin(readU16_val(x+1,y)))+abs(lin(readU16_val(x,y))-lin(readU16_val(x-2,y)));
+        float E_grad=eps+abs(lin(readU16_val(x-1,y))-lin(readU16_val(x+1,y)))+abs(lin(readU16_val(x,y))-lin(readU16_val(x+2,y)));
+        float lp=lp_calc(x,y);
+        float r_N=lin(readU16_val(x,y-1))*2.0*lp/(eps+lp+lp_calc(x,y-2));
+        float r_S=lin(readU16_val(x,y+1))*2.0*lp/(eps+lp+lp_calc(x,y+2));
+        float r_W=lin(readU16_val(x-1,y))*2.0*lp/(eps+lp+lp_calc(x-2,y));
+        float r_E=lin(readU16_val(x+1,y))*2.0*lp/(eps+lp+lp_calc(x+2,y));
+        float r_v=(S_grad*r_N+N_grad*r_S)/(N_grad+S_grad);
+        float r_h=(E_grad*r_W+W_grad*r_E)/(E_grad+W_grad);
+        rgb.r=mix(r_v,r_h,vh_discr);
+        float b_N=lin(readU16_val(x,y-1))*2.0*lp/(eps+lp+lp_calc(x,y-2));
+        float b_S=lin(readU16_val(x,y+1))*2.0*lp/(eps+lp+lp_calc(x,y+2));
+        float b_W=lin(readU16_val(x-1,y))*2.0*lp/(eps+lp+lp_calc(x-2,y));
+        float b_E=lin(readU16_val(x+1,y))*2.0*lp/(eps+lp+lp_calc(x+2,y));
+        float b_v=(S_grad*b_N+N_grad*b_S)/(N_grad+S_grad);
+        float b_h=(E_grad*b_W+W_grad*b_E)/(E_grad+W_grad);
+        rgb.b=mix(b_v,b_h,vh_discr);
+    } else {
+        float c=lin(readU16_val(x,y));
+        float vh_val=vh_calc(x,y);
+        float vh_neighbor=0.25*(vh_calc(x-1,y-1)+vh_calc(x+1,y-1)+vh_calc(x-1,y+1)+vh_calc(x+1,y+1));
+        float vh_discr=abs(0.5 - vh_val) < abs(0.5 - vh_neighbor) ? vh_val : vh_neighbor;
+        float N=lin(readU16_val(x,y-1));
+        float S=lin(readU16_val(x,y+1));
+        float W=lin(readU16_val(x-1,y));
+        float E=lin(readU16_val(x+1,y));
+        float N_grad=eps+abs(N-lin(readU16_val(x,y+1)))+abs(lin(readU16_val(x,y-1))-lin(readU16_val(x,y-3)));
+        float S_grad=eps+abs(S-lin(readU16_val(x,y-1)))+abs(lin(readU16_val(x,y+1))-lin(readU16_val(x,y+3)));
+        float W_grad=eps+abs(W-lin(readU16_val(x+1,y)))+abs(lin(readU16_val(x-1,y))-lin(readU16_val(x-3,y)));
+        float E_grad=eps+abs(E-lin(readU16_val(x-1,y)))+abs(lin(readU16_val(x+1,y))-lin(readU16_val(x+3,y)));
+        float lp=lp_calc(x,y);
+        float g_N=N*2.0*lp/(eps+lp+lp_calc(x,y-2));
+        float g_S=S*2.0*lp/(eps+lp+lp_calc(x,y+2));
+        float g_W=W*2.0*lp/(eps+lp+lp_calc(x-2,y));
+        float g_E=E*2.0*lp/(eps+lp+lp_calc(x+2,y));
+        float g_v=(S_grad*g_N+N_grad*g_S)/(N_grad+S_grad);
+        float g_h=(E_grad*g_W+W_grad*g_E)/(E_grad+W_grad);
+        rgb.g=mix(g_v,g_h,vh_discr);
+        float pq_val=pq_calc(x,y);
+        float pq_neighbor=0.25*(pq_calc(x-1,y-1)+pq_calc(x+1,y-1)+pq_calc(x-1,y+1)+pq_calc(x+1,y+1));
+        float pq_discr=abs(0.5-pq_val)<abs(0.5-pq_neighbor)?pq_val:pq_neighbor;
+        float NW=lin(readU16_val(x-1,y-1))-(lin(readU16_val(x-1,y))+lin(readU16_val(x,y-1)))*0.5+rgb.g;
+        float NE=lin(readU16_val(x+1,y-1))-(lin(readU16_val(x+1,y))+lin(readU16_val(x,y-1)))*0.5+rgb.g;
+        float SW=lin(readU16_val(x-1,y+1))-(lin(readU16_val(x-1,y))+lin(readU16_val(x,y+1)))*0.5+rgb.g;
+        float SE=lin(readU16_val(x+1,y+1))-(lin(readU16_val(x+1,y))+lin(readU16_val(x,y+1)))*0.5+rgb.g;
+        float p=(NW+SE)*0.5;
+        float q=(NE+SW)*0.5;
+        float other=mix(p,q,pq_discr);
+        if(is_red){ rgb.r=c; rgb.b=other; } else { rgb.b=c; rgb.r=other; }
+    }
+    return rgb;
+}
+
 void main() {
     ivec2 p = ivec2(inTexCoord * vec2(params.W, params.H));
     
@@ -328,7 +427,7 @@ void main() {
     int x = p.x;
     int y = p.y;
 
-    vec3 rgb = (params.demosaicMode == 1) ? demosaicVG(x,y) : bilinearRGB(x,y);
+    vec3 rgb = demosaicRCD(x,y);
     float r_demosaiced = rgb.r;
     float g_demosaiced = rgb.g;
     float b_demosaiced = rgb.b;
