@@ -113,14 +113,119 @@ void main() {
                 b_demosaiced = mix(bd1, bd2, vh);
             }
         }
-    } else {
-        // Fallback to bilinear for other patterns
+    } else if (params.cfaType == 1) { // RGGB
         if (ye) {
-            if (xe) { g_demosaiced = lin(readU16_val(x,y)); r_demosaiced = interpH(x,y); b_demosaiced = interpV(x,y); }
-            else { r_demosaiced = lin(readU16_val(x,y)); g_demosaiced = interpG(x,y); b_demosaiced = interpD(x,y); }
+            if (xe) { // red
+                r_demosaiced = lin(readU16_val(x,y));
+                float g_h = 0.5 * (lin(readU16_val(x+1,y)) + lin(readU16_val(x-1,y)));
+                float g_v = 0.5 * (lin(readU16_val(x,y+1)) + lin(readU16_val(x,y-1)));
+                g_demosaiced = mix(g_v, g_h, vh);
+                float bd1 = 0.5 * (lin(readU16_val(x-1,y-1)) + lin(readU16_val(x+1,y+1)));
+                float bd2 = 0.5 * (lin(readU16_val(x-1,y+1)) + lin(readU16_val(x+1,y-1)));
+                b_demosaiced = mix(bd1, bd2, vh);
+            } else { // green
+                g_demosaiced = lin(readU16_val(x,y));
+                float b_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float b_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                b_demosaiced = mix(b_v, b_h, vh);
+                float r_h = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                float r_v = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                r_demosaiced = mix(r_h, r_v, vh);
+            }
         } else {
-            if (xe) { b_demosaiced = lin(readU16_val(x,y)); g_demosaiced = interpG(x,y); r_demosaiced = interpD(x,y); }
-            else { g_demosaiced = lin(readU16_val(x,y)); r_demosaiced = interpV(x,y); b_demosaiced = interpH(x,y); }
+            if (xe) { // green
+                g_demosaiced = lin(readU16_val(x,y));
+                float r_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float r_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                r_demosaiced = mix(r_v, r_h, vh);
+                float b_h = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                float b_v = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                b_demosaiced = mix(b_h, b_v, vh);
+            } else { // blue
+                b_demosaiced = lin(readU16_val(x,y));
+                float g_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float g_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                g_demosaiced = mix(g_v, g_h, vh);
+                float rd1 = 0.5 * (lin(readU16_val(x-1,y-1)) + lin(readU16_val(x+1,y+1)));
+                float rd2 = 0.5 * (lin(readU16_val(x-1,y+1)) + lin(readU16_val(x+1,y-1)));
+                r_demosaiced = mix(rd1, rd2, vh);
+            }
+        }
+    } else if (params.cfaType == 2) { // GBRG
+        if (ye) {
+            if (xe) { // green
+                g_demosaiced = lin(readU16_val(x,y));
+                float b_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float b_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                b_demosaiced = mix(b_h, b_v, vh);
+                float r_h = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                float r_v = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                r_demosaiced = mix(r_h, r_v, vh);
+            } else { // blue
+                b_demosaiced = lin(readU16_val(x,y));
+                float g_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float g_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                g_demosaiced = mix(g_h, g_v, vh);
+                float rd1 = 0.5 * (lin(readU16_val(x-1,y-1)) + lin(readU16_val(x+1,y+1)));
+                float rd2 = 0.5 * (lin(readU16_val(x-1,y+1)) + lin(readU16_val(x+1,y-1)));
+                r_demosaiced = mix(rd1, rd2, vh);
+            }
+        } else {
+            if (xe) { // red
+                r_demosaiced = lin(readU16_val(x,y));
+                float g_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float g_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                g_demosaiced = mix(g_h, g_v, vh);
+                float bd1 = 0.5 * (lin(readU16_val(x-1,y-1)) + lin(readU16_val(x+1,y+1)));
+                float bd2 = 0.5 * (lin(readU16_val(x-1,y+1)) + lin(readU16_val(x+1,y-1)));
+                b_demosaiced = mix(bd1, bd2, vh);
+            } else { // green
+                g_demosaiced = lin(readU16_val(x,y));
+                float r_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float r_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                r_demosaiced = mix(r_h, r_v, vh);
+                float b_h = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                float b_v = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                b_demosaiced = mix(b_v, b_h, vh);
+            }
+        }
+    } else { // GRBG
+        if (ye) {
+            if (xe) { // green
+                g_demosaiced = lin(readU16_val(x,y));
+                float r_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float r_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                r_demosaiced = mix(r_h, r_v, vh);
+                float b_h = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                float b_v = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                b_demosaiced = mix(b_v, b_h, vh);
+            } else { // red
+                r_demosaiced = lin(readU16_val(x,y));
+                float g_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float g_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                g_demosaiced = mix(g_h, g_v, vh);
+                float bd1 = 0.5 * (lin(readU16_val(x-1,y-1)) + lin(readU16_val(x+1,y+1)));
+                float bd2 = 0.5 * (lin(readU16_val(x-1,y+1)) + lin(readU16_val(x+1,y-1)));
+                b_demosaiced = mix(bd1, bd2, vh);
+            }
+        } else {
+            if (xe) { // blue
+                b_demosaiced = lin(readU16_val(x,y));
+                float g_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float g_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                g_demosaiced = mix(g_h, g_v, vh);
+                float rd1 = 0.5 * (lin(readU16_val(x-1,y-1)) + lin(readU16_val(x+1,y+1)));
+                float rd2 = 0.5 * (lin(readU16_val(x-1,y+1)) + lin(readU16_val(x+1,y-1)));
+                r_demosaiced = mix(rd1, rd2, vh);
+            } else { // green
+                g_demosaiced = lin(readU16_val(x,y));
+                float b_h = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                float b_v = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                b_demosaiced = mix(b_h, b_v, vh);
+                float r_h = 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+                float r_v = 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+                r_demosaiced = mix(r_v, r_h, vh);
+            }
         }
     }
 

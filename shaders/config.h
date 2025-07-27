@@ -1,0 +1,7 @@
+#define DT_RCD_LOCAL_SIZE_X 32
+#define DT_RCD_LOCAL_SIZE_Y 32
+#define DT_RCD_TILE_SIZE_X 64
+#define DT_RCD_TILE_SIZE_Y 32
+#define DT_RCD_BORDER 3
+#define DT_LOCAL_SIZE_X 32
+#define DT_LOCAL_SIZE_Y 32

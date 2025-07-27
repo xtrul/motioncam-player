@@ -143,49 +143,148 @@ void convertRawToRGB24_RCD(const uint16_t* raw, const CPUColorParams& p,
             bool xe = (x%2)==0;
             float r=0,g=0,b=0;
             float vh = edgeRatio(x,y);
-            if(p.cfaType==0){ // BGGR
-                if(ye){
-                    if(xe){ // B pixel
-                        b = lin(x,y);
-                        float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
-                        float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
-                        g = (1.0f-vh)*g_v + vh*g_h;
-                        float rb_diag1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
-                        float rb_diag2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
-                        r = g + ((vh > 0.5f) ? rb_diag2 - g : rb_diag1 - g);
-                    } else { // G pixel
-                        g = lin(x,y);
-                        float r_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
-                        float r_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
-                        r = (1.0f-vh)*r_v + vh*r_h;
-                        b = r_v; // simple
+            switch(p.cfaType){
+                case 0: // BGGR
+                    if(ye){
+                        if(xe){ // B pixel
+                            b = lin(x,y);
+                            float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            g = (1.0f-vh)*g_v + vh*g_h;
+                            float rd1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
+                            float rd2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
+                            r = (vh > 0.5f) ? rd2 : rd1;
+                        } else { // G pixel
+                            g = lin(x,y);
+                            float r_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float r_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            r = (1.0f-vh)*r_v + vh*r_h;
+                            b = r_v;
+                        }
+                    } else {
+                        if(xe){ // G pixel
+                            g = lin(x,y);
+                            float b_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float b_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            b = (1.0f-vh)*b_v + vh*b_h;
+                            r = b_v;
+                        } else { // R pixel
+                            r = lin(x,y);
+                            float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            g = (1.0f-vh)*g_v + vh*g_h;
+                            float bd1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
+                            float bd2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
+                            b = (vh > 0.5f) ? bd2 : bd1;
+                        }
                     }
-                } else {
-                    if(xe){ // G pixel
-                        g = lin(x,y);
-                        float b_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
-                        float b_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
-                        b = (1.0f-vh)*b_v + vh*b_h;
-                        r = b_v;
-                    } else { // R pixel
-                        r = lin(x,y);
-                        float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
-                        float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
-                        g = (1.0f-vh)*g_v + vh*g_h;
-                        float rb_diag1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
-                        float rb_diag2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
-                        b = g + ((vh > 0.5f) ? rb_diag2 - g : rb_diag1 - g);
+                    break;
+                case 1: // RGGB
+                    if(ye){
+                        if(xe){ // R pixel
+                            r = lin(x,y);
+                            float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            g = (1.0f-vh)*g_v + vh*g_h;
+                            float bd1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
+                            float bd2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
+                            b = (vh > 0.5f) ? bd2 : bd1;
+                        } else { // G pixel
+                            g = lin(x,y);
+                            float b_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float b_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            b = (1.0f-vh)*b_v + vh*b_h;
+                            r = b_v;
+                        }
+                    } else {
+                        if(xe){ // G pixel
+                            g = lin(x,y);
+                            float r_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float r_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            r = (1.0f-vh)*r_v + vh*r_h;
+                            b = r_v;
+                        } else { // B pixel
+                            b = lin(x,y);
+                            float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            g = (1.0f-vh)*g_v + vh*g_h;
+                            float rd1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
+                            float rd2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
+                            r = (vh > 0.5f) ? rd2 : rd1;
+                        }
                     }
-                }
-            } else {
-                // fallback to simple bilinear for other patterns
-                if(ye){
-                    if(xe){ g=lin(x,y); r=0.5f*(lin(x-1,y)+lin(x+1,y)); b=0.5f*(lin(x,y-1)+lin(x,y+1)); }
-                    else   { r=lin(x,y); g=0.25f*(lin(x-1,y)+lin(x+1,y)+lin(x,y-1)+lin(x,y+1)); b=0.25f*(lin(x-1,y-1)+lin(x+1,y-1)+lin(x-1,y+1)+lin(x+1,y+1)); }
-                }else{
-                    if(xe){ b=lin(x,y); g=0.25f*(lin(x-1,y)+lin(x+1,y)+lin(x,y-1)+lin(x,y+1)); r=0.25f*(lin(x-1,y-1)+lin(x+1,y-1)+lin(x-1,y+1)+lin(x+1,y+1)); }
-                    else   { g=lin(x,y); r=0.5f*(lin(x-1,y)+lin(x+1,y)); b=0.5f*(lin(x,y-1)+lin(x,y+1)); }
-                }
+                    break;
+                case 2: // GBRG
+                    if(ye){
+                        if(xe){ // G pixel
+                            g = lin(x,y);
+                            float b_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float b_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            b = (1.0f-vh)*b_h + vh*b_v;
+                            r = b_h;
+                        } else { // B pixel
+                            b = lin(x,y);
+                            float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            g = (1.0f-vh)*g_h + vh*g_v;
+                            float rd1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
+                            float rd2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
+                            r = (vh > 0.5f) ? rd1 : rd2;
+                        }
+                    } else {
+                        if(xe){ // R pixel
+                            r = lin(x,y);
+                            float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            g = (1.0f-vh)*g_h + vh*g_v;
+                            float bd1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
+                            float bd2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
+                            b = (vh > 0.5f) ? bd1 : bd2;
+                        } else { // G pixel
+                            g = lin(x,y);
+                            float r_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float r_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            r = (1.0f-vh)*r_h + vh*r_v;
+                            b = r_h;
+                        }
+                    }
+                    break;
+                case 3: // GRBG
+                default:
+                    if(ye){
+                        if(xe){ // G pixel
+                            g = lin(x,y);
+                            float r_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float r_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            r = (1.0f-vh)*r_h + vh*r_v;
+                            b = r_h;
+                        } else { // R pixel
+                            r = lin(x,y);
+                            float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            g = (1.0f-vh)*g_h + vh*g_v;
+                            float bd1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
+                            float bd2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
+                            b = (vh > 0.5f) ? bd1 : bd2;
+                        }
+                    } else {
+                        if(xe){ // B pixel
+                            b = lin(x,y);
+                            float g_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float g_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            g = (1.0f-vh)*g_h + vh*g_v;
+                            float rd1 = 0.5f*(lin(x-1,y-1)+lin(x+1,y+1));
+                            float rd2 = 0.5f*(lin(x-1,y+1)+lin(x+1,y-1));
+                            r = (vh > 0.5f) ? rd1 : rd2;
+                        } else { // G pixel
+                            g = lin(x,y);
+                            float b_h = 0.5f*(lin(x-1,y)+lin(x+1,y));
+                            float b_v = 0.5f*(lin(x,y-1)+lin(x,y+1));
+                            b = (1.0f-vh)*b_h + vh*b_v;
+                            r = b_h;
+                        }
+                    }
+                    break;
             }
 
             float r_wb = std::clamp(r * p.gainR, 0.0f, 1.0f);
