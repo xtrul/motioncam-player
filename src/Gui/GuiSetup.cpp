@@ -73,42 +73,9 @@ namespace GuiOverlay {
         init_info.DescriptorPool = appInstance->m_imguiDescriptorPool; // App creates and owns this
         init_info.Subpass = 0; // Assuming ImGui renders in the first subpass
 
-        // MinImageCount and ImageCount should match swap chain
-        init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT; // From AppConfig.h via App.h
-        // Get actual swapchain image count from App instance
-        // This requires m_swapChainImages to be accessible or a getter in App
-        // For now, assuming App.h makes m_swapChainImages.size() available or a similar mechanism
-        // If App::m_swapChainImages is private, App needs a public getter or this needs adjustment.
-        // The original App.h has m_swapChainImages as private.
-        // For this refactor, let's assume App will provide a way to get this, or it's made public for setup.
-        // A direct access to appInstance->m_swapChainImages.size() would require it to be public.
-        // Let's assume it's made public for this setup phase, or a getter exists.
-        // If m_swapChainImages is private, this line would be:
-        // init_info.ImageCount = appInstance->getSwapChainImageCount(); // Hypothetical getter
-        // For now, using a placeholder if App.h is strictly followed.
-        // The provided App.h has m_swapChainImages private. This will be an issue.
-        // Let's assume App::m_swapChainImages was made public for this step.
-        // If not, this must be changed.
-        // The original App.cpp has `appInstance->m_swapChainImages.size()`.
-        // This means m_swapChainImages was public or accessible to GuiOverlay::setup.
-        // The refactored App.h made m_swapChainImages private.
-        // This needs to be fixed in App.h or App provides a getter.
-        // For now, I will assume a getter: appInstance->getSwapChainImageCount()
-        // Let's check the original App.h: m_swapChainImages is private.
-        // The original GuiOverlay::setup was a friend or part of App.
-        // Now that GuiOverlay is separate, it needs public access.
-        // I will assume App.h is modified to make m_swapChainImages public or add a getter.
-        // For this pass, I'll assume a getter:
-        // uint32_t appInstanceGetSwapChainImageCount(App* app) { return static_cast<uint32_t>(app->m_swapChainImages.size()); }
-        // This is messy. The best is a public getter in App class.
-        // For now, I'll assume App.h was modified to make m_swapChainImages public for this.
-        // If App::m_swapChainImages is private, this line needs to be:
-        // init_info.ImageCount = appInstance->getSwapChainImageCount(); // Example getter
-        // The prompt for App.h shows m_swapChainImages as private.
-        // The original `GuiOverlay::setup` was a friend of `App`.
-        // This friendship should be maintained or a public getter added to `App`.
-        // The prompt for `App.h` includes: `friend void GuiOverlay::setup(GLFWwindow* window, App* appInstance);`
-        // So, GuiOverlay::setup can access private members of App.
+        // MinImageCount and ImageCount should match the swap chain
+        init_info.MinImageCount = MAX_FRAMES_IN_FLIGHT;
+        // GuiOverlay::setup is a friend of App and can read the swapchain size directly
         init_info.ImageCount = static_cast<uint32_t>(appInstance->m_swapChainImages.size());
 
 
@@ -156,3 +123,4 @@ namespace GuiOverlay {
     }
 
 } // namespace GuiOverlay
+
