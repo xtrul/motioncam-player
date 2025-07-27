@@ -146,19 +146,4 @@ void App::decodeWorkerLoop() {
     }
     LogToFile("[App::decodeWorkerLoop] Decode thread finished.");
 }
-// launchWorkerThreads is defined in AppInit.cpp as part of the constructor logic now
-// or should be called from there if it's meant to be run once.
-// If it's meant to be callable multiple times, its definition can stay in AppDecode.cpp or move to App.cpp (general part).
-// The original App.cpp had it separate. Let's assume it can stay here if it's specifically for decode/IO threads.
-// However, loadFileAtIndex calls it, so it should be a general App method.
-// The prompt put launchWorkerThreads in App.h private section, so its definition should be in one of the App's .cpp files.
-// Let's move its definition to AppInit.cpp as it's typically part of initial setup or file loading.
-// For now, I'll keep it here to match the current error scope, but it's a candidate for moving.
-// **Correction**: The original App.cpp had `launchWorkerThreads` defined. The refactor implies it's a member of App.
-// It's called from `loadFileAtIndex` (in `AppIO.cpp`) and potentially from `App::App` (in `AppInit.cpp`).
-// So, its definition should be in a common `App` source file, or `AppInit.cpp` if primarily for init.
-// The prompt split App.cpp into multiple files. `launchWorkerThreads` was not explicitly assigned.
-// Given its usage, `AppInit.cpp` or a new `App_threads.cpp` would be suitable.
-// For now, I'll assume its definition is correctly placed in `AppInit.cpp` or another `App_*.cpp` file.
-// The error list doesn't show an unresolved external for `launchWorkerThreads`, so it's likely defined somewhere.
-// The `AppDecode.cpp` file only contains `decodeWorkerLoop`.
+

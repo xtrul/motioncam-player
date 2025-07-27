@@ -528,11 +528,7 @@ namespace GuiOverlay {
         ImVec4 originalWindowBg = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
         ImVec4 originalText = ImGui::GetStyle().Colors[ImGuiCol_Text];
 
-        // This gamma correction for ImGui was likely specific to a particular display setup
-        // and might not be universally needed or correct. It's generally better to handle
-        // gamma correction in the final display stage if possible, or ensure Vulkan swapchain
-        // is sRGB if ImGui outputs sRGB colors.
-        // For now, keeping it as it was in the original user-provided code base.
+        // Apply gamma correction to match sRGB output
         ImGui::GetStyle().Colors[ImGuiCol_WindowBg] = ImVec4(
             powf(originalWindowBg.x, 2.2f),
             powf(originalWindowBg.y, 2.2f),
