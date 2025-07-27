@@ -16,11 +16,10 @@
 #include "vma_usage.h" 
 #include "Utils/RawFrameBuffer.h" // For RawBytes
 
-// Include new sub-module headers
 #include "Graphics/VulkanHelpers.h"
-#include "Graphics/ImageResource.h" // ADD THIS LINE
-#include "Graphics/Pipeline.h"      // ADD THIS LINE
-#include "Graphics/Descriptor.h"    // ADD THIS LINE
+#include "Graphics/ImageResource.h"
+#include "Graphics/Pipeline.h"
+#include "Graphics/Descriptor.h"
 #include "Utils/OrientationUtils.h"
 // For VK_CHECK_RENDERER, if used, and helper function declarations
 // Other headers like ImageResource.h, Pipeline.h, Descriptor.h are not directly included here
@@ -52,7 +51,8 @@ public:
         double staticBlack, double staticWhite, int cfaTypeOverride,
         bool forceUpload,
         OrientationTag defaultOrientation,
-        bool containerFlipped
+        bool containerFlipped,
+        int demosaicMode
     );
 
     void recordDrawCommands(
@@ -130,6 +130,7 @@ private:
         alignas(16) glm::mat4 CCM;
         alignas(4) float saturationAdjustment;
         alignas(4) int orientationDegrees;
+        alignas(4) int demosaicMode;
     };
 
     // Internal state not directly manipulated by namespaced helpers
@@ -159,3 +160,4 @@ private:
 };
 
 #endif // RENDERER_VK_H
+

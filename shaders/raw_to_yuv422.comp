@@ -21,68 +21,207 @@ layout(push_constant, std430) uniform PC {
 
 // -----------------------------------------------------------
 uint readRaw(uint x, uint y) { return imageLoad(rawImg, ivec2(x, y)).r; }
+int readClamped(int x,int y){
+    x = clamp(x, 0, int(pc.width) - 1);
+    y = clamp(y, 0, int(pc.height) - 1);
+    return int(readRaw(uint(x), uint(y)));
+}
 
 float normRaw(uint r){
     return clamp(float(r) - float(pc.black), 0.0, float(pc.white - pc.black))
          / float(pc.white - pc.black);
 }
 
-#define RAW(xx,yy) normRaw(readRaw(xx,yy))
+float lin(int x,int y){ return normRaw(readRaw(uint(clamp(x,0,int(pc.width)-1)), uint(clamp(y,0,int(pc.height)-1)))); }
+
+#define RAW(xx,yy) lin(xx,yy)
 
 // -----------------------------------------------------------
-vec3 bayerToRGB(uint x, uint y)
-{
-    bool xe = (x & 1u) == 0u;
-    bool ye = (y & 1u) == 0u;
-    float r = 0.0, g = 0.0, b = 0.0;
+// ---------------- Variable Gradient Demosaic -----------------
+float interpG(int x,int y){ return 0.25*(RAW(x+1,y)+RAW(x-1,y)+RAW(x,y+1)+RAW(x,y-1)); }
+float interpH(int x,int y){ return 0.5*(RAW(x+1,y)+RAW(x-1,y)); }
+float interpV(int x,int y){ return 0.5*(RAW(x,y+1)+RAW(x,y-1)); }
+float interpD(int x,int y){ return 0.25*(RAW(x+1,y+1)+RAW(x-1,y+1)+RAW(x+1,y-1)+RAW(x-1,y-1)); }
 
-    switch(pc.cfaType)
-    {
-    // BGGR --------------------------------------------------
-    case 0u:
+struct Gradients { int n; int ne; int e; int se; int s; int sw; int w; int nw; };
+
+int readRawI(int x,int y){ return readClamped(x,y); }
+
+vec3 bilinearRGB(int x,int y){
+    bool ye = (y & 1) == 0;
+    bool xe = (x & 1) == 0;
+    vec3 c = vec3(0.0);
+    if(pc.cfaType == 0u){
         if(ye){
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-        }else{
-            if(xe){ g=RAW(x,y); b=(RAW(x,y-1)+RAW(x,y+1))*0.5; r=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ c.b = RAW(x,y); c.g = interpG(x,y); c.r = interpD(x,y); }
+            else   { c.g = RAW(x,y); c.r = interpV(x,y); c.b = interpH(x,y); }
+        } else {
+            if(xe){ c.g = RAW(x,y); c.r = interpH(x,y); c.b = interpV(x,y); }
+            else   { c.r = RAW(x,y); c.g = interpG(x,y); c.b = interpD(x,y); }
         }
-        break;
-    // RGGB --------------------------------------------------
-    case 1u:
+    } else if(pc.cfaType == 1u){
         if(ye){
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-        }else{
-            if(xe){ g=RAW(x,y); r=(RAW(x,y-1)+RAW(x,y+1))*0.5; b=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ c.r = RAW(x,y); c.g = interpG(x,y); c.b = interpD(x,y); }
+            else   { c.g = RAW(x,y); c.r = interpH(x,y); c.b = interpV(x,y); }
+        } else {
+            if(xe){ c.g = RAW(x,y); c.r = interpV(x,y); c.b = interpH(x,y); }
+            else   { c.b = RAW(x,y); c.g = interpG(x,y); c.r = interpD(x,y); }
         }
-        break;
-    // GBRG --------------------------------------------------
-    case 2u:
+    } else if(pc.cfaType == 2u){
         if(ye){
-            if(xe){ g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-        }else{
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ c.g = RAW(x,y); c.r = interpV(x,y); c.b = interpH(x,y); }
+            else   { c.b = RAW(x,y); c.g = interpG(x,y); c.r = interpD(x,y); }
+        } else {
+            if(xe){ c.r = RAW(x,y); c.g = interpG(x,y); c.b = interpD(x,y); }
+            else   { c.g = RAW(x,y); c.r = interpH(x,y); c.b = interpV(x,y); }
         }
-        break;
-    // GRBG --------------------------------------------------
-    case 3u:
+    } else { // GRBG
         if(ye){
-            if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-        }else{
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ c.g = RAW(x,y); c.r = interpH(x,y); c.b = interpV(x,y); }
+            else   { c.r = RAW(x,y); c.g = interpG(x,y); c.b = interpD(x,y); }
+        } else {
+            if(xe){ c.b = RAW(x,y); c.g = interpG(x,y); c.r = interpD(x,y); }
+            else   { c.g = RAW(x,y); c.r = interpV(x,y); c.b = interpH(x,y); }
         }
-        break;
     }
+    return c;
+}
 
-    vec3 rgb = vec3(r,g,b);
-    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);           // white balance
-    rgb  = pc.colMat * rgb;                        // sensor → BT.709
+void setup5x5(int cx,int cy,out int pix[25]){
+    int idx=0; for(int yy=-2; yy<=2; ++yy) for(int xx=-2; xx<=2; ++xx) pix[idx++] = readRawI(cx+xx, cy+yy);
+}
+
+void getGradientsForNonGreen(int x,int y,out Gradients g){
+    int p[25]; setup5x5(x,y,p);
+    int pix1=p[0],pix2=p[1],pix3=p[2],pix4=p[3],pix5=p[4];
+    int pix6=p[5],pix7=p[6],pix8=p[7],pix9=p[8],pix10=p[9];
+    int pix11=p[10],pix12=p[11],pix13=p[12],pix14=p[13],pix15=p[14];
+    int pix16=p[15],pix17=p[16],pix18=p[17],pix19=p[18],pix20=p[19];
+    int pix21=p[20],pix22=p[21],pix23=p[22],pix24=p[23],pix25=p[24];
+    g.n  = abs(pix8 - pix18) + abs(pix3 - pix13) +
+           (abs(pix7 - pix17)>>1) + (abs(pix9 - pix19)>>1) +
+           (abs(pix2 - pix12)>>1) + (abs(pix4 - pix14)>>1);
+    g.ne = abs(pix9 - pix17) + abs(pix5 - pix13) +
+           (abs(pix8 - pix12)>>1) + (abs(pix14 - pix18)>>1) +
+           (abs(pix4 - pix8)>>1) + (abs(pix10 - pix14)>>1);
+    g.e  = abs(pix14 - pix12) + abs(pix15 - pix13) +
+           (abs(pix9 - pix7)>>1) + (abs(pix19 - pix17)>>1) +
+           (abs(pix10 - pix8)>>1) + (abs(pix20 - pix18)>>1);
+    g.se = abs(pix19 - pix7) + abs(pix25 - pix13) +
+           (abs(pix14 - pix8)>>1) + (abs(pix18 - pix12)>>1) +
+           (abs(pix20 - pix14)>>1) + (abs(pix24 - pix18)>>1);
+    g.s  = abs(pix18 - pix8) + abs(pix23 - pix13) +
+           (abs(pix19 - pix9)>>1) + (abs(pix17 - pix7)>>1) +
+           (abs(pix24 - pix14)>>1) + (abs(pix22 - pix12)>>1);
+    g.sw = abs(pix17 - pix9) + abs(pix21 - pix13) +
+           (abs(pix18 - pix14)>>1) + (abs(pix12 - pix8)>>1) +
+           (abs(pix22 - pix18)>>1) + (abs(pix16 - pix12)>>1);
+    g.w  = abs(pix12 - pix14) + abs(pix11 - pix13) +
+           (abs(pix17 - pix19)>>1) + (abs(pix7 - pix9)>>1) +
+           (abs(pix16 - pix18)>>1) + (abs(pix6 - pix8)>>1);
+    g.nw = abs(pix7 - pix19) + abs(pix1 - pix13) +
+           (abs(pix12 - pix18)>>1) + (abs(pix8 - pix14)>>1) +
+           (abs(pix6 - pix12)>>1) + (abs(pix2 - pix8)>>1);
+}
+
+void getGradientsForGreen(int x,int y,out Gradients g){
+    int p[25]; setup5x5(x,y,p);
+    int pix1=p[0],pix2=p[1],pix3=p[2],pix4=p[3],pix5=p[4];
+    int pix6=p[5],pix7=p[6],pix8=p[7],pix9=p[8],pix10=p[9];
+    int pix11=p[10],pix12=p[11],pix13=p[12],pix14=p[13],pix15=p[14];
+    int pix16=p[15],pix17=p[16],pix18=p[17],pix19=p[18],pix20=p[19];
+    int pix21=p[20],pix22=p[21],pix23=p[22],pix24=p[23],pix25=p[24];
+    g.n  = abs(pix3 - pix13) + abs(pix8 - pix18) +
+           (abs(pix7 - pix17)>>1) + (abs(pix9 - pix19)>>1) +
+           (abs(pix2 - pix12)>>1) + (abs(pix4 - pix14)>>1);
+    g.ne = abs(pix9 - pix17) + abs(pix5 - pix13) +
+           abs(pix4 - pix12)  + abs(pix10 - pix18);
+    g.e  = abs(pix14 - pix12) + abs(pix15 - pix13) +
+           (abs(pix9 - pix7)>>1) + (abs(pix19 - pix17)>>1) +
+           (abs(pix10 - pix8)>>1) + (abs(pix20 - pix18)>>1);
+    g.se = abs(pix19 - pix7) + abs(pix25 - pix13) +
+           abs(pix20 - pix8) + abs(pix24 - pix12);
+    g.s  = abs(pix18 - pix8) + abs(pix23 - pix13) +
+           (abs(pix19 - pix9)>>1) + (abs(pix17 - pix7)>>1) +
+           (abs(pix24 - pix14)>>1) + (abs(pix22 - pix12)>>1);
+    g.sw = abs(pix17 - pix9) + abs(pix21 - pix13) +
+           abs(pix22 - pix14) + abs(pix16 - pix8);
+    g.w  = abs(pix12 - pix14) + abs(pix11 - pix13) +
+           (abs(pix17 - pix19)>>1) + (abs(pix7 - pix9)>>1) +
+           (abs(pix16 - pix18)>>1) + (abs(pix6 - pix8)>>1);
+    g.nw = abs(pix7 - pix19) + abs(pix1 - pix13) +
+           abs(pix6 - pix18) + abs(pix2 - pix14);
+}
+
+int gradMin(Gradients g){
+    return min(min(min(g.n,g.ne),min(g.e,g.se)),min(min(g.s,g.sw),min(g.w,g.nw)));
+}
+int gradMax(Gradients g){
+    return max(max(max(g.n,g.ne),max(g.e,g.se)),max(max(g.s,g.sw),max(g.w,g.nw)));
+}
+
+bool processGradients(int x,int y,bool useGreen,out vec3 sum,out int numRegions,out vec3 current){
+    Gradients g; if(useGreen) getGradientsForGreen(x,y,g); else getGradientsForNonGreen(x,y,g);
+    int mn = gradMin(g); int mx = gradMax(g);
+    float threshold = 1.5*float(mn) + 0.5*(float(mx - mn));
+    sum = vec3(0.0); numRegions = 0;
+    if(g.n < threshold){ sum += bilinearRGB(x, y-1); numRegions++; }
+    if(g.ne < threshold){ sum += bilinearRGB(x+1,y-1); numRegions++; }
+    if(g.e < threshold){ sum += bilinearRGB(x+1,y); numRegions++; }
+    if(g.se < threshold){ sum += bilinearRGB(x+1,y+1); numRegions++; }
+    if(g.s < threshold){ sum += bilinearRGB(x,y+1); numRegions++; }
+    if(g.sw < threshold){ sum += bilinearRGB(x-1,y+1); numRegions++; }
+    if(g.w < threshold){ sum += bilinearRGB(x-1,y); numRegions++; }
+    if(g.nw < threshold){ sum += bilinearRGB(x-1,y-1); numRegions++; }
+    if(numRegions==0){ sum = current; return false; }
+    return true;
+}
+
+vec3 demosaicVG(int x,int y){
+    vec3 rgb = vec3(0.0);
+    bool ye = (y & 1) == 0;
+    bool xe = (x & 1) == 0;
+    vec3 sum; int regions; vec3 cur;
+    if(pc.cfaType == 0u){
+        if(ye){
+            if(xe){ cur = bilinearRGB(x,y); rgb.b = cur.b; if(processGradients(x,y,false,sum,regions,cur)){ rgb.r = clamp(rgb.b + (sum.r - sum.b)/regions,0.0,1.0); rgb.g = clamp(rgb.b + (sum.g - sum.b)/regions,0.0,1.0); } else { rgb = sum; } }
+            else  { cur = bilinearRGB(x,y); rgb.g = cur.g; if(processGradients(x,y,true,sum,regions,cur)){ rgb.r = clamp(rgb.g + (sum.r - sum.g)/regions,0.0,1.0); rgb.b = clamp(rgb.g + (sum.b - sum.g)/regions,0.0,1.0); } else { rgb = sum; } }
+        } else {
+            if(xe){ cur = bilinearRGB(x,y); rgb.g = cur.g; if(processGradients(x,y,true,sum,regions,cur)){ rgb.r = clamp(rgb.g + (sum.r - sum.g)/regions,0.0,1.0); rgb.b = clamp(rgb.g + (sum.b - sum.g)/regions,0.0,1.0); } else { rgb = sum; } }
+            else  { cur = bilinearRGB(x,y); rgb.r = cur.r; if(processGradients(x,y,false,sum,regions,cur)){ rgb.g = clamp(rgb.r + (sum.g - sum.r)/regions,0.0,1.0); rgb.b = clamp(rgb.r + (sum.b - sum.r)/regions,0.0,1.0); } else { rgb = sum; } }
+        }
+    } else if(pc.cfaType == 1u){
+        if(ye){
+            if(xe){ cur = bilinearRGB(x,y); rgb.r = cur.r; if(processGradients(x,y,false,sum,regions,cur)){ rgb.g = clamp(rgb.r + (sum.g - sum.r)/regions,0.0,1.0); rgb.b = clamp(rgb.r + (sum.b - sum.r)/regions,0.0,1.0); } else { rgb = sum; } }
+            else  { cur = bilinearRGB(x,y); rgb.g = cur.g; if(processGradients(x,y,true,sum,regions,cur)){ rgb.r = clamp(rgb.g + (sum.r - sum.g)/regions,0.0,1.0); rgb.b = clamp(rgb.g + (sum.b - sum.g)/regions,0.0,1.0); } else { rgb = sum; } }
+        } else {
+            if(xe){ cur = bilinearRGB(x,y); rgb.g = cur.g; if(processGradients(x,y,true,sum,regions,cur)){ rgb.r = clamp(rgb.g + (sum.r - sum.g)/regions,0.0,1.0); rgb.b = clamp(rgb.g + (sum.b - sum.g)/regions,0.0,1.0); } else { rgb = sum; } }
+            else  { cur = bilinearRGB(x,y); rgb.b = cur.b; if(processGradients(x,y,false,sum,regions,cur)){ rgb.r = clamp(rgb.b + (sum.r - sum.b)/regions,0.0,1.0); rgb.g = clamp(rgb.b + (sum.g - sum.b)/regions,0.0,1.0); } else { rgb = sum; } }
+        }
+    } else if(pc.cfaType == 2u){
+        if(ye){
+            if(xe){ cur = bilinearRGB(x,y); rgb.g = cur.g; if(processGradients(x,y,true,sum,regions,cur)){ rgb.r = clamp(rgb.g + (sum.r - sum.g)/regions,0.0,1.0); rgb.b = clamp(rgb.g + (sum.b - sum.g)/regions,0.0,1.0); } else { rgb = sum; } }
+            else  { cur = bilinearRGB(x,y); rgb.b = cur.b; if(processGradients(x,y,false,sum,regions,cur)){ rgb.r = clamp(rgb.b + (sum.r - sum.b)/regions,0.0,1.0); rgb.g = clamp(rgb.b + (sum.g - sum.b)/regions,0.0,1.0); } else { rgb = sum; } }
+        } else {
+            if(xe){ cur = bilinearRGB(x,y); rgb.r = cur.r; if(processGradients(x,y,false,sum,regions,cur)){ rgb.g = clamp(rgb.r + (sum.g - sum.r)/regions,0.0,1.0); rgb.b = clamp(rgb.r + (sum.b - sum.r)/regions,0.0,1.0); } else { rgb = sum; } }
+            else  { cur = bilinearRGB(x,y); rgb.g = cur.g; if(processGradients(x,y,true,sum,regions,cur)){ rgb.r = clamp(rgb.g + (sum.r - sum.g)/regions,0.0,1.0); rgb.b = clamp(rgb.g + (sum.b - sum.g)/regions,0.0,1.0); } else { rgb = sum; } }
+        }
+    } else {
+        if(ye){
+            if(xe){ cur = bilinearRGB(x,y); rgb.g = cur.g; if(processGradients(x,y,true,sum,regions,cur)){ rgb.r = clamp(rgb.g + (sum.r - sum.g)/regions,0.0,1.0); rgb.b = clamp(rgb.g + (sum.b - sum.g)/regions,0.0,1.0); } else { rgb = sum; } }
+            else  { cur = bilinearRGB(x,y); rgb.r = cur.r; if(processGradients(x,y,false,sum,regions,cur)){ rgb.g = clamp(rgb.r + (sum.g - sum.r)/regions,0.0,1.0); rgb.b = clamp(rgb.r + (sum.b - sum.r)/regions,0.0,1.0); } else { rgb = sum; } }
+        } else {
+            if(xe){ cur = bilinearRGB(x,y); rgb.b = cur.b; if(processGradients(x,y,false,sum,regions,cur)){ rgb.r = clamp(rgb.b + (sum.r - sum.b)/regions,0.0,1.0); rgb.g = clamp(rgb.b + (sum.g - sum.b)/regions,0.0,1.0); } else { rgb = sum; } }
+            else  { cur = bilinearRGB(x,y); rgb.g = cur.g; if(processGradients(x,y,true,sum,regions,cur)){ rgb.r = clamp(rgb.g + (sum.r - sum.g)/regions,0.0,1.0); rgb.b = clamp(rgb.g + (sum.b - sum.g)/regions,0.0,1.0); } else { rgb = sum; } }
+        }
+    }
+    return rgb;
+}
+
+vec3 bayerToRGB(uint x, uint y){
+    vec3 rgb = demosaicVG(int(x), int(y));
+    rgb *= vec3(pc.wbR, pc.wbG, pc.wbB);        // white balance
+    rgb = pc.colMat * rgb;                      // sensor -> BT.709
     return clamp(rgb, 0.0, 1.0);
 }
 

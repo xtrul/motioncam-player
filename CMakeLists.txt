@@ -231,48 +231,34 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${APP_EXTERNAL_DIR}/tinydngwriter"
 )
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(SDL2_ARCH_SUFFIX "x64")
-else()
-    set(SDL2_ARCH_SUFFIX "x86")
-endif()
-set(SDL2_LIBRARY_DIR "${SDL2_PATH}/lib/${SDL2_ARCH_SUFFIX}")
-
-set(GLFW_LIB_PATH_VC_SPECIFIC "${GLFW_PATH}/lib-vc2022/glfw3.lib")
-if(NOT EXISTS "${GLFW_LIB_PATH_VC_SPECIFIC}" AND WIN32 AND MSVC)
-    message(FATAL_ERROR "Pre-built GLFW library not found at ${GLFW_LIB_PATH_VC_SPECIFIC}. Please check GLFW_PATH or adjust for your compiler.")
-endif()
-
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    motioncam_decoder
-    imgui
-    glm
-    "${GLFW_LIB_PATH_VC_SPECIFIC}"
-    "${SDL2_LIBRARY_DIR}/SDL2.lib"
-    ${Vulkan_LIBRARIES}
-)
-
-# ─── FFmpeg link block (uses imported targets) ────────────────────────
-set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
-set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
-
-target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
-
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    avcodec.lib
-    avformat.lib
-    avutil.lib
-    swscale.lib
-    swresample.lib
-)
-# ───────────────────────────────────────────────────────────────────────
-
 if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(SDL2_ARCH_SUFFIX "x64")
+    else()
+        set(SDL2_ARCH_SUFFIX "x86")
+    endif()
+    set(SDL2_LIBRARY_DIR "${SDL2_PATH}/lib/${SDL2_ARCH_SUFFIX}")
+    set(GLFW_LIB_PATH_VC_SPECIFIC "${GLFW_PATH}/lib-vc2022/glfw3.lib")
+    if(NOT EXISTS "${GLFW_LIB_PATH_VC_SPECIFIC}" AND MSVC)
+        message(FATAL_ERROR "Pre-built GLFW library not found at ${GLFW_LIB_PATH_VC_SPECIFIC}. Please check GLFW_PATH or adjust for your compiler.")
+    endif()
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        motioncam_decoder
+        imgui
+        glm
+        "${GLFW_LIB_PATH_VC_SPECIFIC}"
+        "${SDL2_LIBRARY_DIR}/SDL2.lib"
+        ${Vulkan_LIBRARIES}
+    )
+    set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
+    set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
+    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+    target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        avcodec.lib avformat.lib avutil.lib swscale.lib swresample.lib
+    )
     target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
     if(HAVE_FFMPEG)
-        # Copy required FFmpeg runtime DLLs next to the executable
         set(FFMPEG_RUNTIME_DIR "C:/dev/vcpkg/installed/x64-windows/bin")
         foreach(dll IN ITEMS avcodec-61.dll avformat-61.dll avutil-59.dll swscale-8.dll swresample-5.dll avfilter-10.dll)
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
@@ -288,6 +274,23 @@ if(WIN32)
                 "$<TARGET_FILE_DIR:${PROJECT_NAME}>/avfilter-10.pdb"
             COMMENT "Copying avfilter-10.pdb"
         )
+    endif()
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GLFW3 REQUIRED glfw3)
+    find_package(SDL2 REQUIRED)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${GLFW3_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        motioncam_decoder
+        imgui
+        glm
+        ${Vulkan_LIBRARIES}
+        ${GLFW3_LIBRARIES}
+        SDL2::SDL2
+    )
+    if(HAVE_FFMPEG)
+        target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
     endif()
 endif()
 

@@ -38,41 +38,7 @@ namespace Descriptor {
     bool createUniformBuffers(Renderer_VK* renderer) {
         cleanupUniformBuffers(renderer); // Clean up old ones first
 
-        // Accessing ShaderParamsUBO requires Renderer_VK.h to be more complete or ShaderParamsUBO to be moved.
-        // For now, assuming Renderer_VK.h has its definition or it's forward-declared and sized correctly.
-        // The definition of ShaderParamsUBO is private in Renderer_VK.h. This will require a friend declaration or moving ShaderParamsUBO.
-        // For simplicity in this step, let's assume sizeof can get it or it's a known fixed size.
-        // A better solution is to make ShaderParamsUBO accessible or pass its size.
-        // For now, we'll proceed assuming Renderer_VK::ShaderParamsUBO is somehow accessible for sizeof.
-        // This will be an issue if ShaderParamsUBO is not defined in a way that sizeof works here.
-        // Let's assume Renderer_VK.h was updated to make ShaderParamsUBO's size known or the struct public.
-        // If not, this would be: struct ShaderParamsUBO { ... }; here or in a shared header.
-        // For now, we'll use a placeholder size if it's not available.
-        // A more robust way: Renderer_VK could have a static constexpr member for UBO size.
-        // For now, let's assume Renderer_VK.h has:
-        // struct ShaderParamsUBO { ... }; (public or friend access)
-        // VkDeviceSize bufferSize = sizeof(Renderer_VK::ShaderParamsUBO);
-        // However, ShaderParamsUBO is private. This is a design flaw in the split if not addressed.
-        // Let's assume Renderer_VK provides a method or a public constant for this size.
-        // If not, we must estimate or make ShaderParamsUBO public.
-        // For this refactor, I will assume ShaderParamsUBO has been made accessible for sizeof.
-        // (This would require editing Renderer_VK.h to make ShaderParamsUBO public or providing a getter for its size)
-        // For the sake of continuing, I'll use a hardcoded estimate if needed, but this is bad practice.
-        // Let's assume the struct definition was moved to a common header or made public in Renderer_VK.h.
-        // If Renderer_VK.h is as provided, this `sizeof` will fail.
-        // The prompt for Renderer_VK.h did not make ShaderParamsUBO public.
-        // This needs to be resolved. For now, I'll assume it's resolved by making it public in Renderer_VK.h
-        // or moving it to a shared header.
-        // The struct `ShaderParamsUBO` is defined as private in `Renderer_VK.h`.
-        // To make this compile, `ShaderParamsUBO` needs to be public, or its size exposed.
-        // Let's assume for this step that `Renderer_VK::ShaderParamsUBO` was made public.
-        struct TempShaderParamsUBO { // Local definition to get sizeof, assuming it matches the private one.
-            alignas(4) int W; alignas(4) int H; alignas(4) int cfaType; alignas(4) float exposure;
-            alignas(4) float blackLevel; alignas(4) float whiteLevel; alignas(4) float invBlackWhiteRange;
-            alignas(4) float gainR; alignas(4) float gainG; alignas(4) float gainB;
-            alignas(16) glm::mat4 CCM; alignas(4) float saturationAdjustment; alignas(4) int orientationDegrees;
-        };
-        VkDeviceSize bufferSize = sizeof(TempShaderParamsUBO);
+        VkDeviceSize bufferSize = sizeof(Renderer_VK::ShaderParamsUBO);
 
 
         renderer->m_uniformBuffers.resize(renderer->m_swapChainImageCount);
@@ -212,13 +178,6 @@ namespace Descriptor {
         }
         LogToFile(std::string("[Descriptor::updateDescriptorSetsWithNewRawImage] Updating ") + std::to_string(renderer->m_descriptorSets.size()) + " descriptor sets.");
 
-        struct TempShaderParamsUBO { // Copied from createUniformBuffers, assuming public access for sizeof
-            alignas(4) int W; alignas(4) int H; alignas(4) int cfaType; alignas(4) float exposure;
-            alignas(4) float blackLevel; alignas(4) float whiteLevel; alignas(4) float invBlackWhiteRange;
-            alignas(4) float gainR; alignas(4) float gainG; alignas(4) float gainB;
-            alignas(16) glm::mat4 CCM; alignas(4) float saturationAdjustment; alignas(4) int orientationDegrees;
-        };
-
         for (size_t i = 0; i < renderer->m_descriptorSets.size(); ++i) {
             if (i >= renderer->m_uniformBuffers.size() || renderer->m_uniformBuffers[i] == VK_NULL_HANDLE) {
                 LogToFile(std::string("[Descriptor::updateDescriptorSetsWithNewRawImage] ERROR: Uniform buffer for set ") + std::to_string(i) + " is invalid. Skipping.");
@@ -233,7 +192,7 @@ namespace Descriptor {
             VkDescriptorBufferInfo bufferInfo{};
             bufferInfo.buffer = renderer->m_uniformBuffers[i];
             bufferInfo.offset = 0;
-            bufferInfo.range = sizeof(TempShaderParamsUBO); // Using local temp struct for sizeof
+            bufferInfo.range = sizeof(Renderer_VK::ShaderParamsUBO);
 
             std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -257,3 +216,4 @@ namespace Descriptor {
     }
 
 } // namespace Descriptor
+
