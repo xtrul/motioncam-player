@@ -10,6 +10,10 @@ static inline float srgb_eotf(float v) {
     return (v <= 0.0031308f) ? v * 12.92f : 1.055f * std::pow(v, 1.0f/2.4f) - 0.055f;
 }
 
+static inline float lerp(float a, float b, float t) {
+    return a * (1.0f - t) + b * t;
+}
+
 static inline uint16_t readU16(const uint16_t* src, int x, int y, int w, int h) {
     x = std::clamp(x,0,w-1);
     y = std::clamp(y,0,h-1);
@@ -279,13 +283,99 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
         }
     };
 
+    auto vh_calc=[&](int x,int y){
+        float sx=0.0f, sy=0.0f;
+        for(int i=-1;i<=1;++i){
+            sx += lin(x+i,y-3) - 3.0f*lin(x+i,y-2) - lin(x+i,y-1) + 6.0f*lin(x+i,y) - lin(x+i,y+1) - 3.0f*lin(x+i,y+2) + lin(x+i,y+3);
+            sy += lin(x-3,y+i) - 3.0f*lin(x-2,y+i) - lin(x-1,y+i) + 6.0f*lin(x,y+i) - lin(x+1,y+i) - 3.0f*lin(x+2,y+i) + lin(x+3,y+i);
+        }
+        float sx2=sx*sx, sy2=sy*sy;
+        return (sx2)/(1e-5f + sx2 + sy2);
+    };
+
+    auto pq_calc=[&](int x,int y){
+        float a=1e-5f,bv=1e-5f;
+        for(int i=-1;i<=1;++i){
+            a += lin(x-3+i,y-3+i) - lin(x+1+i,y-1+i) - lin(x+1+i,y+1+i) + lin(x+3+i,y+3+i)
+                -3.0f*(lin(x-2+i,y-2+i)+lin(x+2+i,y+2+i)) + 6.0f*lin(x+i,y+i);
+            bv += lin(x+3+i,y-3-i) - lin(x+1+i,y-1-i) - lin(x-1+i,y+1-i) + lin(x-3+i,y+3-i)
+                -3.0f*(lin(x+2+i,y-2-i)+lin(x-2+i,y+2-i)) + 6.0f*lin(x+i,y-i);
+        }
+        a*=a; bv*=bv; return a/(a+bv);
+    };
+
+    auto lp_calc=[&](int x,int y){
+        float lp=0.0f; int off=((x & 1)==1)?-1:1; const float w[3]={0.5f,1.0f,0.5f};
+        for(int j=-1;j<=1;++j) for(int i=-1;i<=1;++i) lp+=w[j+1]*w[i+1]*lin(x+i+off,y+j);
+        return std::max(1e-6f, lp);
+    };
+
+    auto demosaicRCD=[&](int x,int y,float& r,float& g,float& b){
+        bool is_green=((x+y)&1)==1;
+        int redX = (p.cfaType==0 || p.cfaType==3) ? 1 : 0;
+        int redY = (p.cfaType==0 || p.cfaType==2) ? 1 : 0;
+        bool is_red = ((x & 1) == redX) && ((y & 1) == redY);
+        const float eps=1e-5f;
+        if(is_green){
+            g=lin(x,y);
+            float vh_val=vh_calc(x,y);
+            float vh_neighbor=0.25f*(vh_calc(x-1,y-1)+vh_calc(x+1,y-1)+vh_calc(x-1,y+1)+vh_calc(x+1,y+1));
+            float vh_discr=std::abs(0.5f - vh_val) < std::abs(0.5f - vh_neighbor) ? vh_neighbor : vh_val;
+            float N_grad=eps+std::abs(lin(x,y-1)-lin(x,y+1))+std::abs(lin(x,y)-lin(x,y-2));
+            float S_grad=eps+std::abs(lin(x,y-1)-lin(x,y+1))+std::abs(lin(x,y)-lin(x,y+2));
+            float W_grad=eps+std::abs(lin(x-1,y)-lin(x+1,y))+std::abs(lin(x,y)-lin(x-2,y));
+            float E_grad=eps+std::abs(lin(x-1,y)-lin(x+1,y))+std::abs(lin(x,y)-lin(x+2,y));
+            float lp=lp_calc(x,y);
+            float r_N=lin(x,y-1)*2.0f*lp/(eps+lp+lp_calc(x,y-2));
+            float r_S=lin(x,y+1)*2.0f*lp/(eps+lp+lp_calc(x,y+2));
+            float r_W=lin(x-1,y)*2.0f*lp/(eps+lp+lp_calc(x-2,y));
+            float r_E=lin(x+1,y)*2.0f*lp/(eps+lp+lp_calc(x+2,y));
+            float r_v=(S_grad*r_N+N_grad*r_S)/(N_grad+S_grad);
+            float r_h=(E_grad*r_W+W_grad*r_E)/(E_grad+W_grad);
+            r=lerp(r_v,r_h,vh_discr);
+            float b_N=lin(x,y-1)*2.0f*lp/(eps+lp+lp_calc(x,y-2));
+            float b_S=lin(x,y+1)*2.0f*lp/(eps+lp+lp_calc(x,y+2));
+            float b_W=lin(x-1,y)*2.0f*lp/(eps+lp+lp_calc(x-2,y));
+            float b_E=lin(x+1,y)*2.0f*lp/(eps+lp+lp_calc(x+2,y));
+            float b_v=(S_grad*b_N+N_grad*b_S)/(N_grad+S_grad);
+            float b_h=(E_grad*b_W+W_grad*b_E)/(E_grad+W_grad);
+            b=lerp(b_v,b_h,vh_discr);
+        }else{
+            float c=lin(x,y);
+            float vh_val=vh_calc(x,y);
+            float vh_neighbor=0.25f*(vh_calc(x-1,y-1)+vh_calc(x+1,y-1)+vh_calc(x-1,y+1)+vh_calc(x+1,y+1));
+            float vh_discr=std::abs(0.5f - vh_val) < std::abs(0.5f - vh_neighbor) ? vh_neighbor : vh_val;
+            float N=lin(x,y-1), S=lin(x,y+1), W=lin(x-1,y), E=lin(x+1,y);
+            float N_grad=eps+std::abs(N-lin(x,y+1))+std::abs(lin(x,y-1)-lin(x,y-3));
+            float S_grad=eps+std::abs(S-lin(x,y-1))+std::abs(lin(x,y+1)-lin(x,y+3));
+            float W_grad=eps+std::abs(W-lin(x+1,y))+std::abs(lin(x-1,y)-lin(x-3,y));
+            float E_grad=eps+std::abs(E-lin(x-1,y))+std::abs(lin(x+1,y)-lin(x+3,y));
+            float lp=lp_calc(x,y);
+            float g_N=N*2.0f*lp/(eps+lp+lp_calc(x,y-2));
+            float g_S=S*2.0f*lp/(eps+lp+lp_calc(x,y+2));
+            float g_W=W*2.0f*lp/(eps+lp+lp_calc(x-2,y));
+            float g_E=E*2.0f*lp/(eps+lp+lp_calc(x+2,y));
+            float g_v=(S_grad*g_N+N_grad*g_S)/(N_grad+S_grad);
+            float g_h=(E_grad*g_W+W_grad*g_E)/(E_grad+W_grad);
+            g=lerp(g_v,g_h,vh_discr);
+            float pq_val=pq_calc(x,y);
+            float pq_neighbor=0.25f*(pq_calc(x-1,y-1)+pq_calc(x+1,y-1)+pq_calc(x-1,y+1)+pq_calc(x+1,y+1));
+            float pq_discr=std::abs(0.5f-pq_val)<std::abs(0.5f-pq_neighbor)?pq_neighbor:pq_val;
+            float NW=lin(x-1,y-1)-(lin(x-1,y)+lin(x,y-1))*0.5f+g;
+            float NE=lin(x+1,y-1)-(lin(x+1,y)+lin(x,y-1))*0.5f+g;
+            float SW=lin(x-1,y+1)-(lin(x-1,y)+lin(x,y+1))*0.5f+g;
+            float SE=lin(x+1,y+1)-(lin(x+1,y)+lin(x,y+1))*0.5f+g;
+            float p=(NW+SE)*0.5f; float q=(NE+SW)*0.5f; float other=lerp(p,q,pq_discr);
+            if(is_red){ r=c; b=other; } else { b=c; r=other; }
+        }
+    };
+
     const float* ccm = p.ccm.data();
 
     auto processRow = [&](int y){
         for(int x=0;x<p.width;++x){
             float r=0.0f,g=0.0f,b=0.0f;
-            if(p.demosaicMode==1) demosaicVG(x,y,r,g,b);
-            else bilinearRGB(x,y,r,g,b);
+            demosaicRCD(x,y,r,g,b);
             float r_wb = std::clamp(r * p.gainR, 0.0f, 1.0f);
             float g_wb = std::clamp(g * p.gainG, 0.0f, 1.0f);
             float b_wb = std::clamp(b * p.gainB, 0.0f, 1.0f);

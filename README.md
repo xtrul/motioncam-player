@@ -67,7 +67,7 @@ runtime DLLs will be copied automatically.
   video packets were written.
 - You can override the detected CFA pattern at runtime by pressing the number
   keys `1`‑`4` which map to **BGGR**, **RGGB**, **GBRG**, and **GRBG** respectively.
-- Variable gradient demosaicing is always used for all export and preview paths.
+- RCD demosaicing is used for all export and preview paths.
 
 ### GPU ProRes Conversion
 
@@ -75,6 +75,7 @@ runtime DLLs will be copied automatically.
 - The log prints `MODE = GPU (Vulkan hw_frames)` when this path is used.
 - If initialization of Vulkan hardware frames fails it falls back to the CPU path automatically.
 - When GPU processing is active additional `[GPU]` log lines confirm the compute pipeline ran.
+- Details from these GPU runs are also written to `gpu_log.txt` in the `Logs` folder.
 
 ## DNxHR Export
 

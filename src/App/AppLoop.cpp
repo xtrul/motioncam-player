@@ -398,8 +398,7 @@ void App::drawFrame() {
                 m_staticBlack, m_staticWhite, m_cfaOverride.value_or(m_cfaTypeFromMetadata),
                 needsFreshUploadFromStaging,
                 m_containerOrientationTag,
-                m_containerFlipped,
-                m_demosaicMode
+                m_containerFlipped
             );
             // Always clear to black when there is video content
             clearColorValue.color = { {0.0f, 0.0f, 0.0f, 1.0f} };
