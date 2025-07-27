@@ -1,0 +1,77 @@
+#version 460
+layout(binding = 0) uniform sampler2D img_cfa;
+layout(binding = 1) uniform sampler2D img_vh;
+layout(binding = 2) uniform sampler2D img_pq;
+layout(binding = 3) uniform sampler2D img_lp;
+layout(binding = 4, rgba32f) uniform writeonly image2D img_out;
+layout(push_constant) uniform PushConstants { vec4 wb; } push;
+layout(local_size_x = 16, local_size_y = 16) in;
+
+void main(){
+    ivec2 ipos = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = textureSize(img_cfa,0);
+    if(any(greaterThanEqual(ipos,size))) return;
+#define cfa(x,y) texelFetch(img_cfa, ivec2(ipos.x+(x), ipos.y+(y)),0).r
+#define vh(x,y) texelFetch(img_vh, ivec2(ipos.x+(x), ipos.y+(y)),0).r
+#define pq(x,y) texelFetch(img_pq, ivec2((ipos.x+(x)+(((ipos.y+(y))&1)==1?0:1))/2, ipos.y+(y)),0).r
+#define lp(x,y) texelFetch(img_lp, ivec2((ipos.x+(x)+(((ipos.y+(y))&1)==1?0:1))/2, ipos.y+(y)),0).r
+    bool is_green=((ipos.x+ipos.y)&1)==1;
+    bool is_red=!is_green && ((ipos.y&1)==0);
+    float r,g,b; const float eps=1e-5;
+    if(is_green){
+        g=cfa(0,0);
+        float vh_val=vh(0,0);
+        float vh_neighbor=0.25*(vh(-1,-1)+vh(1,-1)+vh(-1,1)+vh(1,1));
+        float vh_discr=abs(0.5 - vh_val) < abs(0.5 - vh_neighbor) ? vh_val : vh_neighbor;
+        float N_grad=eps+abs(cfa(0,-1)-cfa(0,1))+abs(cfa(0,0)-cfa(0,-2));
+        float S_grad=eps+abs(cfa(0,-1)-cfa(0,1))+abs(cfa(0,0)-cfa(0,2));
+        float W_grad=eps+abs(cfa(-1,0)-cfa(1,0))+abs(cfa(0,0)-cfa(-2,0));
+        float E_grad=eps+abs(cfa(-1,0)-cfa(1,0))+abs(cfa(0,0)-cfa(2,0));
+        float r_N=cfa(0,-1)*2.0*lp(0,0)/(eps+lp(0,0)+lp(0,-2));
+        float r_S=cfa(0,1)*2.0*lp(0,0)/(eps+lp(0,0)+lp(0,2));
+        float r_W=cfa(-1,0)*2.0*lp(0,0)/(eps+lp(0,0)+lp(-2,0));
+        float r_E=cfa(1,0)*2.0*lp(0,0)/(eps+lp(0,0)+lp(2,0));
+        float r_v=(S_grad*r_N+N_grad*r_S)/(N_grad+S_grad);
+        float r_h=(E_grad*r_W+W_grad*r_E)/(E_grad+W_grad);
+        r=mix(r_v,r_h,vh_discr);
+        float b_N=cfa(0,-1)*2.0*lp(0,0)/(eps+lp(0,0)+lp(0,-2));
+        float b_S=cfa(0,1)*2.0*lp(0,0)/(eps+lp(0,0)+lp(0,2));
+        float b_W=cfa(-1,0)*2.0*lp(0,0)/(eps+lp(0,0)+lp(-2,0));
+        float b_E=cfa(1,0)*2.0*lp(0,0)/(eps+lp(0,0)+lp(2,0));
+        float b_v=(S_grad*b_N+N_grad*b_S)/(N_grad+S_grad);
+        float b_h=(E_grad*b_W+W_grad*b_E)/(E_grad+W_grad);
+        b=mix(b_v,b_h,vh_discr);
+    }else{
+        float c=cfa(0,0);
+        float vh_val=vh(0,0);
+        float vh_neighbor=0.25*(vh(-1,-1)+vh(1,-1)+vh(-1,1)+vh(1,1));
+        float vh_discr=abs(0.5 - vh_val) < abs(0.5 - vh_neighbor) ? vh_val : vh_neighbor;
+        float N=cfa(0,-1), S=cfa(0,1), W=cfa(-1,0), E=cfa(1,0);
+        float N_grad=eps+abs(N-cfa(0,1))+abs(cfa(0,-1)-cfa(0,-3));
+        float S_grad=eps+abs(S-cfa(0,-1))+abs(cfa(0,1)-cfa(0,3));
+        float W_grad=eps+abs(W-cfa(1,0))+abs(cfa(-1,0)-cfa(-3,0));
+        float E_grad=eps+abs(E-cfa(-1,0))+abs(cfa(1,0)-cfa(3,0));
+        float g_N=N*2.0*lp(0,0)/(eps+lp(0,0)+lp(0,-2));
+        float g_S=S*2.0*lp(0,0)/(eps+lp(0,0)+lp(0,2));
+        float g_W=W*2.0*lp(0,0)/(eps+lp(0,0)+lp(-2,0));
+        float g_E=E*2.0*lp(0,0)/(eps+lp(0,0)+lp(2,0));
+        float g_v=(S_grad*g_N+N_grad*g_S)/(N_grad+S_grad);
+        float g_h=(E_grad*g_W+W_grad*g_E)/(E_grad+W_grad);
+        g=mix(g_v,g_h,vh_discr);
+        float pq_val=pq(0,0);
+        float pq_neighbor=0.25*(pq(-1,-1)+pq(1,-1)+pq(-1,1)+pq(1,1));
+        float pq_discr=abs(0.5 - pq_val) < abs(0.5 - pq_neighbor) ? pq_val : pq_neighbor;
+        float NW=cfa(-1,-1)-(cfa(-1,0)+cfa(0,-1))*0.5+g;
+        float NE=cfa(1,-1)-(cfa(1,0)+cfa(0,-1))*0.5+g;
+        float SW=cfa(-1,1)-(cfa(-1,0)+cfa(0,1))*0.5+g;
+        float SE=cfa(1,1)-(cfa(1,0)+cfa(0,1))*0.5+g;
+        float p=(NW+SE)*0.5; float q=(NE+SW)*0.5; float other=mix(p,q,pq_discr);
+        if(is_red){ r=c; b=other; } else { b=c; r=other; }
+    }
+    vec4 color=vec4(r*push.wb.r, g*push.wb.g, b*push.wb.b, 1.0);
+    imageStore(img_out, ipos, color);
+#undef cfa
+#undef vh
+#undef pq
+#undef lp
+}

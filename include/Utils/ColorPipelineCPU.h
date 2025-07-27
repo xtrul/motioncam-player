@@ -7,7 +7,7 @@ struct CPUColorParams {
     int width{0};
     int height{0};
     int cfaType{0}; // 0 BGGR,1 RGGB,2 GBRG,3 GRBG
-    int demosaicMode{1}; // 0 bilinear, 1 variable gradient
+    int demosaicMode{1}; // 0 bilinear, 1 variable gradient, 2 RCD
     double blackLevel{0.0};
     double whiteLevel{65535.0};
     float gainR{1.0f};

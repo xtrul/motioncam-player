@@ -19,7 +19,7 @@ layout(binding = 1) uniform ShaderParams {
     mat4 CCM; // Pass as mat4, use top-left 3x3
     float saturationAdjustment; // e.g., 1.0 for no change, 1.25 for +25%
     int orientationDegrees;
-    int demosaicMode; // 0 bilinear, 1 variable gradient
+    int demosaicMode; // 0 bilinear, 1 variable gradient, 2 RCD
 } params;
 
 // sRGB EOTF (gamma correction)
