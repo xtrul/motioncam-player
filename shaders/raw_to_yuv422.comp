@@ -81,15 +81,127 @@ vec3 bayerToRGB(uint x, uint y)
             }
         }
         break;
-    default:
-        // For other patterns fall back to simple bilinear
+    // RGGB --------------------------------------------------
+    case 1u:
         if(ye){
-            if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){
+                r = RAW(x,y);
+                float g_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float g_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                g = mix(g_v, g_h, vh);
+                float bd1 = 0.5*(RAW(x-1,y-1)+RAW(x+1,y+1));
+                float bd2 = 0.5*(RAW(x-1,y+1)+RAW(x+1,y-1));
+                b = mix(bd1, bd2, vh);
+            } else {
+                g = RAW(x,y);
+                float b_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float b_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                b = mix(b_v, b_h, vh);
+                float r_h = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                float r_v = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                r = mix(r_h, r_v, vh);
+            }
         }else{
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){
+                g = RAW(x,y);
+                float r_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float r_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                r = mix(r_v, r_h, vh);
+                float b_h = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                float b_v = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                b = mix(b_h, b_v, vh);
+            } else {
+                b = RAW(x,y);
+                float g_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float g_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                g = mix(g_v, g_h, vh);
+                float rd1 = 0.5*(RAW(x-1,y-1)+RAW(x+1,y+1));
+                float rd2 = 0.5*(RAW(x-1,y+1)+RAW(x+1,y-1));
+                r = mix(rd1, rd2, vh);
+            }
         }
+        break;
+    // GBRG --------------------------------------------------
+    case 2u:
+        if(ye){
+            if(xe){
+                g = RAW(x,y);
+                float b_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float b_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                b = mix(b_h, b_v, vh);
+                float r_h = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                float r_v = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                r = mix(r_h, r_v, vh);
+            } else {
+                b = RAW(x,y);
+                float g_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float g_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                g = mix(g_h, g_v, vh);
+                float rd1 = 0.5*(RAW(x-1,y-1)+RAW(x+1,y+1));
+                float rd2 = 0.5*(RAW(x-1,y+1)+RAW(x+1,y-1));
+                r = mix(rd1, rd2, vh);
+            }
+        }else{
+            if(xe){
+                r = RAW(x,y);
+                float g_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float g_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                g = mix(g_h, g_v, vh);
+                float bd1 = 0.5*(RAW(x-1,y-1)+RAW(x+1,y+1));
+                float bd2 = 0.5*(RAW(x-1,y+1)+RAW(x+1,y-1));
+                b = mix(bd1, bd2, vh);
+            } else {
+                g = RAW(x,y);
+                float r_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float r_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                r = mix(r_h, r_v, vh);
+                float b_h = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                float b_v = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                b = mix(b_v, b_h, vh);
+            }
+        }
+        break;
+    // GRBG --------------------------------------------------
+    case 3u:
+        if(ye){
+            if(xe){
+                g = RAW(x,y);
+                float r_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float r_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                r = mix(r_h, r_v, vh);
+                float b_h = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                float b_v = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                b = mix(b_v, b_h, vh);
+            } else {
+                r = RAW(x,y);
+                float g_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float g_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                g = mix(g_h, g_v, vh);
+                float bd1 = 0.5*(RAW(x-1,y-1)+RAW(x+1,y+1));
+                float bd2 = 0.5*(RAW(x-1,y+1)+RAW(x+1,y-1));
+                b = mix(bd1, bd2, vh);
+            }
+        }else{
+            if(xe){
+                b = RAW(x,y);
+                float g_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float g_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                g = mix(g_h, g_v, vh);
+                float rd1 = 0.5*(RAW(x-1,y-1)+RAW(x+1,y+1));
+                float rd2 = 0.5*(RAW(x-1,y+1)+RAW(x+1,y-1));
+                r = mix(rd1, rd2, vh);
+            } else {
+                g = RAW(x,y);
+                float b_h = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                float b_v = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                b = mix(b_h, b_v, vh);
+                float r_h = 0.5*(RAW(x,y-1)+RAW(x,y+1));
+                float r_v = 0.5*(RAW(x-1,y)+RAW(x+1,y));
+                r = mix(r_v, r_h, vh);
+            }
+        }
+        break;
+    default:
         break;
     }
 

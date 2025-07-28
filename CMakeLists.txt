@@ -109,6 +109,8 @@ set(SHADER_FILES
     "${APP_SHADERS_SRC_DIR}/fullscreen_quad.vert"
     "${APP_SHADERS_SRC_DIR}/image_process.frag"
     "${APP_SHADERS_SRC_DIR}/raw_to_yuv422.comp"
+    "${APP_SHADERS_SRC_DIR}/rcd_conv.comp"
+    "${APP_SHADERS_SRC_DIR}/rcd_fill.comp"
 )
 set(COMPILED_SHADER_OUTPUTS "")
 foreach(SHADER_INPUT_FILE ${SHADER_FILES})
@@ -243,30 +245,49 @@ if(NOT EXISTS "${GLFW_LIB_PATH_VC_SPECIFIC}" AND WIN32 AND MSVC)
     message(FATAL_ERROR "Pre-built GLFW library not found at ${GLFW_LIB_PATH_VC_SPECIFIC}. Please check GLFW_PATH or adjust for your compiler.")
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    motioncam_decoder
-    imgui
-    glm
-    "${GLFW_LIB_PATH_VC_SPECIFIC}"
-    "${SDL2_LIBRARY_DIR}/SDL2.lib"
-    ${Vulkan_LIBRARIES}
-)
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        motioncam_decoder
+        imgui
+        glm
+        "${GLFW_LIB_PATH_VC_SPECIFIC}"
+        "${SDL2_LIBRARY_DIR}/SDL2.lib"
+        ${Vulkan_LIBRARIES}
+    )
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED sdl2)
+    pkg_check_modules(GLFW REQUIRED glfw3)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_INCLUDE_DIRS} ${GLFW_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        motioncam_decoder
+        imgui
+        glm
+        ${GLFW_LIBRARIES}
+        ${SDL2_LIBRARIES}
+        ${Vulkan_LIBRARIES}
+    )
+endif()
 
 # ─── FFmpeg link block (uses imported targets) ────────────────────────
-set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
-set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
+if(WIN32)
+    set(FFMPEG_INCLUDE_DIR "C:/dev/vcpkg/installed/x64-windows/include")
+    set(FFMPEG_LIBRARY_DIR "C:/dev/vcpkg/installed/x64-windows/lib")
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
+    target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
 
-target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
-
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    avcodec.lib
-    avformat.lib
-    avutil.lib
-    swscale.lib
-    swresample.lib
-)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        avcodec.lib
+        avformat.lib
+        avutil.lib
+        swscale.lib
+        swresample.lib
+    )
+elseif(HAVE_FFMPEG)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
+endif()
 # ───────────────────────────────────────────────────────────────────────
 
 if(WIN32)
