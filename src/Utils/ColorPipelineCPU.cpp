@@ -22,7 +22,8 @@ static inline float linFromRaw(uint16_t v, double black, double invRange) {
 }
 
 void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
-                       std::vector<uint8_t>& outRGB, unsigned threads)
+                       std::vector<uint8_t>& outRGB, unsigned threads,
+                       bool useAdvanced)
 {
     outRGB.resize(p.width * p.height * 3);
     double range = p.whiteLevel - p.blackLevel;
@@ -35,6 +36,13 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
     auto interpH = [&](int x, int y)->float{ return 0.5f*(lin(x+1,y)+lin(x-1,y));};
     auto interpV = [&](int x, int y)->float{ return 0.5f*(lin(x,y+1)+lin(x,y-1));};
     auto interpD = [&](int x, int y)->float{ return 0.25f*(lin(x+1,y+1)+lin(x-1,y+1)+lin(x+1,y-1)+lin(x-1,y-1));};
+    auto edgeG = [&](int x,int y)->float{
+        float gh = std::abs(lin(x-1,y)-lin(x+1,y)) + std::abs(lin(x-2,y)-lin(x+2,y));
+        float gv = std::abs(lin(x,y-1)-lin(x,y+1)) + std::abs(lin(x,y-2)-lin(x,y+2));
+        if(gh < gv) return 0.5f*(lin(x-1,y)+lin(x+1,y));
+        if(gv < gh) return 0.5f*(lin(x,y-1)+lin(x,y+1));
+        return 0.25f*(lin(x-1,y)+lin(x+1,y)+lin(x,y-1)+lin(x,y+1));
+    };
 
     const float* ccm = p.ccm.data();
 
@@ -46,37 +54,37 @@ void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& p,
             switch(p.cfaType){
                 case 0: // BGGR
                     if(ye){
-                        if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+                        if(xe){ b=lin(x,y); g=useAdvanced?edgeG(x,y):interpG(x,y); r=interpD(x,y); }
                         else { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
                     }else{
                         if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
-                        else { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+                        else { r=lin(x,y); g=useAdvanced?edgeG(x,y):interpG(x,y); b=interpD(x,y); }
                     }
                     break;
                 case 1: // RGGB
                     if(ye){
-                        if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+                        if(xe){ r=lin(x,y); g=useAdvanced?edgeG(x,y):interpG(x,y); b=interpD(x,y); }
                         else { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
                     }else{
                         if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
-                        else { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+                        else { b=lin(x,y); g=useAdvanced?edgeG(x,y):interpG(x,y); r=interpD(x,y); }
                     }
                     break;
                 case 2: // GBRG
                     if(ye){
                         if(xe){ g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
-                        else { b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+                        else { b=lin(x,y); g=useAdvanced?edgeG(x,y):interpG(x,y); r=interpD(x,y); }
                     }else{
-                        if(xe){ r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+                        if(xe){ r=lin(x,y); g=useAdvanced?edgeG(x,y):interpG(x,y); b=interpD(x,y); }
                         else { g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
                     }
                     break;
                 default: // GRBG
                     if(ye){
                         if(xe){ g=lin(x,y); r=interpH(x,y); b=interpV(x,y); }
-                        else { r=lin(x,y); g=interpG(x,y); b=interpD(x,y); }
+                        else { r=lin(x,y); g=useAdvanced?edgeG(x,y):interpG(x,y); b=interpD(x,y); }
                     }else{
-                        if(xe){ b=lin(x,y); g=interpG(x,y); r=interpD(x,y); }
+                        if(xe){ b=lin(x,y); g=useAdvanced?edgeG(x,y):interpG(x,y); r=interpD(x,y); }
                         else { g=lin(x,y); r=interpV(x,y); b=interpH(x,y); }
                     }
                     break;

@@ -17,4 +17,5 @@ struct CPUColorParams {
 };
 
 void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& params,
-                       std::vector<uint8_t>& outRGB, unsigned threads = 1);
+                       std::vector<uint8_t>& outRGB, unsigned threads = 1,
+                       bool useAdvanced = true);
