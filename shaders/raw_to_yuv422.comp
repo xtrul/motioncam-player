@@ -27,7 +27,21 @@ float normRaw(uint r){
          / float(pc.white - pc.black);
 }
 
-#define RAW(xx,yy) normRaw(readRaw(xx,yy))
+#define RAW(xx,yy) normRaw(readRaw(uint(xx),uint(yy)))
+
+float rawClamp(int x,int y){
+    int cx = clamp(x, 0, int(pc.width) - 1);
+    int cy = clamp(y, 0, int(pc.height) - 1);
+    return RAW(cx,cy);
+}
+
+float edgeG(int x,int y){
+    float gh = abs(rawClamp(x-1,y) - rawClamp(x+1,y)) + abs(rawClamp(x-2,y) - rawClamp(x+2,y));
+    float gv = abs(rawClamp(x,y-1) - rawClamp(x,y+1)) + abs(rawClamp(x,y-2) - rawClamp(x,y+2));
+    if(gh < gv) return 0.5*(rawClamp(x-1,y)+rawClamp(x+1,y));
+    if(gv < gh) return 0.5*(rawClamp(x,y-1)+rawClamp(x,y+1));
+    return 0.25*(rawClamp(x-1,y)+rawClamp(x+1,y)+rawClamp(x,y-1)+rawClamp(x,y+1));
+}
 
 // -----------------------------------------------------------
 vec3 bayerToRGB(uint x, uint y)
@@ -41,30 +55,30 @@ vec3 bayerToRGB(uint x, uint y)
     // BGGR --------------------------------------------------
     case 0u:
         if(ye){
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ b=RAW(x,y); g=edgeG(int(x),int(y)); r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
             else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
         }else{
             if(xe){ g=RAW(x,y); b=(RAW(x,y-1)+RAW(x,y+1))*0.5; r=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { r=RAW(x,y); g=edgeG(int(x),int(y)); b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
         }
         break;
     // RGGB --------------------------------------------------
     case 1u:
         if(ye){
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ r=RAW(x,y); g=edgeG(int(x),int(y)); b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
             else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
         }else{
             if(xe){ g=RAW(x,y); r=(RAW(x,y-1)+RAW(x,y+1))*0.5; b=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { b=RAW(x,y); g=edgeG(int(x),int(y)); r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
         }
         break;
     // GBRG --------------------------------------------------
     case 2u:
         if(ye){
             if(xe){ g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { b=RAW(x,y); g=edgeG(int(x),int(y)); r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
         }else{
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ r=RAW(x,y); g=edgeG(int(x),int(y)); b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
             else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
         }
         break;
@@ -72,9 +86,9 @@ vec3 bayerToRGB(uint x, uint y)
     case 3u:
         if(ye){
             if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            else   { r=RAW(x,y); g=edgeG(int(x),int(y)); b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
         }else{
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ b=RAW(x,y); g=edgeG(int(x),int(y)); r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
             else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
         }
         break;

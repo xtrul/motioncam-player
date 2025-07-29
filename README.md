@@ -75,6 +75,12 @@ runtime DLLs will be copied automatically.
 - If initialization of Vulkan hardware frames fails it falls back to the CPU path automatically.
 - When GPU processing is active additional `[GPU]` log lines confirm the compute pipeline ran.
 
+## Quad Bayer Demosaicing
+
+The converter now performs edge-aware demosaicing based on the MATLAB functions
+in `quad-bayer-demosaic-method`. This method is always used for CPU and GPU
+paths so output remains consistent across preview and exports.
+
 ## DNxHR Export
 
 - The context menu also provides **Export to DNxHR** and **Convert to DNxHR (GPU)** which operate similarly to the ProRes paths.

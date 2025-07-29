@@ -38,19 +38,26 @@ float lin(uint v_u16) {
     return clamp(t * params.exposure, 0.0, 1.0);
 }
 
-float interpG(int x, int y) {
-    return 0.25 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y)) +
-                   lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1)));
-}
 float interpH(int x, int y) { 
     return 0.5 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y)));
 }
 float interpV(int x, int y) { 
     return 0.5 * (lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1)));
 }
-float interpD(int x, int y) { 
+float interpD(int x, int y) {
     return 0.25 * (lin(readU16_val(x + 1, y + 1)) + lin(readU16_val(x - 1, y + 1)) +
                    lin(readU16_val(x + 1, y - 1)) + lin(readU16_val(x - 1, y - 1)));
+}
+
+float edgeG(int x, int y) {
+    float gh = abs(lin(readU16_val(x-1,y)) - lin(readU16_val(x+1,y))) +
+               abs(lin(readU16_val(x-2,y)) - lin(readU16_val(x+2,y)));
+    float gv = abs(lin(readU16_val(x,y-1)) - lin(readU16_val(x,y+1))) +
+               abs(lin(readU16_val(x,y-2)) - lin(readU16_val(x,y+2)));
+    if(gh < gv) return 0.5 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)));
+    if(gv < gh) return 0.5 * (lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
+    return 0.25 * (lin(readU16_val(x-1,y)) + lin(readU16_val(x+1,y)) +
+                   lin(readU16_val(x,y-1)) + lin(readU16_val(x,y+1)));
 }
 
 void main() {
@@ -73,9 +80,9 @@ void main() {
         if (ye) { 
             if (xe) { 
                 b_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
+                g_demosaiced = edgeG(x, y);
                 r_demosaiced = interpD(x, y);
-            } else { 
+            } else {
                 g_demosaiced = lin(readU16_val(x, y));
                 r_demosaiced = interpV(x, y); 
                 b_demosaiced = interpH(x, y); 
@@ -87,7 +94,7 @@ void main() {
                 b_demosaiced = interpV(x, y); 
             } else { 
                 r_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
+                g_demosaiced = edgeG(x, y);
                 b_demosaiced = interpD(x, y);
             }
         }
@@ -95,7 +102,7 @@ void main() {
         if (ye) {
             if (xe) { 
                 r_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
+                g_demosaiced = edgeG(x, y);
                 b_demosaiced = interpD(x, y);
             } else { 
                 g_demosaiced = lin(readU16_val(x, y));
@@ -109,7 +116,7 @@ void main() {
                 b_demosaiced = interpH(x, y);
             } else { 
                 b_demosaiced = lin(readU16_val(x, y));
-                g_demosaiced = interpG(x, y);
+                g_demosaiced = edgeG(x, y);
                 r_demosaiced = interpD(x, y);
             }
         }
@@ -121,13 +128,13 @@ void main() {
                 b_demosaiced = interpH(x,y);
             } else { 
                 b_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
+                g_demosaiced = edgeG(x,y);
                 r_demosaiced = interpD(x,y);
             }
         } else {
-            if (xe) { 
+            if (xe) {
                 r_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
+                g_demosaiced = edgeG(x,y);
                 b_demosaiced = interpD(x,y);
             } else { 
                 g_demosaiced = lin(readU16_val(x,y));
@@ -143,13 +150,13 @@ void main() {
                 b_demosaiced = interpV(x,y);
             } else { 
                 r_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
+                g_demosaiced = edgeG(x,y);
                 b_demosaiced = interpD(x,y);
             }
         } else {
             if (xe) { 
                 b_demosaiced = lin(readU16_val(x,y));
-                g_demosaiced = interpG(x,y);
+                g_demosaiced = edgeG(x,y);
                 r_demosaiced = interpD(x,y);
             } else { 
                 g_demosaiced = lin(readU16_val(x,y));

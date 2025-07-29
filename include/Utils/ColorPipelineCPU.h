@@ -16,5 +16,6 @@ struct CPUColorParams {
     float saturation{1.0f};
 };
 
+// Convert a raw Bayer frame to 8-bit sRGB using the edge-aware demosaicer
 void convertRawToRGB24(const uint16_t* raw, const CPUColorParams& params,
                        std::vector<uint8_t>& outRGB, unsigned threads = 1);
