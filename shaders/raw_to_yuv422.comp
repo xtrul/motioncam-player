@@ -32,8 +32,9 @@ float normRaw(uint r){
 // -----------------------------------------------------------
 vec3 bayerToRGB(uint x, uint y)
 {
-    bool xe = (x & 1u) == 0u;
-    bool ye = (y & 1u) == 0u;
+    const uint step = 2u;
+    bool xe = ((x / step) & 1u) == 0u;
+    bool ye = ((y / step) & 1u) == 0u;
     float r = 0.0, g = 0.0, b = 0.0;
 
     switch(pc.cfaType)
@@ -41,41 +42,41 @@ vec3 bayerToRGB(uint x, uint y)
     // BGGR --------------------------------------------------
     case 0u:
         if(ye){
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ b=RAW(x,y); g=(RAW(x-step,y)+RAW(x+step,y)+RAW(x,y-step)+RAW(x,y+step))*0.25; r=(RAW(x-step,y-step)+RAW(x+step,y-step)+RAW(x-step,y+step)+RAW(x+step,y+step))*0.25; }
+            else   { g=RAW(x,y); b=(RAW(x-step,y)+RAW(x+step,y))*0.5; r=(RAW(x,y-step)+RAW(x,y+step))*0.5; }
         }else{
-            if(xe){ g=RAW(x,y); b=(RAW(x,y-1)+RAW(x,y+1))*0.5; r=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ g=RAW(x,y); b=(RAW(x,y-step)+RAW(x,y+step))*0.5; r=(RAW(x-step,y)+RAW(x+step,y))*0.5; }
+            else   { r=RAW(x,y); g=(RAW(x-step,y)+RAW(x+step,y)+RAW(x,y-step)+RAW(x,y+step))*0.25; b=(RAW(x-step,y-step)+RAW(x+step,y-step)+RAW(x-step,y+step)+RAW(x+step,y+step))*0.25; }
         }
         break;
     // RGGB --------------------------------------------------
     case 1u:
         if(ye){
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ r=RAW(x,y); g=(RAW(x-step,y)+RAW(x+step,y)+RAW(x,y-step)+RAW(x,y+step))*0.25; b=(RAW(x-step,y-step)+RAW(x+step,y-step)+RAW(x-step,y+step)+RAW(x+step,y+step))*0.25; }
+            else   { g=RAW(x,y); r=(RAW(x-step,y)+RAW(x+step,y))*0.5; b=(RAW(x,y-step)+RAW(x,y+step))*0.5; }
         }else{
-            if(xe){ g=RAW(x,y); r=(RAW(x,y-1)+RAW(x,y+1))*0.5; b=(RAW(x-1,y)+RAW(x+1,y))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ g=RAW(x,y); r=(RAW(x,y-step)+RAW(x,y+step))*0.5; b=(RAW(x-step,y)+RAW(x+step,y))*0.5; }
+            else   { b=RAW(x,y); g=(RAW(x-step,y)+RAW(x+step,y)+RAW(x,y-step)+RAW(x,y+step))*0.25; r=(RAW(x-step,y-step)+RAW(x+step,y-step)+RAW(x-step,y+step)+RAW(x+step,y+step))*0.25; }
         }
         break;
     // GBRG --------------------------------------------------
     case 2u:
         if(ye){
-            if(xe){ g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ g=RAW(x,y); b=(RAW(x-step,y)+RAW(x+step,y))*0.5; r=(RAW(x,y-step)+RAW(x,y+step))*0.5; }
+            else   { b=RAW(x,y); g=(RAW(x-step,y)+RAW(x+step,y)+RAW(x,y-step)+RAW(x,y+step))*0.25; r=(RAW(x-step,y-step)+RAW(x+step,y-step)+RAW(x-step,y+step)+RAW(x+step,y+step))*0.25; }
         }else{
-            if(xe){ r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ r=RAW(x,y); g=(RAW(x-step,y)+RAW(x+step,y)+RAW(x,y-step)+RAW(x,y+step))*0.25; b=(RAW(x-step,y-step)+RAW(x+step,y-step)+RAW(x-step,y+step)+RAW(x+step,y+step))*0.25; }
+            else   { g=RAW(x,y); r=(RAW(x-step,y)+RAW(x+step,y))*0.5; b=(RAW(x,y-step)+RAW(x,y+step))*0.5; }
         }
         break;
     // GRBG --------------------------------------------------
     case 3u:
         if(ye){
-            if(xe){ g=RAW(x,y); r=(RAW(x-1,y)+RAW(x+1,y))*0.5; b=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
-            else   { r=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; b=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
+            if(xe){ g=RAW(x,y); r=(RAW(x-step,y)+RAW(x+step,y))*0.5; b=(RAW(x,y-step)+RAW(x,y+step))*0.5; }
+            else   { r=RAW(x,y); g=(RAW(x-step,y)+RAW(x+step,y)+RAW(x,y-step)+RAW(x,y+step))*0.25; b=(RAW(x-step,y-step)+RAW(x+step,y-step)+RAW(x-step,y+step)+RAW(x+step,y+step))*0.25; }
         }else{
-            if(xe){ b=RAW(x,y); g=(RAW(x-1,y)+RAW(x+1,y)+RAW(x,y-1)+RAW(x,y+1))*0.25; r=(RAW(x-1,y-1)+RAW(x+1,y-1)+RAW(x-1,y+1)+RAW(x+1,y+1))*0.25; }
-            else   { g=RAW(x,y); b=(RAW(x-1,y)+RAW(x+1,y))*0.5; r=(RAW(x,y-1)+RAW(x,y+1))*0.5; }
+            if(xe){ b=RAW(x,y); g=(RAW(x-step,y)+RAW(x+step,y)+RAW(x,y-step)+RAW(x,y+step))*0.25; r=(RAW(x-step,y-step)+RAW(x+step,y-step)+RAW(x-step,y+step)+RAW(x+step,y+step))*0.25; }
+            else   { g=RAW(x,y); b=(RAW(x-step,y)+RAW(x+step,y))*0.5; r=(RAW(x,y-step)+RAW(x,y+step))*0.5; }
         }
         break;
     }
