@@ -66,7 +66,7 @@ namespace Descriptor {
         // The struct `ShaderParamsUBO` is defined as private in `Renderer_VK.h`.
         // To make this compile, `ShaderParamsUBO` needs to be public, or its size exposed.
         // Let's assume for this step that `Renderer_VK::ShaderParamsUBO` was made public.
-        struct TempShaderParamsUBO { // Local definition to get sizeof, assuming it matches the private one.
+        struct TempShaderParamsUBO { // Local definition to get sizeof
             alignas(4) int W; alignas(4) int H; alignas(4) int cfaType; alignas(4) float exposure;
             alignas(4) float blackLevel; alignas(4) float whiteLevel; alignas(4) float invBlackWhiteRange;
             alignas(4) float gainR; alignas(4) float gainG; alignas(4) float gainB;

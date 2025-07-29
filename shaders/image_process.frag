@@ -39,18 +39,22 @@ float lin(uint v_u16) {
 }
 
 float interpG(int x, int y) {
-    return 0.25 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y)) +
-                   lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1)));
+    int s = 2;
+    return 0.25 * (lin(readU16_val(x + s, y)) + lin(readU16_val(x - s, y)) +
+                   lin(readU16_val(x, y + s)) + lin(readU16_val(x, y - s)));
 }
-float interpH(int x, int y) { 
-    return 0.5 * (lin(readU16_val(x + 1, y)) + lin(readU16_val(x - 1, y)));
+float interpH(int x, int y) {
+    int s = 2;
+    return 0.5 * (lin(readU16_val(x + s, y)) + lin(readU16_val(x - s, y)));
 }
-float interpV(int x, int y) { 
-    return 0.5 * (lin(readU16_val(x, y + 1)) + lin(readU16_val(x, y - 1)));
+float interpV(int x, int y) {
+    int s = 2;
+    return 0.5 * (lin(readU16_val(x, y + s)) + lin(readU16_val(x, y - s)));
 }
-float interpD(int x, int y) { 
-    return 0.25 * (lin(readU16_val(x + 1, y + 1)) + lin(readU16_val(x - 1, y + 1)) +
-                   lin(readU16_val(x + 1, y - 1)) + lin(readU16_val(x - 1, y - 1)));
+float interpD(int x, int y) {
+    int s = 2;
+    return 0.25 * (lin(readU16_val(x + s, y + s)) + lin(readU16_val(x - s, y + s)) +
+                   lin(readU16_val(x + s, y - s)) + lin(readU16_val(x - s, y - s)));
 }
 
 void main() {
@@ -63,8 +67,9 @@ void main() {
 
     int x = p.x;
     int y = p.y;
-    bool ye = (y % 2) == 0; 
-    bool xe = (x % 2) == 0; 
+    int step = 2;
+    bool ye = ((y / step) % 2) == 0;
+    bool xe = ((x / step) % 2) == 0;
 
     float r_demosaiced = 0.0, g_demosaiced = 0.0, b_demosaiced = 0.0;
 
