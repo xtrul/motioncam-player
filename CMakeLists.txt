@@ -173,6 +173,7 @@ set(APP_SOURCES
   src/Utils/EncodingConfig.cpp
   src/Utils/OrientationUtils.cpp
   src/Utils/ColorPipelineCPU.cpp
+  src/Utils/QuadBayerDemosaic.cpp
 
   src/main.cpp
 )
