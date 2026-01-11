@@ -19,6 +19,20 @@ set(APP_DEPS_DIR       "${APP_ROOT_DIR}/deps")
 set(APP_ASSETS_DIR      "${APP_ROOT_DIR}/assets")
 set(APP_SHADERS_SRC_DIR "${APP_ROOT_DIR}/shaders")
 set(APP_CMAKE_DIR       "${APP_ROOT_DIR}/cmake")
+set(APP_DEPS_DIR       "${APP_ROOT_DIR}/deps")
+
+if(APPLE)
+    option(MC_BUILD_UNIVERSAL "Build universal macOS binary (arm64 + x86_64)" OFF)
+    if(MC_BUILD_UNIVERSAL)
+        set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "macOS architectures" FORCE)
+    endif()
+    set(MC_MAC_DEPS_ROOT "$ENV{FATPREFIX}" CACHE PATH "Prefix containing macOS dependencies (MoltenVK/Vulkan, SDL2, GLFW, etc.)")
+    if(MC_MAC_DEPS_ROOT AND EXISTS "${MC_MAC_DEPS_ROOT}")
+        list(PREPEND CMAKE_PREFIX_PATH "${MC_MAC_DEPS_ROOT}")
+        list(PREPEND CMAKE_FRAMEWORK_PATH "${MC_MAC_DEPS_ROOT}")
+        message(STATUS "macOS deps root: ${MC_MAC_DEPS_ROOT}")
+    endif()
+endif()
 
 message(STATUS "Application Structure:")
 message(STATUS "  Source files (.cpp):      ${APP_ROOT_DIR}/src (structured)")  
@@ -46,24 +60,62 @@ set(GLM_TEST_ENABLE OFF CACHE BOOL "Disable GLM tests" FORCE)
 add_subdirectory(${GLM_SOURCE_DIR} ${CMAKE_BINARY_DIR}/glm_build EXCLUDE_FROM_ALL)
 message(STATUS "Configured GLM from: ${GLM_SOURCE_DIR}")
 
-set(GLFW_PATH "${APP_EXTERNAL_DIR}/glfw" CACHE PATH "Path to GLFW pre-built libraries and headers")
-if(NOT EXISTS "${GLFW_PATH}/include/GLFW/glfw3.h")
-    message(FATAL_ERROR "GLFW headers not found at ${GLFW_PATH}/include. Check GLFW_PATH.")
-endif()
-set(glfw3_DIR "${APP_CMAKE_DIR}" CACHE INTERNAL "Path to custom glfw3Config.cmake")
-message(STATUS "Using pre-built GLFW from: ${GLFW_PATH}")
-
-set(SDL2_PATH "${APP_EXTERNAL_DIR}/SDL2" CACHE PATH "Path to SDL2 development libraries")
-if(NOT EXISTS "${SDL2_PATH}/include/SDL.h")
-    message(FATAL_ERROR "SDL2 headers not found at ${SDL2_PATH}/include. Check SDL2_PATH.")
-endif()
-message(STATUS "Using pre-built SDL2 from: ${SDL2_PATH}")
-
 set(VMA_INCLUDE_DIR "${APP_EXTERNAL_DIR}/vma")
 if(NOT EXISTS "${VMA_INCLUDE_DIR}/vk_mem_alloc.h")
     message(FATAL_ERROR "vk_mem_alloc.h not found at ${VMA_INCLUDE_DIR}.")
 endif()
 message(STATUS "Found VMA header in: ${VMA_INCLUDE_DIR}")
+
+set(PLATFORM_INCLUDE_DIRS "")
+set(PLATFORM_LIBRARIES "")
+
+if(WIN32)
+    set(GLFW_PATH "${APP_EXTERNAL_DIR}/glfw" CACHE PATH "Path to GLFW pre-built libraries and headers")
+    if(NOT EXISTS "${GLFW_PATH}/include/GLFW/glfw3.h")
+        message(FATAL_ERROR "GLFW headers not found at ${GLFW_PATH}/include. Check GLFW_PATH.")
+    endif()
+    set(glfw3_DIR "${APP_CMAKE_DIR}" CACHE INTERNAL "Path to custom glfw3Config.cmake")
+    message(STATUS "Using pre-built GLFW from: ${GLFW_PATH}")
+
+    set(SDL2_PATH "${APP_EXTERNAL_DIR}/SDL2" CACHE PATH "Path to SDL2 development libraries")
+    if(NOT EXISTS "${SDL2_PATH}/include/SDL.h")
+        message(FATAL_ERROR "SDL2 headers not found at ${SDL2_PATH}/include. Check SDL2_PATH.")
+    endif()
+    message(STATUS "Using pre-built SDL2 from: ${SDL2_PATH}")
+
+    list(APPEND PLATFORM_INCLUDE_DIRS "${GLFW_PATH}/include" "${SDL2_PATH}/include")
+elseif(APPLE)
+    find_package(glfw3 CONFIG REQUIRED)
+    if(TARGET glfw)
+        set(MC_GLFW_TARGET glfw)
+    elseif(TARGET glfw3::glfw)
+        set(MC_GLFW_TARGET glfw3::glfw)
+    else()
+        message(FATAL_ERROR "glfw target not found after find_package(glfw3).")
+    endif()
+    get_target_property(MC_GLFW_INCLUDE_DIRS ${MC_GLFW_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+    if(MC_GLFW_INCLUDE_DIRS)
+        list(APPEND PLATFORM_INCLUDE_DIRS ${MC_GLFW_INCLUDE_DIRS})
+    endif()
+
+    find_package(SDL2 CONFIG REQUIRED)
+    if(NOT TARGET SDL2::SDL2)
+        message(FATAL_ERROR "SDL2::SDL2 target not found; ensure SDL2 CONFIG package is available.")
+    endif()
+    if(DEFINED SDL2_INCLUDE_DIRS)
+        list(APPEND PLATFORM_INCLUDE_DIRS ${SDL2_INCLUDE_DIRS})
+    else()
+        get_target_property(MC_SDL2_INCLUDE_DIRS SDL2::SDL2 INTERFACE_INCLUDE_DIRECTORIES)
+        if(MC_SDL2_INCLUDE_DIRS)
+            list(APPEND PLATFORM_INCLUDE_DIRS ${MC_SDL2_INCLUDE_DIRS})
+        endif()
+    endif()
+
+    list(APPEND PLATFORM_LIBRARIES ${MC_GLFW_TARGET} SDL2::SDL2
+        "-framework Cocoa" "-framework IOKit" "-framework CoreVideo" "-framework Metal" "-framework CoreFoundation" "-framework AudioToolbox")
+else()
+    message(FATAL_ERROR "Unsupported platform: configure dependencies for this OS.")
+endif()
 
 if(WIN32)
     set(GLSLANG_VALIDATOR_EXECUTABLE_NAME "glslangValidator.exe")
@@ -184,7 +236,15 @@ list(APPEND APP_SOURCES "${IMGUI_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp")
 
 message(STATUS "Application sources for executable: ${APP_SOURCES}")
 
-add_executable(${PROJECT_NAME} WIN32 "")
+if(APPLE)
+    add_executable(${PROJECT_NAME} MACOSX_BUNDLE "")
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${PROJECT_SOURCE_DIR}/Info.plist"
+        MACOSX_RPATH TRUE
+    )
+else()
+    add_executable(${PROJECT_NAME} WIN32 "")
+endif()
 target_sources(${PROJECT_NAME} PRIVATE ${APP_SOURCES})
 
 if(WIN32 AND EXISTS "${APP_ROOT_DIR}/icon.rc")
@@ -213,8 +273,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
   "${VMA_INCLUDE_DIR}"
   "${Vulkan_INCLUDE_DIRS}"
-  "${GLFW_PATH}/include"
-  "${SDL2_PATH}/include"
+  ${PLATFORM_INCLUDE_DIRS}
 
   "${MOTIONCAM_DECODER_DIR}/lib/include"
   "${MOTIONCAM_DECODER_THIRDPARTY_DIR}"
@@ -224,34 +283,34 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${APP_EXTERNAL_DIR}/tinydngwriter"
 )
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(SDL2_ARCH_SUFFIX "x64")
-else()
-    set(SDL2_ARCH_SUFFIX "x86")
-endif()
-set(SDL2_LIBRARY_DIR "${SDL2_PATH}/lib/${SDL2_ARCH_SUFFIX}")
+if(WIN32)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(SDL2_ARCH_SUFFIX "x64")
+    else()
+        set(SDL2_ARCH_SUFFIX "x86")
+    endif()
+    set(SDL2_LIBRARY_DIR "${SDL2_PATH}/lib/${SDL2_ARCH_SUFFIX}")
 
-set(GLFW_LIB_PATH_VC_SPECIFIC "${GLFW_PATH}/lib-vc2022/glfw3.lib")
-if(NOT EXISTS "${GLFW_LIB_PATH_VC_SPECIFIC}" AND WIN32 AND MSVC)
-    message(FATAL_ERROR "Pre-built GLFW library not found at ${GLFW_LIB_PATH_VC_SPECIFIC}. Please check GLFW_PATH or adjust for your compiler.")
+    set(GLFW_LIB_PATH_VC_SPECIFIC "${GLFW_PATH}/lib-vc2022/glfw3.lib")
+    if(NOT EXISTS "${GLFW_LIB_PATH_VC_SPECIFIC}" AND MSVC)
+        message(FATAL_ERROR "Pre-built GLFW library not found at ${GLFW_LIB_PATH_VC_SPECIFIC}. Please check GLFW_PATH or adjust for your compiler.")
+    endif()
+
+    list(APPEND PLATFORM_LIBRARIES "${GLFW_LIB_PATH_VC_SPECIFIC}" "${SDL2_LIBRARY_DIR}/SDL2.lib")
 endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     motioncam_decoder
     imgui
     glm
-    "${GLFW_LIB_PATH_VC_SPECIFIC}"
-    "${SDL2_LIBRARY_DIR}/SDL2.lib"
+    ${PLATFORM_LIBRARIES}
     ${Vulkan_LIBRARIES}
 )
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE Shlwapi.lib Comdlg32.lib dwmapi.lib Shell32.lib)
-endif()
-
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     target_link_libraries(${PROJECT_NAME} PRIVATE Threads::Threads)
-elseif(MSVC)
 endif()
 
 
@@ -260,26 +319,46 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     OUTPUT_NAME "MotionCam Player"
 )
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${SHADER_COMPILED_DIR}"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders_spv"
-    COMMENT "Copying compiled shaders to executable output directory"
-    VERBATIM
-)
-message(STATUS "POST_BUILD: Configured to copy ${SHADER_COMPILED_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders_spv")
-
-if(EXISTS "${APP_ASSETS_DIR}")
+if(APPLE)
+    set(APP_BUNDLE_RESOURCES "$<TARGET_FILE_DIR:${PROJECT_NAME}>/../Resources")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${APP_ASSETS_DIR}"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets"
-        COMMENT "Copying assets to executable output directory"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_BUNDLE_RESOURCES}/shaders_spv"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${SHADER_COMPILED_DIR}" "${APP_BUNDLE_RESOURCES}/shaders_spv"
+        COMMENT "Copying compiled shaders into bundle Resources"
         VERBATIM
     )
-    message(STATUS "POST_BUILD: Configured to copy ${APP_ASSETS_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets")
+    if(EXISTS "${APP_ASSETS_DIR}")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_BUNDLE_RESOURCES}/assets"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${APP_ASSETS_DIR}" "${APP_BUNDLE_RESOURCES}/assets"
+            COMMENT "Copying assets into bundle Resources"
+            VERBATIM
+        )
+    else()
+        message(WARNING "Assets directory not found at ${APP_ASSETS_DIR}. Skipping asset copy.")
+    endif()
 else()
-    message(WARNING "Assets directory not found at ${APP_ASSETS_DIR}. Skipping asset copy.")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${SHADER_COMPILED_DIR}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders_spv"
+        COMMENT "Copying compiled shaders to executable output directory"
+        VERBATIM
+    )
+    message(STATUS "POST_BUILD: Configured to copy ${SHADER_COMPILED_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders_spv")
+
+    if(EXISTS "${APP_ASSETS_DIR}")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${APP_ASSETS_DIR}"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets"
+            COMMENT "Copying assets to executable output directory"
+            VERBATIM
+        )
+        message(STATUS "POST_BUILD: Configured to copy ${APP_ASSETS_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets")
+    else()
+        message(WARNING "Assets directory not found at ${APP_ASSETS_DIR}. Skipping asset copy.")
+    endif()
 endif()
 
 # Copy SDL2.dll to executable output directory on Windows
