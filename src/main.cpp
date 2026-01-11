@@ -29,6 +29,7 @@
 #   ifndef PATH_MAX
 #       define PATH_MAX 1024 // Or some other reasonable default
 #   endif
+#   include <libgen.h>  // dirname
 #endif
 
 #include <SDL.h>
@@ -100,7 +101,22 @@ void determineAppBasePath(const char* argv0) {
 
     if (exePath.has_filename()) { //Check if it's a file path
         if (exePath.has_parent_path()) {
-            g_AppBasePath = exePath.parent_path().string();
+            fs::path parentDir = exePath.parent_path();
+#ifdef __APPLE__
+            // When running from an app bundle, move base path to Contents/Resources
+            if (parentDir.filename() == "MacOS") {
+                fs::path maybeResources = parentDir.parent_path() / "Resources";
+                if (fs::exists(maybeResources)) {
+                    g_AppBasePath = maybeResources.string();
+                } else {
+                    g_AppBasePath = parentDir.string();
+                }
+            } else {
+                g_AppBasePath = parentDir.string();
+            }
+#else
+            g_AppBasePath = parentDir.string();
+#endif
         }
         else {
             // This case implies exePath is something like "app.exe" found in PATH,
