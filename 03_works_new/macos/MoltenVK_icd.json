@@ -1,0 +1,11 @@
+{
+    "file_format_version": "1.0.0",
+    "ICD": {
+        "library_path": "@executable_path/../Frameworks/libMoltenVK.dylib",
+        "api_version": "1.3.200"
+        // You can check the MoltenVK version you built. Common values are 1.2.x or 1.3.x.
+        // For example, if `nm $FATPREFIX/lib/libMoltenVK.dylib | grep mvk_icdGetVersion` shows something,
+        // or check the MoltenVK release notes for the version you cloned.
+        // 1.3.200 is a safe modern bet. If unsure, 1.2.0.
+    }
+}
