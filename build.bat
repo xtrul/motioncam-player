@@ -38,6 +38,5 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo.
 echo Build complete. Binary should be at "%BUILD_DIR%\bin\%CONFIG%\MotionCam Player.exe"
 exit /b 0
