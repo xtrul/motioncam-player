@@ -32,6 +32,35 @@ if(APPLE)
         list(PREPEND CMAKE_FRAMEWORK_PATH "${MC_MAC_DEPS_ROOT}")
         message(STATUS "macOS deps root: ${MC_MAC_DEPS_ROOT}")
     endif()
+
+    # Helper to bundle dylibs into the app
+    function(copy_and_fixup_dylib)
+        set(oneValueArgs TARGET_NAME SOURCE_ACTUAL_PATH BUNDLE_LINK_NAME)
+        cmake_parse_arguments(ARG "" "${oneValueArgs}" "" ${ARGN})
+        if(NOT ARG_TARGET_NAME OR NOT ARG_SOURCE_ACTUAL_PATH OR NOT ARG_BUNDLE_LINK_NAME)
+            message(FATAL_ERROR "copy_and_fixup_dylib requires TARGET_NAME, SOURCE_ACTUAL_PATH, BUNDLE_LINK_NAME")
+        endif()
+        if(NOT EXISTS "${ARG_SOURCE_ACTUAL_PATH}")
+            message(WARNING "copy_and_fixup_dylib: source not found at ${ARG_SOURCE_ACTUAL_PATH}")
+            return()
+        endif()
+
+        set(BUNDLE_LIB_DIR "${CMAKE_BINARY_DIR}/${ARG_TARGET_NAME}.app/Contents/Frameworks")
+        set(FINAL_BUNDLE_PATH "${BUNDLE_LIB_DIR}/${ARG_BUNDLE_LINK_NAME}")
+        set(TARGET_EXECUTABLE_PATH "$<TARGET_FILE:${ARG_TARGET_NAME}>")
+
+        add_custom_command(TARGET ${ARG_TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${BUNDLE_LIB_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${ARG_SOURCE_ACTUAL_PATH}"
+                "${FINAL_BUNDLE_PATH}"
+            COMMAND install_name_tool -id "@rpath/${ARG_BUNDLE_LINK_NAME}" "${FINAL_BUNDLE_PATH}"
+            COMMAND install_name_tool -change "${ARG_BUNDLE_LINK_NAME}" "@rpath/${ARG_BUNDLE_LINK_NAME}" "${TARGET_EXECUTABLE_PATH}"
+            COMMAND install_name_tool -change "${ARG_SOURCE_ACTUAL_PATH}" "@rpath/${ARG_BUNDLE_LINK_NAME}" "${TARGET_EXECUTABLE_PATH}"
+            COMMENT "Embedding ${ARG_SOURCE_ACTUAL_PATH} as ${ARG_BUNDLE_LINK_NAME} into bundle"
+            VERBATIM
+        )
+    endfunction()
 endif()
 
 message(STATUS "Application Structure:")
@@ -97,6 +126,10 @@ elseif(APPLE)
     if(MC_GLFW_INCLUDE_DIRS)
         list(APPEND PLATFORM_INCLUDE_DIRS ${MC_GLFW_INCLUDE_DIRS})
     endif()
+    get_target_property(MC_GLFW_LIB_PATH ${MC_GLFW_TARGET} IMPORTED_LOCATION_RELEASE)
+    if(NOT MC_GLFW_LIB_PATH)
+        get_target_property(MC_GLFW_LIB_PATH ${MC_GLFW_TARGET} IMPORTED_LOCATION)
+    endif()
 
     find_package(SDL2 CONFIG REQUIRED)
     if(NOT TARGET SDL2::SDL2)
@@ -110,9 +143,27 @@ elseif(APPLE)
             list(APPEND PLATFORM_INCLUDE_DIRS ${MC_SDL2_INCLUDE_DIRS})
         endif()
     endif()
+    get_target_property(MC_SDL2_LIB_PATH SDL2::SDL2 IMPORTED_LOCATION_RELEASE)
+    if(NOT MC_SDL2_LIB_PATH)
+        get_target_property(MC_SDL2_LIB_PATH SDL2::SDL2 IMPORTED_LOCATION)
+    endif()
+
+    find_path(ZSTD_INCLUDE_DIR NAMES zstd.h HINTS "${MC_MAC_DEPS_ROOT}/include" "/usr/local/include" "/opt/homebrew/include")
+    find_library(ZSTD_LIBRARY_PATH NAMES zstd libzstd HINTS "${MC_MAC_DEPS_ROOT}/lib" "/usr/local/lib" "/opt/homebrew/lib")
+    if(ZSTD_INCLUDE_DIR AND ZSTD_LIBRARY_PATH)
+        add_library(Zstd_interface INTERFACE IMPORTED GLOBAL)
+        set_target_properties(Zstd_interface PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${ZSTD_INCLUDE_DIR}"
+            INTERFACE_LINK_LIBRARIES "${ZSTD_LIBRARY_PATH}")
+        list(APPEND PLATFORM_INCLUDE_DIRS "${ZSTD_INCLUDE_DIR}")
+        list(APPEND PLATFORM_LIBRARIES Zstd_interface)
+    endif()
 
     list(APPEND PLATFORM_LIBRARIES ${MC_GLFW_TARGET} SDL2::SDL2
         "-framework Cocoa" "-framework IOKit" "-framework CoreVideo" "-framework Metal" "-framework CoreFoundation" "-framework AudioToolbox")
+    if(ZSTD_LIBRARY_PATH)
+        list(APPEND PLATFORM_LIBRARIES "${ZSTD_LIBRARY_PATH}")
+    endif()
 else()
     message(FATAL_ERROR "Unsupported platform: configure dependencies for this OS.")
 endif()
@@ -241,6 +292,8 @@ if(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST "${PROJECT_SOURCE_DIR}/Info.plist"
         MACOSX_RPATH TRUE
+        BUILD_RPATH "@executable_path/../Frameworks"
+        INSTALL_RPATH "@executable_path/../Frameworks"
     )
 else()
     add_executable(${PROJECT_NAME} WIN32 "")
@@ -336,6 +389,85 @@ if(APPLE)
         )
     else()
         message(WARNING "Assets directory not found at ${APP_ASSETS_DIR}. Skipping asset copy.")
+    endif()
+
+    # Bundle dylibs for macOS
+    set(APP_BUNDLE_FRAMEWORKS "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.app/Contents/Frameworks")
+    if(TARGET Vulkan::Vulkan)
+        get_target_property(VULKAN_LOADER_LIBRARY_TO_BUNDLE Vulkan::Vulkan IMPORTED_LOCATION_RELEASE)
+        if(NOT VULKAN_LOADER_LIBRARY_TO_BUNDLE)
+            get_target_property(VULKAN_LOADER_LIBRARY_TO_BUNDLE Vulkan::Vulkan IMPORTED_LOCATION)
+        endif()
+    endif()
+    if(NOT VULKAN_LOADER_LIBRARY_TO_BUNDLE)
+        find_library(VULKAN_LOADER_LIBRARY_TO_BUNDLE NAMES libvulkan.dylib vulkan.dylib libvulkan.1.dylib vulkan.1
+            HINTS "${MC_MAC_DEPS_ROOT}/lib" "/usr/local/lib" "/opt/homebrew/lib")
+    endif()
+    if(VULKAN_LOADER_LIBRARY_TO_BUNDLE)
+        copy_and_fixup_dylib(TARGET_NAME ${PROJECT_NAME}
+            SOURCE_ACTUAL_PATH "${VULKAN_LOADER_LIBRARY_TO_BUNDLE}"
+            BUNDLE_LINK_NAME "libvulkan.1.dylib")
+    endif()
+
+    if(MC_GLFW_LIB_PATH)
+        copy_and_fixup_dylib(TARGET_NAME ${PROJECT_NAME}
+            SOURCE_ACTUAL_PATH "${MC_GLFW_LIB_PATH}"
+            BUNDLE_LINK_NAME "libglfw.3.dylib")
+    endif()
+
+    if(MC_SDL2_LIB_PATH)
+        get_filename_component(SDL2_ACTUAL_FILENAME "${MC_SDL2_LIB_PATH}" NAME)
+        copy_and_fixup_dylib(TARGET_NAME ${PROJECT_NAME}
+            SOURCE_ACTUAL_PATH "${MC_SDL2_LIB_PATH}"
+            BUNDLE_LINK_NAME "${SDL2_ACTUAL_FILENAME}")
+    endif()
+
+    if(MOLTENVK_LIBRARY_TO_BUNDLE)
+        get_filename_component(MVK_ACTUAL_FILENAME "${MOLTENVK_LIBRARY_TO_BUNDLE}" NAME)
+        copy_and_fixup_dylib(TARGET_NAME ${PROJECT_NAME}
+            SOURCE_ACTUAL_PATH "${MOLTENVK_LIBRARY_TO_BUNDLE}"
+            BUNDLE_LINK_NAME "${MVK_ACTUAL_FILENAME}")
+    endif()
+
+    if(ZSTD_LIBRARY_PATH)
+        get_filename_component(ZSTD_ACTUAL_FILENAME "${ZSTD_LIBRARY_PATH}" NAME)
+        copy_and_fixup_dylib(TARGET_NAME ${PROJECT_NAME}
+            SOURCE_ACTUAL_PATH "${ZSTD_LIBRARY_PATH}"
+            BUNDLE_LINK_NAME "${ZSTD_ACTUAL_FILENAME}")
+    endif()
+
+    # Copy and patch MoltenVK_icd.json for bundle
+    find_file(MOLTENVK_ICD_JSON_SOURCE_PATH NAMES MoltenVK_icd.json
+        HINTS
+            "${MC_MAC_DEPS_ROOT}/share/vulkan/icd.d"
+            "${MC_MAC_DEPS_ROOT}/etc/vulkan/icd.d"
+            "$ENV{VULKAN_SDK}/share/vulkan/icd.d"
+            "$ENV{VULKAN_SDK}/etc/vulkan/icd.d"
+        NO_DEFAULT_PATH)
+    if(MOLTENVK_ICD_JSON_SOURCE_PATH)
+        set(APP_BUNDLE_VK_ICD_DIR "${APP_BUNDLE_RESOURCES}/vulkan/icd.d")
+        set(BUNDLED_MOLTENVK_ICD_JSON_PATH "${APP_BUNDLE_VK_ICD_DIR}/MoltenVK_icd.json")
+        file(WRITE "${CMAKE_BINARY_DIR}/PatchMoltenVK.cmake" "
+if(NOT DEFINED JSON_FILE_TO_PATCH OR NOT DEFINED OLD_STRING_TO_REPLACE OR NOT DEFINED NEW_STRING_TO_REPLACE)
+  message(FATAL_ERROR \"Missing vars for patch\")
+endif()
+if(EXISTS \"${JSON_FILE_TO_PATCH}\")
+  file(READ \"${JSON_FILE_TO_PATCH}\" CURRENT_CONTENT)
+  string(REPLACE \"${OLD_STRING_TO_REPLACE}\" \"${NEW_STRING_TO_REPLACE}\" MODIFIED_CONTENT \"${CURRENT_CONTENT}\")
+  file(WRITE \"${JSON_FILE_TO_PATCH}\" \"${MODIFIED_CONTENT}\")
+endif()
+")
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${APP_BUNDLE_VK_ICD_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MOLTENVK_ICD_JSON_SOURCE_PATH}" "${BUNDLED_MOLTENVK_ICD_JSON_PATH}"
+            COMMAND ${CMAKE_COMMAND}
+                -DJSON_FILE_TO_PATCH="${BUNDLED_MOLTENVK_ICD_JSON_PATH}"
+                -DOLD_STRING_TO_REPLACE="\"../../../lib/libMoltenVK.dylib\""
+                -DNEW_STRING_TO_REPLACE="\"../../../Frameworks/libMoltenVK.dylib\""
+                -P "${CMAKE_BINARY_DIR}/PatchMoltenVK.cmake"
+            COMMENT "Copying and patching MoltenVK_icd.json in bundle"
+            VERBATIM
+        )
     endif()
 else()
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
